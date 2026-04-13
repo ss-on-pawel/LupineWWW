@@ -1,33 +1,56 @@
 {% extends "base.html" %}
 
-{% block title %}Lista srodkow trwalych{% endblock %}
+{% block title %}Ewidencja majątku{% endblock %}
 
 {% block content %}
     <section class="card">
-        <h2>Lista srodkow trwalych</h2>
+        <h2>Ewidencja majątku</h2>
+        <p class="intro">Aktualna lista składników majątku z podstawowymi danymi ewidencyjnymi i odpowiedzialnością.</p>
+
         {% if assets %}
             <table>
                 <thead>
                     <tr>
                         <th>Nazwa</th>
                         <th>Numer inwentarzowy</th>
-                        <th>Opis</th>
-                        <th>Data dodania</th>
+                        <th>Typ składnika</th>
+                        <th>Kategoria</th>
+                        <th>Status</th>
+                        <th>Lokalizacja</th>
+                        <th>Osoba odpowiedzialna</th>
+                        <th>Data utworzenia</th>
+                        <th>Akcje</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for asset in assets %}
                         <tr>
-                            <td>{{ asset.name }}</td>
-                            <td>{{ asset.inventory_number }}</td>
-                            <td>{{ asset.description|default:"-" }}</td>
-                            <td>{{ asset.added_at|date:"Y-m-d H:i" }}</td>
+                            <td data-label="Nazwa">
+                                <a href="{% url 'assets:detail' asset.id %}"><strong>{{ asset.name }}</strong></a><br>
+                                <span class="muted">{{ asset.manufacturer|default:"-" }}{% if asset.model %} / {{ asset.model }}{% endif %}</span>
+                            </td>
+                            <td data-label="Numer inwentarzowy">{{ asset.inventory_number }}</td>
+                            <td data-label="Typ składnika">{{ asset.get_asset_type_display }}</td>
+                            <td data-label="Kategoria">{{ asset.category }}</td>
+                            <td data-label="Status">
+                                <span class="status-pill">{{ asset.get_status_display }}</span><br>
+                                <span class="muted">{{ asset.get_technical_condition_display }}</span>
+                            </td>
+                            <td data-label="Lokalizacja">
+                                {{ asset.location|default:"-" }}
+                                {% if asset.room %}<br><span class="muted">Pomieszczenie: {{ asset.room }}</span>{% endif %}
+                            </td>
+                            <td data-label="Osoba odpowiedzialna">{{ asset.responsible_person|default:"-" }}</td>
+                            <td data-label="Data utworzenia">{{ asset.created_at|date:"Y-m-d H:i" }}</td>
+                            <td data-label="Akcje">
+                                <a class="button-secondary" href="{% url 'assets:detail' asset.id %}">Karta środka</a>
+                            </td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         {% else %}
-            <p>Brak srodkow trwalych w systemie.</p>
+            <p>Brak składników majątku w ewidencji.</p>
         {% endif %}
     </section>
 {% endblock %}

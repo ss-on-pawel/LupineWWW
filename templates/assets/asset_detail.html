@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Karta środka{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .asset-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        .asset-title {
+            margin: 0;
+        }
+        .asset-subtitle {
+            margin: 6px 0 0;
+            color: #52606d;
+        }
+        .asset-meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .meta-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #eef4f9;
+            color: #34516b;
+            font-size: 0.92rem;
+        }
+        .asset-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+            margin-top: 24px;
+        }
+        .summary-box {
+            padding: 16px;
+            border: 1px solid #d7e0ea;
+            border-radius: 10px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+        }
+        .summary-label {
+            display: block;
+            margin-bottom: 6px;
+            color: #6b7785;
+            font-size: 0.9rem;
+        }
+        .summary-value {
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+            border-bottom: 1px solid #d7e0ea;
+            padding-bottom: 12px;
+        }
+        .tab-button {
+            padding: 10px 14px;
+            border: 1px solid #c7d2de;
+            border-radius: 999px;
+            background: #fff;
+            color: #34516b;
+            font: inherit;
+            cursor: pointer;
+        }
+        .tab-button[aria-selected="true"] {
+            background: #0f4c81;
+            border-color: #0f4c81;
+            color: #fff;
+        }
+        .tab-panel {
+            display: none;
+        }
+        .tab-panel.is-active {
+            display: block;
+        }
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px 20px;
+        }
+        .detail-item {
+            padding: 14px 16px;
+            border: 1px solid #d7e0ea;
+            border-radius: 10px;
+            background: #fbfdff;
+        }
+        .detail-item-wide {
+            grid-column: 1 / -1;
+        }
+        .detail-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #6b7785;
+            font-size: 0.9rem;
+        }
+        .detail-value {
+            font-weight: 600;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="card">
+        <div class="asset-header">
+            <div>
+                <p class="intro">Karta środka</p>
+                <h2 class="asset-title">{{ asset.name }}</h2>
+                <p class="asset-subtitle">{{ asset.inventory_number }}</p>
+                <div class="asset-meta">
+                    <span class="meta-pill">Typ składnika: {{ asset.get_asset_type_display }}</span>
+                    <span class="meta-pill">Status: {{ asset.get_status_display }}</span>
+                    <span class="meta-pill">Stan techniczny: {{ asset.get_technical_condition_display }}</span>
+                </div>
+            </div>
+            <div class="actions">
+                <a class="button-secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+            </div>
+        </div>
+
+        <div class="asset-summary">
+            <div class="summary-box">
+                <span class="summary-label">Wartość zakupu</span>
+                <div class="summary-value">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div>
+            </div>
+            <div class="summary-box">
+                <span class="summary-label">Lokalizacja</span>
+                <div class="summary-value">{{ asset.location|default:"-" }}</div>
+            </div>
+            <div class="summary-box">
+                <span class="summary-label">Osoba odpowiedzialna</span>
+                <div class="summary-value">{{ asset.responsible_person|default:"-" }}</div>
+            </div>
+            <div class="summary-box">
+                <span class="summary-label">Aktywny</span>
+                <div class="summary-value">{% if asset.is_active %}Tak{% else %}Nie{% endif %}</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="tabs" role="tablist" aria-label="Zakładki karty środka">
+            <button class="tab-button" type="button" role="tab" aria-selected="true" aria-controls="tab-podstawowe" id="btn-podstawowe">Dane podstawowe</button>
+            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-organizacyjne" id="btn-organizacyjne">Organizacyjne</button>
+            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-techniczne" id="btn-techniczne">Techniczne</button>
+            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-finansowe" id="btn-finansowe">Finansowe</button>
+            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-eksploatacja" id="btn-eksploatacja">Eksploatacja</button>
+            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-metadane" id="btn-metadane">Metadane</button>
+        </div>
+
+        <section class="tab-panel is-active" id="tab-podstawowe" role="tabpanel" aria-labelledby="btn-podstawowe">
+            <div class="details-grid">
+                <div class="detail-item"><span class="detail-label">Numer inwentarzowy</span><div class="detail-value">{{ asset.inventory_number }}</div></div>
+                <div class="detail-item"><span class="detail-label">Nazwa</span><div class="detail-value">{{ asset.name }}</div></div>
+                <div class="detail-item"><span class="detail-label">Typ składnika</span><div class="detail-value">{{ asset.get_asset_type_display }}</div></div>
+                <div class="detail-item"><span class="detail-label">Wartość zakupu</span><div class="detail-value">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div></div>
+                <div class="detail-item"><span class="detail-label">Lokalizacja</span><div class="detail-value">{{ asset.location|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Status</span><div class="detail-value">{{ asset.get_status_display }}</div></div>
+                <div class="detail-item"><span class="detail-label">Identyfikator zewnętrzny</span><div class="detail-value">{{ asset.external_id|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Aktywny</span><div class="detail-value">{% if asset.is_active %}Tak{% else %}Nie{% endif %}</div></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-organizacyjne" role="tabpanel" aria-labelledby="btn-organizacyjne">
+            <div class="details-grid">
+                <div class="detail-item"><span class="detail-label">Jednostka organizacyjna</span><div class="detail-value">{{ asset.organizational_unit|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Dział</span><div class="detail-value">{{ asset.department|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">MPK / centrum kosztów</span><div class="detail-value">{{ asset.cost_center|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Osoba odpowiedzialna</span><div class="detail-value">{{ asset.responsible_person|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Aktualny użytkownik</span><div class="detail-value">{{ asset.current_user|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Pomieszczenie</span><div class="detail-value">{{ asset.room|default:"-" }}</div></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-techniczne" role="tabpanel" aria-labelledby="btn-techniczne">
+            <div class="details-grid">
+                <div class="detail-item"><span class="detail-label">Producent</span><div class="detail-value">{{ asset.manufacturer|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Model</span><div class="detail-value">{{ asset.model|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Numer seryjny</span><div class="detail-value">{{ asset.serial_number|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Kod kreskowy</span><div class="detail-value">{{ asset.barcode|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Stan techniczny</span><div class="detail-value">{{ asset.get_technical_condition_display }}</div></div>
+                <div class="detail-item detail-item-wide"><span class="detail-label">Opis</span><div class="detail-value">{{ asset.description|default:"-" }}</div></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-finansowe" role="tabpanel" aria-labelledby="btn-finansowe">
+            <div class="details-grid">
+                <div class="detail-item"><span class="detail-label">Data zakupu</span><div class="detail-value">{{ asset.purchase_date|date:"Y-m-d"|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Data przyjęcia do użytkowania</span><div class="detail-value">{{ asset.commissioning_date|date:"Y-m-d"|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Wartość zakupu</span><div class="detail-value">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div></div>
+                <div class="detail-item"><span class="detail-label">Numer faktury</span><div class="detail-value">{{ asset.invoice_number|default:"-" }}</div></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-eksploatacja" role="tabpanel" aria-labelledby="btn-eksploatacja">
+            <div class="details-grid">
+                <div class="detail-item"><span class="detail-label">Data ostatniej inwentaryzacji</span><div class="detail-value">{{ asset.last_inventory_date|date:"Y-m-d"|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Data następnego przeglądu</span><div class="detail-value">{{ asset.next_review_date|date:"Y-m-d"|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Gwarancja do</span><div class="detail-value">{{ asset.warranty_until|date:"Y-m-d"|default:"-" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Ubezpieczenie do</span><div class="detail-value">{{ asset.insurance_until|date:"Y-m-d"|default:"-" }}</div></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-metadane" role="tabpanel" aria-labelledby="btn-metadane">
+            <div class="details-grid">
+                <div class="detail-item"><span class="detail-label">Data utworzenia</span><div class="detail-value">{{ asset.created_at|date:"Y-m-d H:i" }}</div></div>
+                <div class="detail-item"><span class="detail-label">Data aktualizacji</span><div class="detail-value">{{ asset.updated_at|date:"Y-m-d H:i" }}</div></div>
+            </div>
+        </section>
+    </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        (function () {
+            const buttons = document.querySelectorAll(".tab-button");
+            const panels = document.querySelectorAll(".tab-panel");
+
+            function activateTab(button) {
+                buttons.forEach((item) => {
+                    const isSelected = item === button;
+                    item.setAttribute("aria-selected", isSelected ? "true" : "false");
+                    item.tabIndex = isSelected ? 0 : -1;
+                });
+
+                panels.forEach((panel) => {
+                    panel.classList.toggle("is-active", panel.id === button.getAttribute("aria-controls"));
+                });
+            }
+
+            buttons.forEach((button, index) => {
+                button.tabIndex = index === 0 ? 0 : -1;
+
+                button.addEventListener("click", () => activateTab(button));
+                button.addEventListener("keydown", (event) => {
+                    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    const delta = event.key === "ArrowRight" ? 1 : -1;
+                    const nextIndex = (index + delta + buttons.length) % buttons.length;
+                    buttons[nextIndex].focus();
+                    activateTab(buttons[nextIndex]);
+                });
+            });
+        })();
+    </script>
+{% endblock %}

@@ -3,17 +3,17 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Zarzadzanie majatkiem{% endblock %}</title>
+    <title>{% block title %}Zarządzanie majątkiem{% endblock %}</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: "Segoe UI", Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background: #f5f5f5;
-            color: #222;
+            background: #f3f6fb;
+            color: #1f2933;
         }
         header, main {
-            max-width: 960px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 24px 16px;
         }
@@ -21,9 +21,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
         }
         a {
-            color: #0a5db1;
+            color: #0f4c81;
             text-decoration: none;
         }
         a:hover {
@@ -31,10 +33,11 @@
         }
         .card {
             background: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 16px;
+            border: 1px solid #d7e0ea;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 24px rgba(15, 76, 129, 0.06);
         }
         .messages {
             list-style: none;
@@ -47,18 +50,74 @@
             padding: 12px;
             margin-bottom: 12px;
         }
-        form p {
-            margin-bottom: 16px;
+        .intro {
+            margin: 0 0 8px;
+            color: #52606d;
         }
-        input, textarea {
+        .section-title {
+            margin: 0 0 16px;
+            font-size: 1.1rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px 20px;
+        }
+        .field-wide {
+            grid-column: 1 / -1;
+        }
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .form-field label {
+            font-weight: 600;
+        }
+        input, select, textarea {
             width: 100%;
             box-sizing: border-box;
-            padding: 10px;
-            margin-top: 6px;
+            padding: 10px 12px;
+            border: 1px solid #c7d2de;
+            border-radius: 8px;
+            background: #fff;
+            font: inherit;
+        }
+        input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            transform: scale(1.1);
+        }
+        .helptext {
+            font-size: 0.9rem;
+            color: #52606d;
+        }
+        .errorlist {
+            margin: 0;
+            padding-left: 18px;
+            color: #b42318;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
         }
         button {
-            padding: 10px 16px;
+            padding: 11px 18px;
             cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background: #0f4c81;
+            color: #fff;
+            font: inherit;
+        }
+        .button-secondary {
+            display: inline-block;
+            padding: 11px 18px;
+            border: 1px solid #c7d2de;
+            border-radius: 8px;
+            color: #1f2933;
+            background: #fff;
         }
         table {
             width: 100%;
@@ -68,16 +127,54 @@
             text-align: left;
             padding: 12px;
             border-bottom: 1px solid #ddd;
+            vertical-align: top;
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #e8f1f8;
+            color: #0f4c81;
+            font-size: 0.9rem;
+        }
+        .muted {
+            color: #6b7785;
+        }
+        @media (max-width: 700px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead {
+                display: none;
+            }
+            tr {
+                padding: 12px 0;
+                border-bottom: 1px solid #d7e0ea;
+            }
+            td {
+                padding: 6px 0;
+                border: 0;
+            }
+            td::before {
+                content: attr(data-label);
+                display: block;
+                font-weight: 600;
+                margin-bottom: 2px;
+            }
         }
     </style>
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
     <header>
-        <h1>Zarzadzanie majatkiem</h1>
+        <div>
+            <h1>{{ page_title|default:"Zarządzanie majątkiem" }}</h1>
+            <p class="intro">Rejestr składników majątku i podstawowych danych ewidencyjnych.</p>
+        </div>
         <nav>
-            <a href="{% url 'assets:list' %}">Lista srodkow</a>
+            <a href="{% url 'assets:list' %}">Ewidencja majątku</a>
             |
-            <a href="{% url 'assets:create' %}">Dodaj srodek</a>
+            <a href="{% url 'assets:create' %}">Dodaj składnik</a>
             |
             <a href="/admin/">Admin</a>
         </nav>
@@ -92,5 +189,6 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

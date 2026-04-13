@@ -1,14 +1,198 @@
 {% extends "base.html" %}
 
-{% block title %}Dodaj srodek trwaly{% endblock %}
+{% block title %}Dodaj składnik majątku{% endblock %}
 
 {% block content %}
-    <section class="card">
-        <h2>Dodaj srodek trwaly</h2>
-        <form method="post">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit">Zapisz</button>
-        </form>
-    </section>
+    <form method="post">
+        {% csrf_token %}
+
+        <section class="card">
+            <h2>Nowy składnik majątku</h2>
+            <p class="intro">Uzupełnij podstawowe dane identyfikacyjne, organizacyjne i eksploatacyjne.</p>
+
+            {% if form.non_field_errors %}
+                <ul class="errorlist">
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            <h3 class="section-title">Dane podstawowe</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    {{ form.name.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.inventory_number.label_tag }}
+                    {{ form.inventory_number }}
+                    {% if form.inventory_number.help_text %}<div class="helptext">{{ form.inventory_number.help_text }}</div>{% endif %}
+                    {{ form.inventory_number.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.asset_type.label_tag }}
+                    {{ form.asset_type }}
+                    {{ form.asset_type.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.category.label_tag }}
+                    {{ form.category }}
+                    {{ form.category.errors }}
+                </div>
+                <div class="form-field field-wide">
+                    {{ form.description.label_tag }}
+                    {{ form.description }}
+                    {{ form.description.errors }}
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3 class="section-title">Identyfikacja i specyfikacja</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.manufacturer.label_tag }}
+                    {{ form.manufacturer }}
+                    {{ form.manufacturer.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.model.label_tag }}
+                    {{ form.model }}
+                    {{ form.model.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.serial_number.label_tag }}
+                    {{ form.serial_number }}
+                    {{ form.serial_number.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.barcode.label_tag }}
+                    {{ form.barcode }}
+                    {% if form.barcode.help_text %}<div class="helptext">{{ form.barcode.help_text }}</div>{% endif %}
+                    {{ form.barcode.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.external_id.label_tag }}
+                    {{ form.external_id }}
+                    {{ form.external_id.errors }}
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3 class="section-title">Dane zakupowe</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.purchase_date.label_tag }}
+                    {{ form.purchase_date }}
+                    {{ form.purchase_date.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.commissioning_date.label_tag }}
+                    {{ form.commissioning_date }}
+                    {{ form.commissioning_date.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.purchase_value.label_tag }}
+                    {{ form.purchase_value }}
+                    {% if form.purchase_value.help_text %}<div class="helptext">{{ form.purchase_value.help_text }}</div>{% endif %}
+                    {{ form.purchase_value.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.invoice_number.label_tag }}
+                    {{ form.invoice_number }}
+                    {{ form.invoice_number.errors }}
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3 class="section-title">Przypisanie organizacyjne</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.cost_center.label_tag }}
+                    {{ form.cost_center }}
+                    {{ form.cost_center.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.organizational_unit.label_tag }}
+                    {{ form.organizational_unit }}
+                    {{ form.organizational_unit.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.department.label_tag }}
+                    {{ form.department }}
+                    {{ form.department.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.location.label_tag }}
+                    {{ form.location }}
+                    {{ form.location.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.room.label_tag }}
+                    {{ form.room }}
+                    {{ form.room.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.responsible_person.label_tag }}
+                    {{ form.responsible_person }}
+                    {{ form.responsible_person.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.current_user.label_tag }}
+                    {{ form.current_user }}
+                    {{ form.current_user.errors }}
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3 class="section-title">Eksploatacja</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.status.label_tag }}
+                    {{ form.status }}
+                    {{ form.status.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.technical_condition.label_tag }}
+                    {{ form.technical_condition }}
+                    {{ form.technical_condition.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.last_inventory_date.label_tag }}
+                    {{ form.last_inventory_date }}
+                    {{ form.last_inventory_date.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.next_review_date.label_tag }}
+                    {{ form.next_review_date }}
+                    {{ form.next_review_date.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.warranty_until.label_tag }}
+                    {{ form.warranty_until }}
+                    {{ form.warranty_until.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.insurance_until.label_tag }}
+                    {{ form.insurance_until }}
+                    {{ form.insurance_until.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.is_active.label_tag }}
+                    {{ form.is_active }}
+                    {{ form.is_active.errors }}
+                </div>
+            </div>
+
+            <div class="actions">
+                <button type="submit">Zapisz składnik</button>
+                <a class="button-secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+            </div>
+        </section>
+    </form>
 {% endblock %}
