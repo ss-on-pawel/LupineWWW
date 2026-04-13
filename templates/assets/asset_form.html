@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Dodaj srodek trwaly{% endblock %}
+
+{% block content %}
+    <section class="card">
+        <h2>Dodaj srodek trwaly</h2>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Zapisz</button>
+        </form>
+    </section>
+{% endblock %}
