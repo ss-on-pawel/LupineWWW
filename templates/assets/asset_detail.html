@@ -4,255 +4,506 @@
 
 {% block extra_head %}
     <style>
-        .asset-header {
+        .asset-shell {
+            --asset-line: 1px solid #d8dee6;
+            --asset-radius: 12px;
+            position: relative;
+            overflow: hidden;
+            padding: 32px;
+            background:
+                linear-gradient(rgba(15, 23, 42, 0.032) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(15, 23, 42, 0.032) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(248, 250, 252, 0.985) 100%);
+            background-size: 28px 28px, 28px 28px, auto;
+            border: var(--asset-line);
+            border-radius: var(--asset-radius);
+        }
+        .asset-shell::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(15, 76, 129, 0.025) 0%, transparent 40%);
+            pointer-events: none;
+        }
+        .asset-shell > * {
+            position: relative;
+            z-index: 1;
+        }
+        .asset-system-header {
             display: flex;
             justify-content: space-between;
+            align-items: flex-start;
             gap: 24px;
             flex-wrap: wrap;
-            align-items: flex-start;
+            padding-bottom: 28px;
+            border-bottom: var(--asset-line);
+        }
+        .asset-kicker,
+        .summary-label,
+        .detail-label,
+        .section-label {
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #66758a;
+        }
+        .asset-kicker {
+            display: inline-block;
+            margin-bottom: 14px;
         }
         .asset-title {
             margin: 0;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-size: clamp(2.2rem, 4vw, 3.9rem);
+            line-height: 0.94;
+            font-weight: 800;
+            letter-spacing: -0.045em;
+            color: #0f1720;
         }
         .asset-subtitle {
-            margin: 6px 0 0;
-            color: #52606d;
+            margin: 14px 0 0;
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.96rem;
+            letter-spacing: 0.05em;
+            color: #425466;
         }
-        .asset-meta {
+        .asset-meta-row {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
-            margin-top: 16px;
+            margin-top: 20px;
         }
         .meta-pill {
             display: inline-flex;
             align-items: center;
-            padding: 6px 12px;
+            min-height: 34px;
+            padding: 0 12px;
+            border: var(--asset-line);
             border-radius: 999px;
-            background: #eef4f9;
-            color: #34516b;
-            font-size: 0.92rem;
+            background: rgba(255, 255, 255, 0.8);
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.77rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #314154;
+        }
+        .asset-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: nowrap;
+            align-items: center;
+        }
+        .asset-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0 14px;
+            border: var(--asset-line);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.9);
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-size: 0.94rem;
+            font-weight: 600;
+            color: #101828;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .asset-action:hover {
+            color: #0f4c81;
+            border-color: #b9c7d5;
+            text-decoration: none;
         }
         .asset-summary {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            align-items: stretch;
             margin-top: 24px;
+            border-top: var(--asset-line);
+            border-bottom: var(--asset-line);
         }
-        .summary-box {
-            padding: 16px;
-            border: 1px solid #d7e0ea;
-            border-radius: 10px;
-            background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 96px;
+            padding: 18px 20px;
         }
-        .summary-label {
-            display: block;
-            margin-bottom: 6px;
-            color: #6b7785;
-            font-size: 0.9rem;
+        .summary-item + .summary-item {
+            border-left: var(--asset-line);
         }
         .summary-value {
-            font-size: 1.05rem;
+            display: block;
+            margin-top: 10px;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-size: 1.02rem;
+            line-height: 1.4;
             font-weight: 600;
+            color: #111927;
         }
-        .tabs {
+        .summary-value.is-mono {
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.92rem;
+            letter-spacing: 0.02em;
+        }
+        .asset-sections {
+            margin-top: 28px;
+        }
+        .detail-section {
+            border-top: var(--asset-line);
+        }
+        .detail-section:last-child {
+            border-bottom: var(--asset-line);
+        }
+        .section-head-static,
+        .section-toggle {
+            width: 100%;
             display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 18px;
-            border-bottom: 1px solid #d7e0ea;
-            padding-bottom: 12px;
+            align-items: center;
+            gap: 14px;
+            padding: 20px 0;
+            border: 0;
+            background: transparent;
+            text-align: left;
+            color: #101828;
         }
-        .tab-button {
-            padding: 10px 14px;
-            border: 1px solid #c7d2de;
-            border-radius: 999px;
-            background: #fff;
-            color: #34516b;
-            font: inherit;
+        .section-toggle {
             cursor: pointer;
+            font: inherit;
+            transition: color 0.15s ease;
         }
-        .tab-button[aria-selected="true"] {
-            background: #0f4c81;
-            border-color: #0f4c81;
-            color: #fff;
+        .section-toggle:hover {
+            color: #0f4c81;
         }
-        .tab-panel {
+        .section-toggle:hover .section-title-text,
+        .section-toggle:hover .section-icon {
+            color: #0f4c81;
+        }
+        .section-icon {
+            width: 18px;
+            flex: 0 0 18px;
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.9rem;
+            color: #425466;
+            transition: color 0.15s ease;
+        }
+        .section-title-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 0;
+        }
+        .section-title-text {
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-size: 1.16rem;
+            line-height: 1.2;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            transition: color 0.15s ease;
+        }
+        .section-body {
+            padding: 0 0 24px;
+        }
+        .section-body.is-hidden {
             display: none;
         }
-        .tab-panel.is-active {
-            display: block;
-        }
-        .details-grid {
+        .section-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 16px 20px;
+            gap: 0;
+            border-top: var(--asset-line);
+            border-left: var(--asset-line);
+            background: rgba(255, 255, 255, 0.72);
         }
         .detail-item {
-            padding: 14px 16px;
-            border: 1px solid #d7e0ea;
-            border-radius: 10px;
-            background: #fbfdff;
+            min-height: 92px;
+            padding: 18px 20px 20px;
+            border-right: var(--asset-line);
+            border-bottom: var(--asset-line);
         }
         .detail-item-wide {
             grid-column: 1 / -1;
         }
-        .detail-label {
-            display: block;
-            margin-bottom: 8px;
-            color: #6b7785;
-            font-size: 0.9rem;
-        }
         .detail-value {
-            font-weight: 600;
+            margin-top: 12px;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            font-size: 1rem;
             line-height: 1.5;
-            white-space: pre-wrap;
+            font-weight: 600;
+            color: #111927;
+        }
+        .detail-value.is-mono {
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.92rem;
+            letter-spacing: 0.02em;
+        }
+        @media (max-width: 960px) {
+            .asset-summary {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .summary-item:nth-child(3),
+            .summary-item:nth-child(4) {
+                border-top: var(--asset-line);
+            }
+            .summary-item:nth-child(3) {
+                border-left: 0;
+            }
+        }
+        @media (max-width: 720px) {
+            .asset-shell {
+                padding: 22px;
+            }
+            .asset-system-header {
+                gap: 18px;
+            }
+            .asset-actions {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+        }
+        @media (max-width: 640px) {
+            .asset-summary {
+                grid-template-columns: 1fr;
+            }
+            .summary-item + .summary-item {
+                border-top: var(--asset-line);
+                border-left: 0;
+            }
+            .asset-action {
+                flex: 1 1 auto;
+            }
+            .section-grid {
+                grid-template-columns: 1fr;
+            }
+            .detail-item {
+                min-height: auto;
+            }
+            .detail-item-wide {
+                grid-column: auto;
+            }
         }
     </style>
 {% endblock %}
 
 {% block content %}
-    <section class="card">
-        <div class="asset-header">
+    <section class="asset-shell">
+        <div class="asset-system-header">
             <div>
-                <p class="intro">Karta środka</p>
+                <span class="asset-kicker">Karta środka</span>
                 <h2 class="asset-title">{{ asset.name }}</h2>
                 <p class="asset-subtitle">{{ asset.inventory_number }}</p>
-                <div class="asset-meta">
-                    <span class="meta-pill">Typ składnika: {{ asset.get_asset_type_display }}</span>
-                    <span class="meta-pill">Status: {{ asset.get_status_display }}</span>
-                    <span class="meta-pill">Stan techniczny: {{ asset.get_technical_condition_display }}</span>
+                <div class="asset-meta-row">
+                    <span class="meta-pill">STATUS / {{ asset.get_status_display }}</span>
+                    <span class="meta-pill">TYP / {{ asset.get_asset_type_display }}</span>
+                    <span class="meta-pill">STAN / {{ asset.get_technical_condition_display }}</span>
                 </div>
             </div>
-            <div class="actions">
-                <a class="button-secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+            <div class="asset-actions">
+                <a class="asset-action" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+                <a class="asset-action" href="/admin/assets/asset/{{ asset.id }}/change/">Edytuj</a>
             </div>
         </div>
 
         <div class="asset-summary">
-            <div class="summary-box">
-                <span class="summary-label">Wartość zakupu</span>
-                <div class="summary-value">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div>
+            <div class="summary-item">
+                <span class="summary-label">Wartość</span>
+                <span class="summary-value is-mono">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</span>
             </div>
-            <div class="summary-box">
+            <div class="summary-item">
                 <span class="summary-label">Lokalizacja</span>
-                <div class="summary-value">{{ asset.location|default:"-" }}</div>
+                <span class="summary-value">{{ asset.location|default:"-" }}</span>
             </div>
-            <div class="summary-box">
+            <div class="summary-item">
                 <span class="summary-label">Osoba odpowiedzialna</span>
-                <div class="summary-value">{{ asset.responsible_person|default:"-" }}</div>
+                <span class="summary-value">{{ asset.responsible_person|default:"-" }}</span>
             </div>
-            <div class="summary-box">
+            <div class="summary-item">
                 <span class="summary-label">Aktywny</span>
-                <div class="summary-value">{% if asset.is_active %}Tak{% else %}Nie{% endif %}</div>
+                <span class="summary-value is-mono">{% if asset.is_active %}TAK{% else %}NIE{% endif %}</span>
             </div>
         </div>
-    </section>
 
-    <section class="card">
-        <div class="tabs" role="tablist" aria-label="Zakładki karty środka">
-            <button class="tab-button" type="button" role="tab" aria-selected="true" aria-controls="tab-podstawowe" id="btn-podstawowe">Dane podstawowe</button>
-            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-organizacyjne" id="btn-organizacyjne">Organizacyjne</button>
-            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-techniczne" id="btn-techniczne">Techniczne</button>
-            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-finansowe" id="btn-finansowe">Finansowe</button>
-            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-eksploatacja" id="btn-eksploatacja">Eksploatacja</button>
-            <button class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-metadane" id="btn-metadane">Metadane</button>
+        <div class="asset-sections">
+            <section class="detail-section">
+                <div class="section-head-static">
+                    <span class="section-icon">▼</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Sekcja główna</span>
+                        <span class="section-title-text">Dane podstawowe</span>
+                    </div>
+                </div>
+                <div class="section-body" id="sekcja-podstawowe">
+                    <div class="section-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Numer inwentarzowy</span>
+                            <div class="detail-value is-mono">{{ asset.inventory_number }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Nazwa</span>
+                            <div class="detail-value">{{ asset.name }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Typ</span>
+                            <div class="detail-value is-mono">{{ asset.get_asset_type_display }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Wartość</span>
+                            <div class="detail-value is-mono">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Lokalizacja</span>
+                            <div class="detail-value">{{ asset.location|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Status</span>
+                            <div class="detail-value is-mono">{{ asset.get_status_display }}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-organizacyjne">
+                    <span class="section-icon">▶</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Obszar organizacyjny</span>
+                        <span class="section-title-text">Organizacyjne</span>
+                    </div>
+                </button>
+                <div class="section-body is-hidden" id="sekcja-organizacyjne">
+                    <div class="section-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Jednostka organizacyjna</span>
+                            <div class="detail-value">{{ asset.organizational_unit|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Dział</span>
+                            <div class="detail-value">{{ asset.department|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Osoba odpowiedzialna</span>
+                            <div class="detail-value">{{ asset.responsible_person|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Aktualny użytkownik</span>
+                            <div class="detail-value">{{ asset.current_user|default:"-" }}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-techniczne">
+                    <span class="section-icon">▶</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Obszar techniczny</span>
+                        <span class="section-title-text">Techniczne</span>
+                    </div>
+                </button>
+                <div class="section-body is-hidden" id="sekcja-techniczne">
+                    <div class="section-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Producent</span>
+                            <div class="detail-value">{{ asset.manufacturer|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Model</span>
+                            <div class="detail-value">{{ asset.model|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Numer seryjny</span>
+                            <div class="detail-value is-mono">{{ asset.serial_number|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Stan techniczny</span>
+                            <div class="detail-value is-mono">{{ asset.get_technical_condition_display }}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-finansowe">
+                    <span class="section-icon">▶</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Obszar finansowy</span>
+                        <span class="section-title-text">Finansowe</span>
+                    </div>
+                </button>
+                <div class="section-body is-hidden" id="sekcja-finansowe">
+                    <div class="section-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Data zakupu</span>
+                            <div class="detail-value is-mono">{{ asset.purchase_date|date:"Y-m-d"|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Data przyjęcia</span>
+                            <div class="detail-value is-mono">{{ asset.commissioning_date|date:"Y-m-d"|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Wartość</span>
+                            <div class="detail-value is-mono">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Numer faktury</span>
+                            <div class="detail-value is-mono">{{ asset.invoice_number|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item detail-item-wide">
+                            <span class="detail-label">Centrum kosztów</span>
+                            <div class="detail-value is-mono">{{ asset.cost_center|default:"-" }}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-eksploatacja">
+                    <span class="section-icon">▶</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Obszar eksploatacyjny</span>
+                        <span class="section-title-text">Eksploatacja</span>
+                    </div>
+                </button>
+                <div class="section-body is-hidden" id="sekcja-eksploatacja">
+                    <div class="section-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Data ostatniej inwentaryzacji</span>
+                            <div class="detail-value is-mono">{{ asset.last_inventory_date|date:"Y-m-d"|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Data następnego przeglądu</span>
+                            <div class="detail-value is-mono">{{ asset.next_review_date|date:"Y-m-d"|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Gwarancja</span>
+                            <div class="detail-value is-mono">{{ asset.warranty_until|date:"Y-m-d"|default:"-" }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Ubezpieczenie</span>
+                            <div class="detail-value is-mono">{{ asset.insurance_until|date:"Y-m-d"|default:"-" }}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
-
-        <section class="tab-panel is-active" id="tab-podstawowe" role="tabpanel" aria-labelledby="btn-podstawowe">
-            <div class="details-grid">
-                <div class="detail-item"><span class="detail-label">Numer inwentarzowy</span><div class="detail-value">{{ asset.inventory_number }}</div></div>
-                <div class="detail-item"><span class="detail-label">Nazwa</span><div class="detail-value">{{ asset.name }}</div></div>
-                <div class="detail-item"><span class="detail-label">Typ składnika</span><div class="detail-value">{{ asset.get_asset_type_display }}</div></div>
-                <div class="detail-item"><span class="detail-label">Wartość zakupu</span><div class="detail-value">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div></div>
-                <div class="detail-item"><span class="detail-label">Lokalizacja</span><div class="detail-value">{{ asset.location|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Status</span><div class="detail-value">{{ asset.get_status_display }}</div></div>
-                <div class="detail-item"><span class="detail-label">Identyfikator zewnętrzny</span><div class="detail-value">{{ asset.external_id|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Aktywny</span><div class="detail-value">{% if asset.is_active %}Tak{% else %}Nie{% endif %}</div></div>
-            </div>
-        </section>
-
-        <section class="tab-panel" id="tab-organizacyjne" role="tabpanel" aria-labelledby="btn-organizacyjne">
-            <div class="details-grid">
-                <div class="detail-item"><span class="detail-label">Jednostka organizacyjna</span><div class="detail-value">{{ asset.organizational_unit|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Dział</span><div class="detail-value">{{ asset.department|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">MPK / centrum kosztów</span><div class="detail-value">{{ asset.cost_center|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Osoba odpowiedzialna</span><div class="detail-value">{{ asset.responsible_person|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Aktualny użytkownik</span><div class="detail-value">{{ asset.current_user|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Pomieszczenie</span><div class="detail-value">{{ asset.room|default:"-" }}</div></div>
-            </div>
-        </section>
-
-        <section class="tab-panel" id="tab-techniczne" role="tabpanel" aria-labelledby="btn-techniczne">
-            <div class="details-grid">
-                <div class="detail-item"><span class="detail-label">Producent</span><div class="detail-value">{{ asset.manufacturer|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Model</span><div class="detail-value">{{ asset.model|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Numer seryjny</span><div class="detail-value">{{ asset.serial_number|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Kod kreskowy</span><div class="detail-value">{{ asset.barcode|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Stan techniczny</span><div class="detail-value">{{ asset.get_technical_condition_display }}</div></div>
-                <div class="detail-item detail-item-wide"><span class="detail-label">Opis</span><div class="detail-value">{{ asset.description|default:"-" }}</div></div>
-            </div>
-        </section>
-
-        <section class="tab-panel" id="tab-finansowe" role="tabpanel" aria-labelledby="btn-finansowe">
-            <div class="details-grid">
-                <div class="detail-item"><span class="detail-label">Data zakupu</span><div class="detail-value">{{ asset.purchase_date|date:"Y-m-d"|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Data przyjęcia do użytkowania</span><div class="detail-value">{{ asset.commissioning_date|date:"Y-m-d"|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Wartość zakupu</span><div class="detail-value">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div></div>
-                <div class="detail-item"><span class="detail-label">Numer faktury</span><div class="detail-value">{{ asset.invoice_number|default:"-" }}</div></div>
-            </div>
-        </section>
-
-        <section class="tab-panel" id="tab-eksploatacja" role="tabpanel" aria-labelledby="btn-eksploatacja">
-            <div class="details-grid">
-                <div class="detail-item"><span class="detail-label">Data ostatniej inwentaryzacji</span><div class="detail-value">{{ asset.last_inventory_date|date:"Y-m-d"|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Data następnego przeglądu</span><div class="detail-value">{{ asset.next_review_date|date:"Y-m-d"|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Gwarancja do</span><div class="detail-value">{{ asset.warranty_until|date:"Y-m-d"|default:"-" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Ubezpieczenie do</span><div class="detail-value">{{ asset.insurance_until|date:"Y-m-d"|default:"-" }}</div></div>
-            </div>
-        </section>
-
-        <section class="tab-panel" id="tab-metadane" role="tabpanel" aria-labelledby="btn-metadane">
-            <div class="details-grid">
-                <div class="detail-item"><span class="detail-label">Data utworzenia</span><div class="detail-value">{{ asset.created_at|date:"Y-m-d H:i" }}</div></div>
-                <div class="detail-item"><span class="detail-label">Data aktualizacji</span><div class="detail-value">{{ asset.updated_at|date:"Y-m-d H:i" }}</div></div>
-            </div>
-        </section>
     </section>
 {% endblock %}
 
 {% block extra_scripts %}
     <script>
         (function () {
-            const buttons = document.querySelectorAll(".tab-button");
-            const panels = document.querySelectorAll(".tab-panel");
+            const toggles = document.querySelectorAll(".section-toggle");
 
-            function activateTab(button) {
-                buttons.forEach((item) => {
-                    const isSelected = item === button;
-                    item.setAttribute("aria-selected", isSelected ? "true" : "false");
-                    item.tabIndex = isSelected ? 0 : -1;
-                });
+            toggles.forEach((toggle) => {
+                toggle.addEventListener("click", () => {
+                    const body = document.getElementById(toggle.getAttribute("aria-controls"));
+                    const icon = toggle.querySelector(".section-icon");
+                    const expanded = toggle.getAttribute("aria-expanded") === "true";
 
-                panels.forEach((panel) => {
-                    panel.classList.toggle("is-active", panel.id === button.getAttribute("aria-controls"));
-                });
-            }
-
-            buttons.forEach((button, index) => {
-                button.tabIndex = index === 0 ? 0 : -1;
-
-                button.addEventListener("click", () => activateTab(button));
-                button.addEventListener("keydown", (event) => {
-                    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
-                        return;
-                    }
-
-                    event.preventDefault();
-                    const delta = event.key === "ArrowRight" ? 1 : -1;
-                    const nextIndex = (index + delta + buttons.length) % buttons.length;
-                    buttons[nextIndex].focus();
-                    activateTab(buttons[nextIndex]);
+                    toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+                    body.classList.toggle("is-hidden", expanded);
+                    icon.textContent = expanded ? "▶" : "▼";
                 });
             });
         })();

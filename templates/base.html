@@ -1,17 +1,12 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Zarządzanie majątkiem{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'lupine/styles.css' %}">
     <style>
-        body {
-            font-family: "Segoe UI", Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background: #f3f6fb;
-            color: #1f2933;
-        }
         header, main {
             max-width: 1200px;
             margin: 0 auto;
@@ -37,7 +32,6 @@
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
-            box-shadow: 0 8px 24px rgba(15, 76, 129, 0.06);
         }
         .messages {
             list-style: none;
