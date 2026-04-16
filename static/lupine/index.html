@@ -1,0 +1,1068 @@
+﻿<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inwentaryzacja środków trwałych i zarządzanie majątkiem | Lupine</title>
+  <meta name="description" content="Kompleksowa inwentaryzacja majątku i system zarządzania środkami trwałymi. Spis z natury, oznakowanie i kontrola.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://www.lupine.com.pl/">
+  <!-- Google Search Console: dodaj meta verification po podpięciu domeny -->
+  <!-- Analytics: podłącz Plausible lub Google Analytics po wdrożeniu i zgodzie cookies -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preload" href="styles.css" as="style">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="is-preloading home-page">
+  <div class="preloader mono" id="preloader" aria-live="polite">
+    <div class="preloader-inner">
+      <p class="preloader-label">LUPINE / ASSET CONTROL SYSTEM</p>
+
+      <div class="preloader-lines" aria-hidden="true">
+        <div class="preloader-line" data-step="0">
+          <span class="preloader-line-text">initializing modules...</span>
+          <span class="preloader-line-status">OK</span>
+        </div>
+        <div class="preloader-line" data-step="1">
+          <span class="preloader-line-text">loading registry...</span>
+          <span class="preloader-line-status">OK</span>
+        </div>
+        <div class="preloader-line" data-step="2">
+          <span class="preloader-line-text">verifying structure...</span>
+          <span class="preloader-line-status">OK</span>
+        </div>
+        <div class="preloader-line" data-step="3">
+          <span class="preloader-line-text">reconciling records...</span>
+          <span class="preloader-line-status">OK</span>
+        </div>
+      </div>
+
+      <div class="preloader-progress" aria-label="Postęp ładowania systemu">
+        <div class="preloader-track">
+          <div class="preloader-fill" id="preloader-fill"></div>
+        </div>
+        <div class="preloader-meta">
+          <span class="preloader-percent" id="preloader-percent">0%</span>
+          <span class="preloader-ready" id="preloader-ready">SYSTEM READY</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <header class="site-header" id="top">
+    <div class="site-header-inner container">
+      <a href="/" class="brand" aria-label="Lupine">
+        <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true">
+          <!-- siatka czarnych kropek 5x5 -->
+          <circle cx="6"  cy="6"  r="2.1" class="dot base" />
+          <circle cx="14" cy="6"  r="2.1" class="dot base" />
+          <circle cx="22" cy="6"  r="2.1" class="dot base" />
+          <circle cx="30" cy="6"  r="2.1" class="dot base" />
+          <circle cx="38" cy="6"  r="2.1" class="dot base" />
+
+          <circle cx="6"  cy="14" r="2.1" class="dot base" />
+          <circle cx="14" cy="14" r="2.1" class="dot base" />
+          <circle cx="22" cy="14" r="2.1" class="dot base" />
+          <circle cx="30" cy="14" r="2.1" class="dot base" />
+          <circle cx="38" cy="14" r="2.1" class="dot base" />
+
+          <circle cx="6"  cy="22" r="2.1" class="dot base" />
+          <circle cx="14" cy="22" r="2.1" class="dot base" />
+          <circle cx="22" cy="22" r="2.1" class="dot base" />
+          <circle cx="30" cy="22" r="2.1" class="dot base" />
+          <circle cx="38" cy="22" r="2.1" class="dot base" />
+
+          <circle cx="6"  cy="30" r="2.1" class="dot base" />
+          <circle cx="14" cy="30" r="2.1" class="dot base" />
+          <circle cx="22" cy="30" r="2.1" class="dot base" />
+          <circle cx="30" cy="30" r="2.1" class="dot base" />
+          <circle cx="38" cy="30" r="2.1" class="dot base" />
+
+          <circle cx="6"  cy="38" r="2.1" class="dot base" />
+          <circle cx="14" cy="38" r="2.1" class="dot base" />
+          <circle cx="22" cy="38" r="2.1" class="dot base" />
+          <circle cx="30" cy="38" r="2.1" class="dot base" />
+          <circle cx="38" cy="38" r="2.1" class="dot base" />
+
+          <!-- wycentrowane L w środku układu -->
+          <!-- kolumna środkowo-lewa -->
+          <circle cx="14" cy="14" r="2.25" class="dot accent seq-1" />
+          <circle cx="14" cy="22" r="2.25" class="dot accent seq-2" />
+          <circle cx="14" cy="30" r="2.25" class="dot accent seq-3" />
+          <!-- dół L -->
+          <circle cx="22" cy="30" r="2.25" class="dot accent seq-4" />
+          <circle cx="30" cy="30" r="2.25" class="dot accent seq-5" />
+        </svg>
+
+        <span class="brand-wordmark">LUPINE</span>
+      </a>
+
+      <nav class="site-nav" aria-label="Główne menu">
+        <a href="process.html">Proces</a>
+        <a href="services.html">Usługi</a>
+        <a href="technology.html">Technologia</a>
+        <a href="contact.html">Kontakt</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="page-shell">
+    <main class="container">
+      <section class="hero" id="system" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow mono">LUPINE / SYSTEM MAJĄTKU</p>
+          <h1 id="hero-title">Inwentaryzacja i zarządzanie majątkiem w jednym systemie</h1>
+          <p class="hero-subtitle">
+            Realizujemy inwentaryzację środków trwałych i wyposażenia oraz udostępniamy system do ich dalszego zarządzania
+          </p>
+          <p class="hero-subtitle">
+            Zobacz, jak wygląda <a href="process.html">proces inwentaryzacji środków trwałych</a>, poznaj <a href="services.html">modele współpracy</a> i sprawdź, jak działa <a href="technology.html">system do inwentaryzacji</a>.
+          </p>
+        </div>
+
+        <div class="hero-panel" aria-label="Placeholder panelu danych">
+          <div class="system-panel">
+            <p class="system-panel-label mono">ASSET RECORD / LIVE STATE</p>
+
+            <div class="asset-records mono" aria-label="Lista rekordów">
+              <div class="asset-row is-current reveal-step" style="--reveal-delay: 100ms;" data-record-row>
+                <span class="asset-id" data-record-id>ST-000234</span>
+                <span class="asset-status" data-record-status>ACTIVE</span>
+              </div>
+              <div class="asset-row reveal-step" style="--reveal-delay: 200ms;" data-record-row>
+                <span class="asset-id" data-record-id>EQ-991223</span>
+                <span class="asset-status" data-record-status>ASSIGNED</span>
+              </div>
+              <div class="asset-row reveal-step is-alert" style="--reveal-delay: 300ms;" data-record-row>
+                <span class="asset-id" data-record-id>ST-882341</span>
+                <span class="asset-status" data-record-status>NO LOCATION</span>
+              </div>
+            </div>
+
+            <div class="asset-details mono reveal-step" style="--reveal-delay: 400ms;" aria-label="Szczegóły aktywnego składnika" data-details-panel>
+              <p><span>TYPE:</span> <strong data-detail-type>Laptop</strong></p>
+              <p><span>LOCATION:</span> <strong data-detail-location>Warszawa / IT</strong></p>
+              <p><span>OWNER:</span> <strong data-detail-owner>ADMIN_01</strong></p>
+              <p><span>LAST SCAN:</span> <strong data-detail-scan>2026-01-12 / 12:43:22</strong></p>
+              <p><span>STATUS:</span> <strong data-detail-verified>Verified</strong></p>
+            </div>
+
+            <div class="system-log mono" aria-label="Log systemowy" data-system-log>
+              <p class="reveal-step" style="--reveal-delay: 520ms;">scan completed</p>
+              <p class="reveal-step" style="--reveal-delay: 610ms;">asset assigned</p>
+              <p class="reveal-step" style="--reveal-delay: 700ms;">location verified</p>
+              <p class="reveal-step" style="--reveal-delay: 790ms;">record synchronized</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="credibility-section" id="dlaczego-lupine" aria-labelledby="credibility-title">
+        <div class="credibility-header reveal-on-scroll">
+          <h2 id="credibility-title">System sprawdzony w praktyce</h2>
+        </div>
+
+        <div class="credibility-layout">
+          <div class="stats-panel mono reveal-on-scroll" data-stats-panel>
+            <p class="stats-panel-label">SYSTEM STATS / LIVE</p>
+
+            <div class="stats-grid">
+              <div class="stats-row stats-row-metric" data-stat-row>
+                <div class="stats-line">
+                  <span>ASSETS PROCESSED</span>
+                  <strong data-stat-value="3M+">...</strong>
+                </div>
+                <div class="stats-bar-text" data-bar-text data-bar-filled="20" data-bar-total="22" aria-hidden="true"></div>
+              </div>
+              <div class="stats-row stats-row-metric" data-stat-row>
+                <div class="stats-line">
+                  <span>IMPLEMENTATIONS</span>
+                  <strong data-stat-value="400+">...</strong>
+                </div>
+                <div class="stats-bar-text" data-bar-text data-bar-filled="15" data-bar-total="22" aria-hidden="true"></div>
+              </div>
+              <div class="stats-row stats-row-metric" data-stat-row>
+                <div class="stats-line">
+                  <span>INVENTORIES COMPLETED</span>
+                  <strong data-stat-value="2K+">...</strong>
+                </div>
+                <div class="stats-bar-text" data-bar-text data-bar-filled="17" data-bar-total="22" aria-hidden="true"></div>
+              </div>
+            </div>
+            <div class="stats-system-active" data-stat-row>
+              <p class="stats-system-label">SYSTEM ACTIVE</p>
+              <strong data-stat-value="SINCE 2009">...</strong>
+            </div>
+          </div>
+
+          <div class="clients-registry reveal-on-scroll">
+            <p class="clients-registry-label mono">SELECTED CLIENTS / REGISTRY</p>
+
+            <div class="clients-registry-list">
+              <div class="clients-registry-column">
+                <p class="clients-registry-item"><span class="mono">[01]</span><span>MSZ</span></p>
+                <p class="clients-registry-item"><span class="mono">[02]</span><span>MF</span></p>
+                <p class="clients-registry-item"><span class="mono">[03]</span><span>PZU</span></p>
+                <p class="clients-registry-item"><span class="mono">[04]</span><span>PKO BP</span></p>
+                <p class="clients-registry-item"><span class="mono">[05]</span><span>BGK</span></p>
+                <p class="clients-registry-item"><span class="mono">[06]</span><span>BOŚ</span></p>
+              </div>
+              <div class="clients-registry-column">
+                <p class="clients-registry-item"><span class="mono">[07]</span><span>Tauron</span></p>
+                <p class="clients-registry-item"><span class="mono">[08]</span><span>TUI</span></p>
+                <p class="clients-registry-item"><span class="mono">[09]</span><span>Bayer</span></p>
+                <p class="clients-registry-item"><span class="mono">[10]</span><span>DB Schenker</span></p>
+                <p class="clients-registry-item"><span class="mono">[11]</span><span>Sanofi</span></p>
+                <p class="clients-registry-item"><span class="mono">[12]</span><span>Eurocash</span></p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <section class="technology-section" id="technologia" aria-labelledby="technology-title">
+        <div class="technology-module reveal-on-scroll">
+          <div class="technology-module-copy">
+            <h2 id="technology-title">Własny system rozwijany wraz ze zmianami technologicznymi.</h2>
+            <p>Terminale mobilne łączą funkcję komputera i skanera, umożliwiając pracę bezpośrednio na danych w terenie.</p>
+            <p>Odczyt obejmuje kody 1D i 2D, również o wysokiej gęstości i częściowo uszkodzone.</p>
+            <p>Druk odbywa się na drukarkach termotransferowych, z wykorzystaniem trwałych etykiet odpornych na ścieranie, wilgoć i intensywną eksploatację.</p>
+            <p>Całość pracuje w jednym systemie, który rejestruje, weryfikuje i synchronizuje dane w czasie rzeczywistym.</p>
+          </div>
+
+          <div class="technology-module-stack mono" aria-label="Stos identyfikacji">
+            <p class="technology-module-label">IDENTIFICATION STACK / ACTIVE</p>
+
+            <div class="technology-module-rows">
+              <div class="technology-module-row">
+                <span>PLATFORM</span>
+                <strong>LUPINE SYSTEM</strong>
+              </div>
+              <div class="technology-module-row">
+                <span>IDENTIFICATION</span>
+                <strong>BARCODE / QR / DATAMATRIX</strong>
+              </div>
+              <div class="technology-module-row">
+                <span>DEVICES</span>
+                <strong>MOBILE TERMINALS</strong>
+              </div>
+              <div class="technology-module-row">
+                <span>PRINTING</span>
+                <strong>LABEL PRINTERS</strong>
+              </div>
+              <div class="technology-module-row">
+                <span>LABELS</span>
+                <strong>DURABLE / INDUSTRIAL</strong>
+              </div>
+              <div class="technology-module-row">
+                <span>WORKFLOW</span>
+                <strong>FIELD / OFFICE / REPORTING</strong>
+              </div>
+              <div class="technology-module-row is-active">
+                <span>STATUS</span>
+                <strong>ACTIVE</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="services-section" id="uslugi" aria-labelledby="services-title">
+        <div class="services-module reveal-on-scroll">
+          <p class="services-module-label mono" id="services-title">SERVICE MODULE / AVAILABLE</p>
+          <p class="services-module-subtitle">Dostępne modele współpracy i zakres usług</p>
+
+          <div class="services-module-rows">
+            <div class="services-module-row">
+              <h3>INVENTORY SERVICE</h3>
+              <p class="services-module-line mono">FULL / ON-SITE EXECUTION</p>
+              <p>Pełna inwentaryzacja realizowana przez nasz zespół.<br>Spis z natury, oznaczenia, weryfikacja i raport końcowy.</p>
+            </div>
+
+            <div class="services-module-row">
+              <h3>SOFTWARE ACCESS</h3>
+              <p class="services-module-line mono">SYSTEM / TERMINALS / PRINTERS</p>
+              <p>Dostęp do systemu wraz z urządzeniami.<br>Obsługa inwentaryzacji, rejestru majątku i raportowania.</p>
+            </div>
+
+            <div class="services-module-row">
+              <h3>HYBRID MODE</h3>
+              <p class="services-module-line mono">SERVICE + SYSTEM</p>
+              <p>Połączenie pracy naszego zespołu z Twoim systemem.<br>Wsparcie wdrożeniowe i operacyjne.</p>
+            </div>
+
+            <div class="services-module-row">
+              <h3>ASSET MANAGEMENT</h3>
+              <p class="services-module-line mono">REGISTRATION / TRANSFERS / DISPOSAL</p>
+              <p>Pełna obsługa majątku.<br>Przyjęcia, ruchy, likwidacje i inwentaryzacje ciągłe.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <footer class="footer-section" aria-labelledby="footer-title">
+        <div class="footer-panel reveal-on-scroll">
+          <p class="footer-kicker mono">LUPINE / INFORMACJE KOŃCOWE</p>
+          <p class="footer-message" id="footer-title">Uporządkowany majątek i dane gotowe do wykorzystania operacyjnego i rozliczeniowego.</p>
+
+          <div class="footer-grid">
+            <section class="footer-module" aria-labelledby="footer-card-brand">
+              <p class="footer-label mono" id="footer-card-brand">LUPINE</p>
+              <p class="footer-copy">Kompleksowa inwentaryzacja majątku oraz systemy zarządzania dla dużych organizacji.</p>
+            </section>
+
+            <section class="footer-module" aria-labelledby="footer-card-nav">
+              <p class="footer-label mono" id="footer-card-nav">NAWIGACJA</p>
+              <nav class="footer-nav" aria-label="Stopka nawigacja">
+                <a href="#uslugi">Co robimy</a>
+                <a href="#technologia">Jak działamy</a>
+                <a href="#dlaczego-lupine">Dlaczego Lupine</a>
+                <a href="contact.html">Kontakt</a>
+                <a href="wiedza.html">Wiedza</a>
+              </nav>
+            </section>
+
+            <section class="footer-module" aria-labelledby="footer-card-contact">
+              <p class="footer-label mono" id="footer-card-contact">KONTAKT</p>
+              <div class="footer-contact">
+                <a href="mailto:biuro@lupine.pl">biuro@lupine.pl</a>
+                <a href="tel:+48792860792">+48 792 860 792</a>
+                <p>Warszawa, Polska</p>
+              </div>
+            </section>
+          </div>
+
+          <div class="footer-bottom">
+            <p>© Lupine – Paweł Kosson</p>
+            <p>2026</p>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="cookie-banner" id="cookie-banner" role="dialog" aria-live="polite" aria-label="Ustawienia cookies">
+    <div class="cookie-banner-content">
+      <p class="cookie-banner-copy">
+        Ta strona wykorzystuje pliki cookies niezbędne do działania oraz opcjonalne cookies analityczne. Możesz zaakceptować wszystkie albo zarządzać ustawieniami.
+        <a href="privacy.html">Polityka prywatności</a>
+      </p>
+      <div class="cookie-banner-actions">
+        <button class="cookie-action" type="button" id="cookie-accept">Akceptuję</button>
+        <button class="cookie-action" type="button" id="cookie-settings-toggle" aria-expanded="false" aria-controls="cookie-settings-panel">Ustawienia</button>
+      </div>
+      <div class="cookie-settings" id="cookie-settings-panel">
+        <div class="cookie-settings-group">
+          <div>
+            <p class="cookie-settings-label mono">Niezbędne</p>
+            <p class="cookie-settings-description">Pliki wymagane do prawidłowego działania strony. Zawsze aktywne.</p>
+          </div>
+          <button class="cookie-toggle is-locked" type="button" aria-pressed="true" aria-label="Niezbędne cookies aktywne" disabled></button>
+        </div>
+        <div class="cookie-settings-group">
+          <div>
+            <p class="cookie-settings-label mono">Analityczne</p>
+            <p class="cookie-settings-description">Pomagają analizować sposób korzystania ze strony i rozwijać jej działanie.</p>
+          </div>
+          <button class="cookie-toggle" type="button" id="cookie-analytics-toggle" aria-pressed="false" aria-label="Przełącz cookies analityczne"></button>
+        </div>
+        <button class="cookie-action cookie-settings-save" type="button" id="cookie-save">Zapisz ustawienia</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="barcode-band" id="barcode-band" aria-hidden="true">
+    <div class="system-footer">
+      <p class="system-footer-label mono">LUPINE / ASSET CONTROL SYSTEM</p>
+      <nav class="system-footer-nav" aria-label="Stopka" id="kontakt">
+        <a href="contact.html">Kontakt</a>
+        <a href="privacy.html">Polityka prywatności</a>
+        <a href="wiedza.html">Wiedza</a>
+      </nav>
+    </div>
+    <div class="barcode-pattern" id="barcode-pattern"></div>
+    <span class="barcode-scan"></span>
+  </div>
+
+  <script>
+    window.addEventListener("load", () => {
+      const brand = document.querySelector(".brand");
+      if (!brand) return;
+
+      brand.classList.add("is-animated");
+
+      setTimeout(() => {
+        brand.classList.remove("is-animated");
+      }, 1200);
+    });
+
+    (function () {
+      const body = document.body;
+      const siteHeader = document.querySelector(".site-header");
+      const preloader = document.getElementById("preloader");
+      const fill = document.getElementById("preloader-fill");
+      const percent = document.getElementById("preloader-percent");
+      const ready = document.getElementById("preloader-ready");
+      const lines = Array.from(document.querySelectorAll(".preloader-line"));
+      const barcodeBand = document.getElementById("barcode-band");
+      const barcodePattern = document.getElementById("barcode-pattern");
+      const cookieBanner = document.getElementById("cookie-banner");
+      const cookieAccept = document.getElementById("cookie-accept");
+      const cookieSettingsToggle = document.getElementById("cookie-settings-toggle");
+      const cookieSettingsPanel = document.getElementById("cookie-settings-panel");
+      const cookieAnalyticsToggle = document.getElementById("cookie-analytics-toggle");
+      const cookieSave = document.getElementById("cookie-save");
+      const revealNodes = Array.from(document.querySelectorAll(".reveal-step"));
+      const scrollRevealNodes = Array.from(document.querySelectorAll(".reveal-on-scroll"));
+      const statsPanel = document.querySelector("[data-stats-panel]");
+      const statRows = Array.from(document.querySelectorAll("[data-stat-row]"));
+      const recordRows = Array.from(document.querySelectorAll("[data-record-row]"));
+      const detailsPanel = document.querySelector("[data-details-panel]");
+      const systemLog = document.querySelector("[data-system-log]");
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const COOKIE_STORAGE_KEY = "lupine_cookie_settings";
+      const records = [
+        {
+          id: "ST-000234",
+          type: "Laptop",
+          queueState: "pending",
+          stages: [
+            {
+              status: "SCANNING",
+              alert: false,
+              details: {
+                type: "Laptop",
+                location: "—",
+                owner: "—",
+                scan: "2026-01-12 / 12:43:18",
+                verified: "Reading tag"
+              },
+              logs: ["tag detected", "record created"],
+              duration: 1300
+            },
+            {
+              status: "UNASSIGNED",
+              alert: true,
+              details: {
+                type: "Laptop",
+                location: "Warszawa / IT",
+                owner: "—",
+                scan: "2026-01-12 / 12:43:22",
+                verified: "Awaiting owner"
+              },
+              logs: ["location assigned"],
+              duration: 1200
+            },
+            {
+              status: "ASSIGNED",
+              alert: false,
+              details: {
+                type: "Laptop",
+                location: "Warszawa / IT",
+                owner: "ADMIN_01",
+                scan: "2026-01-12 / 12:43:22",
+                verified: "Owner linked"
+              },
+              logs: ["owner linked"],
+              duration: 1200
+            },
+            {
+              status: "VERIFIED",
+              alert: false,
+              details: {
+                type: "Laptop",
+                location: "Warszawa / IT",
+                owner: "ADMIN_01",
+                scan: "2026-01-12 / 12:43:22",
+                verified: "Verified"
+              },
+              logs: ["record verified", "synchronized"],
+              duration: 1050
+            }
+          ]
+        },
+        {
+          id: "EQ-991223",
+          type: "Monitor",
+          queueState: "pending",
+          stages: [
+            {
+              status: "READING TAG",
+              alert: false,
+              details: {
+                type: "Monitor",
+                location: "—",
+                owner: "USER_14",
+                scan: "2026-01-12 / 12:47:01",
+                verified: "Resolving location"
+              },
+              logs: ["tag detected", "record created"],
+              duration: 1400
+            },
+            {
+              status: "NO LOCATION",
+              alert: true,
+              details: {
+                type: "Monitor",
+                location: "—",
+                owner: "USER_14",
+                scan: "2026-01-12 / 12:47:09",
+                verified: "Location pending"
+              },
+              logs: ["location unresolved"],
+              duration: 1200
+            },
+            {
+              status: "LOCATION SET",
+              alert: false,
+              details: {
+                type: "Monitor",
+                location: "Krakow / OPS",
+                owner: "USER_14",
+                scan: "2026-01-12 / 12:47:09",
+                verified: "Location assigned"
+              },
+              logs: ["location assigned"],
+              duration: 1150
+            },
+            {
+              status: "VERIFIED",
+              alert: false,
+              details: {
+                type: "Monitor",
+                location: "Krakow / OPS",
+                owner: "USER_14",
+                scan: "2026-01-12 / 12:47:09",
+                verified: "Verified"
+              },
+              logs: ["record verified", "synchronized"],
+              duration: 1000
+            }
+          ]
+        },
+        {
+          id: "ST-882341",
+          type: "Router",
+          queueState: "pending",
+          stages: [
+            {
+              status: "SCANNING",
+              alert: false,
+              details: {
+                type: "Router",
+                location: "Warszawa / INFRA",
+                owner: "INFRA_NODE",
+                scan: "2026-01-12 / 12:51:28",
+                verified: "Reading tag"
+              },
+              logs: ["tag detected"],
+              duration: 1350
+            },
+            {
+              status: "VERIFIED",
+              alert: false,
+              details: {
+                type: "Router",
+                location: "Warszawa / INFRA",
+                owner: "INFRA_NODE",
+                scan: "2026-01-12 / 12:51:33",
+                verified: "Verified"
+              },
+              logs: ["record created", "record verified", "synchronized"],
+              duration: 1500
+            }
+          ]
+        }
+      ];
+      const steps = [
+        { duration: 700, target: 12 },
+        { duration: 1100, target: 37 },
+        { duration: 900, target: 64 },
+        { duration: 1300, target: 83 }
+      ];
+      const finalRampDuration = 520;
+      const readyDelay = 260;
+      const checkDelay = 320;
+      const holdDelay = 700;
+      const fadeDuration = 650;
+      let activeRecordIndex = 0;
+      let rotationTimer = null;
+      let analyticsCookiesEnabled = false;
+
+      function wait(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }
+
+      function easeOutCubic(value) {
+        return 1 - Math.pow(1 - value, 3);
+      }
+
+      function setCookieAnalyticsState(enabled) {
+        analyticsCookiesEnabled = Boolean(enabled);
+
+        if (cookieAnalyticsToggle) {
+          cookieAnalyticsToggle.setAttribute("aria-pressed", String(analyticsCookiesEnabled));
+        }
+      }
+
+      function hideCookieBanner() {
+        if (!cookieBanner) {
+          return;
+        }
+
+        cookieBanner.classList.remove("is-visible");
+        cookieBanner.classList.add("is-hidden");
+      }
+
+      function showCookieBanner() {
+        if (!cookieBanner) {
+          return;
+        }
+
+        cookieBanner.classList.remove("is-hidden");
+        requestAnimationFrame(() => {
+          cookieBanner.classList.add("is-visible");
+        });
+      }
+
+      function persistCookieSettings(analyticsEnabled) {
+        const settings = {
+          necessary: true,
+          analytics: Boolean(analyticsEnabled)
+        };
+
+        localStorage.setItem(COOKIE_STORAGE_KEY, JSON.stringify(settings));
+        window.lupineCookieSettings = settings;
+        setCookieAnalyticsState(settings.analytics);
+        hideCookieBanner();
+      }
+
+      function initCookieBanner() {
+        if (!cookieBanner) {
+          return;
+        }
+
+        let storedSettings = null;
+
+        try {
+          storedSettings = JSON.parse(localStorage.getItem(COOKIE_STORAGE_KEY) || "null");
+        } catch (error) {
+          storedSettings = null;
+        }
+
+        if (storedSettings && typeof storedSettings.analytics === "boolean") {
+          window.lupineCookieSettings = storedSettings;
+          setCookieAnalyticsState(storedSettings.analytics);
+          hideCookieBanner();
+          return;
+        }
+
+        window.lupineCookieSettings = {
+          necessary: true,
+          analytics: false
+        };
+
+        setCookieAnalyticsState(false);
+        showCookieBanner();
+
+        cookieAccept?.addEventListener("click", () => {
+          persistCookieSettings(true);
+        });
+
+        cookieSettingsToggle?.addEventListener("click", () => {
+          const isOpen = cookieSettingsPanel?.classList.toggle("is-open");
+          cookieSettingsToggle.setAttribute("aria-expanded", String(Boolean(isOpen)));
+        });
+
+        cookieAnalyticsToggle?.addEventListener("click", () => {
+          setCookieAnalyticsState(!analyticsCookiesEnabled);
+        });
+
+        cookieSave?.addEventListener("click", () => {
+          persistCookieSettings(analyticsCookiesEnabled);
+        });
+      }
+
+      function initScrollReveal() {
+        if (!scrollRevealNodes.length) {
+          return;
+        }
+
+        if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+          scrollRevealNodes.forEach((node) => node.classList.add("is-visible"));
+          return;
+        }
+
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) {
+              return;
+            }
+
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          });
+        }, {
+          threshold: 0.18,
+          rootMargin: "0px 0px -8% 0px"
+        });
+
+        scrollRevealNodes.forEach((node, index) => {
+          node.style.setProperty("--scroll-delay", `${index * 90}ms`);
+          observer.observe(node);
+        });
+      }
+
+      function initStatsPanel() {
+        if (!statsPanel || !statRows.length) {
+          return;
+        }
+
+        const buildBarSegments = (node) => {
+          if (node.childElementCount) {
+            return Array.from(node.querySelectorAll(".stats-bar-segment"));
+          }
+
+          const total = Number.parseInt(node.getAttribute("data-bar-total"), 10);
+          const startBracket = document.createElement("span");
+          const track = document.createElement("span");
+          const endBracket = document.createElement("span");
+
+          startBracket.className = "stats-bar-bracket";
+          startBracket.textContent = "[";
+          track.className = "stats-bar-track";
+          endBracket.className = "stats-bar-bracket";
+          endBracket.textContent = "]";
+
+          for (let index = 0; index < total; index += 1) {
+            const segment = document.createElement("span");
+            segment.className = "stats-bar-segment";
+            track.appendChild(segment);
+          }
+
+          node.append(startBracket, track, endBracket);
+          return Array.from(track.children);
+        };
+
+        const animateBarText = (node, rowIndex) => {
+          const filled = Number.parseInt(node.getAttribute("data-bar-filled"), 10);
+          const segments = buildBarSegments(node);
+          let current = 0;
+
+          segments.forEach((segment) => segment.classList.remove("is-filled"));
+
+          const tick = () => {
+            if (current >= filled) {
+              return;
+            }
+
+            segments[current].classList.add("is-filled");
+            current += 1;
+
+            const nextDelay = 28 + Math.floor(Math.random() * 55) + rowIndex * 8;
+            window.setTimeout(tick, nextDelay);
+          };
+
+          window.setTimeout(tick, 120 + rowIndex * 70);
+        };
+
+        Array.from(statsPanel.querySelectorAll("[data-bar-text]")).forEach((barNode) => {
+          buildBarSegments(barNode);
+        });
+
+        const activateStats = () => {
+          statRows.forEach((row, index) => {
+            window.setTimeout(() => {
+              row.classList.add("is-visible");
+
+              Array.from(row.querySelectorAll("[data-stat-value]")).forEach((valueNode) => {
+                const finalValue = valueNode.getAttribute("data-stat-value");
+
+                window.setTimeout(() => {
+                  valueNode.textContent = finalValue;
+                  valueNode.classList.add("is-final");
+                }, 180);
+              });
+
+              Array.from(row.querySelectorAll("[data-bar-text]")).forEach((barNode) => {
+                animateBarText(barNode, index);
+              });
+            }, index * 140);
+          });
+        };
+
+        if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+          activateStats();
+          return;
+        }
+
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) {
+              return;
+            }
+
+            activateStats();
+            observer.disconnect();
+          });
+        }, {
+          threshold: 0.3
+        });
+
+        observer.observe(statsPanel);
+      }
+
+      function activatePanel() {
+        if (prefersReducedMotion) {
+          revealNodes.forEach((node) => node.classList.add("is-visible"));
+          startRecordRotation();
+          return;
+        }
+
+        revealNodes.forEach((node) => {
+          window.setTimeout(() => {
+            node.classList.add("is-visible");
+          }, Number.parseInt(node.style.getPropertyValue("--reveal-delay"), 10) || 0);
+        });
+
+        const longestDelay = revealNodes.reduce((max, node) => {
+          const value = Number.parseInt(node.style.getPropertyValue("--reveal-delay"), 10) || 0;
+          return Math.max(max, value);
+        }, 0);
+
+        window.setTimeout(startRecordRotation, longestDelay + 900);
+      }
+
+      function setActiveRecord(index, stage) {
+        activeRecordIndex = index;
+
+        recordRows.forEach((row, rowIndex) => {
+          const record = records[rowIndex];
+          const isCurrent = rowIndex === index;
+          const isDone = record.queueState === "done";
+          const queuedStatus = isDone ? "VERIFIED" : "QUEUED";
+
+          row.classList.toggle("is-current", isCurrent);
+          row.classList.toggle("is-alert", isCurrent ? Boolean(stage.alert) : false);
+          row.classList.toggle("is-done", !isCurrent && isDone);
+          row.classList.toggle("is-queued", !isCurrent && !isDone);
+          row.querySelector("[data-record-id]").textContent = record.id;
+          row.querySelector("[data-record-status]").textContent = isCurrent ? stage.status : queuedStatus;
+        });
+      }
+
+      function updateDetails(stage) {
+        if (!detailsPanel) {
+          return;
+        }
+
+        const applyValues = () => {
+          detailsPanel.querySelector("[data-detail-type]").textContent = stage.details.type;
+          detailsPanel.querySelector("[data-detail-location]").textContent = stage.details.location;
+          detailsPanel.querySelector("[data-detail-owner]").textContent = stage.details.owner;
+          detailsPanel.querySelector("[data-detail-scan]").textContent = stage.details.scan;
+          detailsPanel.querySelector("[data-detail-verified]").textContent = stage.details.verified;
+        };
+
+        if (prefersReducedMotion) {
+          applyValues();
+          return;
+        }
+
+        detailsPanel.classList.add("is-updating");
+        window.setTimeout(() => {
+          applyValues();
+          detailsPanel.classList.remove("is-updating");
+        }, 150);
+      }
+
+      function pushLogLine(message) {
+        if (!systemLog) {
+          return;
+        }
+
+        const line = document.createElement("p");
+        line.textContent = message;
+        line.className = prefersReducedMotion ? "" : "log-enter";
+        systemLog.appendChild(line);
+
+        while (systemLog.children.length > 5) {
+          systemLog.removeChild(systemLog.firstElementChild);
+        }
+
+        if (!prefersReducedMotion) {
+          window.requestAnimationFrame(() => {
+            line.classList.add("is-visible");
+          });
+        }
+      }
+
+      function startRecordRotation() {
+        if (rotationTimer) {
+          return;
+        }
+
+        runRecordSequence(activeRecordIndex);
+      }
+
+      function runRecordSequence(recordIndex) {
+        const record = records[recordIndex];
+        let stageIndex = 0;
+
+        const runStage = () => {
+          const stage = record.stages[stageIndex];
+          setActiveRecord(recordIndex, stage);
+          updateDetails(stage);
+          stage.logs.forEach((entry) => pushLogLine(entry));
+
+          const isLastStage = stageIndex === record.stages.length - 1;
+          const duration = stage.duration + (isLastStage ? 220 : 0);
+
+          rotationTimer = window.setTimeout(() => {
+            if (stageIndex < record.stages.length - 1) {
+              stageIndex += 1;
+              runStage();
+              return;
+            }
+
+            record.queueState = "done";
+            const nextRecordIndex = (recordIndex + 1) % records.length;
+            records[nextRecordIndex].queueState = "pending";
+            runRecordSequence(nextRecordIndex);
+          }, duration);
+        };
+
+        runStage();
+      }
+
+      function buildBarcode() {
+        if (!barcodePattern) {
+          return;
+        }
+
+        const viewportWidth = window.innerWidth;
+        const fragment = document.createDocumentFragment();
+        const widths = [1, 2, 2, 3, 4];
+        const gaps = [1, 2, 2, 3];
+        let consumed = 0;
+
+        barcodePattern.textContent = "";
+
+        while (consumed < viewportWidth) {
+          const line = document.createElement("span");
+          const width = widths[Math.floor(Math.random() * widths.length)];
+          const gap = gaps[Math.floor(Math.random() * gaps.length)];
+
+          line.className = "barcode-line";
+          line.style.width = width + "px";
+          line.style.marginRight = gap + "px";
+          fragment.appendChild(line);
+
+          consumed += width + gap;
+        }
+
+        barcodePattern.appendChild(fragment);
+      }
+
+      function syncHeaderState() {
+        if (!siteHeader) {
+          return;
+        }
+
+        siteHeader.classList.toggle("is-scrolled", window.scrollY > 18);
+      }
+
+      function animateProgress(from, to, duration) {
+        return new Promise((resolve) => {
+          const start = window.performance.now();
+
+          function frame(now) {
+            const elapsed = now - start;
+            const raw = Math.min(elapsed / duration, 1);
+            const eased = easeOutCubic(raw);
+            const current = Math.round(from + (to - from) * eased);
+
+            fill.style.width = current + "%";
+            percent.textContent = current + "%";
+
+            if (raw < 1) {
+              window.requestAnimationFrame(frame);
+              return;
+            }
+
+            resolve();
+          }
+
+          window.requestAnimationFrame(frame);
+        });
+      }
+
+      async function runStep(line, config, currentValue) {
+        line.classList.add("is-visible", "is-active");
+        await animateProgress(currentValue, config.target, config.duration);
+        line.classList.remove("is-active");
+        line.classList.add("is-complete");
+        return config.target;
+      }
+
+      function finishPreloader() {
+        ready.textContent = "SYSTEM READY";
+        preloader.classList.add("is-ready");
+
+        window.setTimeout(() => {
+          ready.textContent = "SYSTEM READY ✓";
+          preloader.classList.add("is-complete");
+
+          window.setTimeout(() => {
+            preloader.classList.add("is-hidden");
+
+            window.setTimeout(() => {
+              preloader.setAttribute("hidden", "");
+              body.classList.remove("is-preloading");
+              activatePanel();
+              if (!prefersReducedMotion && barcodeBand) {
+                barcodeBand.classList.add("is-scanning");
+                window.setTimeout(() => {
+                  barcodeBand.classList.remove("is-scanning");
+                }, 2400);
+              }
+            }, fadeDuration);
+          }, holdDelay);
+        }, checkDelay);
+      }
+
+      async function runSequence() {
+        let currentValue = 0;
+
+        for (let index = 0; index < steps.length; index += 1) {
+          currentValue = await runStep(lines[index], steps[index], currentValue);
+          await wait(index === steps.length - 1 ? 180 : 140);
+        }
+
+        await animateProgress(currentValue, 100, finalRampDuration);
+        fill.style.width = "100%";
+        percent.textContent = "100%";
+
+        await wait(readyDelay);
+        finishPreloader();
+      }
+
+      lines.forEach((line) => line.classList.remove("is-visible", "is-active", "is-complete"));
+      fill.style.width = "0%";
+      percent.textContent = "0%";
+      buildBarcode();
+      window.addEventListener("resize", buildBarcode);
+      window.addEventListener("scroll", syncHeaderState, { passive: true });
+      syncHeaderState();
+      initScrollReveal();
+      initCookieBanner();
+      initStatsPanel();
+      runSequence();
+    })();
+  </script>
+</body>
+</html>

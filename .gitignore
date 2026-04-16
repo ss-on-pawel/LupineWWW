@@ -1,4 +1,4 @@
-node_modules/ 
+node_modules/
 
 __pycache__/
 *.pyc
@@ -9,3 +9,11 @@ db.sqlite3
 
 .env
 venv/
+
+# Django / static build
+staticfiles/
+
+# OS / VS Code
+.DS_Store
+Thumbs.db
+.vscode/

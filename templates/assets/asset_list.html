@@ -2,55 +2,1161 @@
 
 {% block title %}Ewidencja majątku{% endblock %}
 
-{% block content %}
-    <section class="card">
-        <h2>Ewidencja majątku</h2>
-        <p class="intro">Aktualna lista składników majątku z podstawowymi danymi ewidencyjnymi i odpowiedzialnością.</p>
+{% block extra_head %}
+    <style>
+        .asset-list-shell {
+            --line: rgba(15, 23, 42, 0.1);
+            --line-strong: rgba(15, 23, 42, 0.16);
+            --text-muted: #667085;
+            --surface-soft: rgba(255, 255, 255, 0.7);
+            --surface-table: #ffffff;
+            --ui-font: var(--font-sans, "Inter", system-ui, sans-serif);
+            --data-font: var(--font-sans, "Inter", system-ui, sans-serif);
+            --mono-font: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            position: relative;
+            overflow: visible;
+            font-family: var(--ui-font);
+            background: transparent;
+        }
+        .asset-list-shell[data-mode="dense"] {
+            width: calc(100vw - 32px);
+            max-width: none;
+            margin-left: calc(50% - 50vw + 16px);
+            margin-right: calc(50% - 50vw + 16px);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-toolbar,
+        .asset-list-shell[data-mode="dense"] .asset-list-meta,
+        .asset-list-shell[data-mode="dense"] .asset-list-pagination {
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+        .asset-list-toolbar {
+            display: grid;
+            grid-template-columns: minmax(320px, 1.9fr) repeat(2, minmax(180px, 1fr)) auto;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 12px;
+            padding: 14px 0 16px;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            background: var(--surface-soft);
+            backdrop-filter: blur(10px);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-toolbar {
+            grid-template-columns: minmax(240px, 2.4fr) repeat(2, minmax(150px, 1fr)) auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            background: rgba(255, 255, 255, 0.58);
+            backdrop-filter: blur(6px);
+        }
+        .asset-list-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-field {
+            gap: 3px;
+        }
+        .asset-list-field label {
+            font-family: var(--mono-font);
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-field label {
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+        }
+        .asset-list-toolbar input,
+        .asset-list-toolbar select,
+        .asset-list-toolbar button {
+            min-height: 40px;
+            font-family: var(--ui-font);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-toolbar input,
+        .asset-list-shell[data-mode="dense"] .asset-list-toolbar select,
+        .asset-list-shell[data-mode="dense"] .asset-list-toolbar button {
+            min-height: 34px;
+            padding-top: 7px;
+            padding-bottom: 7px;
+            padding-left: 10px;
+            padding-right: 10px;
+            font-size: 0.86rem;
+        }
+        .asset-list-shell input,
+        .asset-list-shell select,
+        .asset-list-shell button {
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            background: rgba(255, 255, 255, 0.94);
+            color: #0f172a;
+        }
+        .asset-list-shell input:focus,
+        .asset-list-shell select:focus,
+        .asset-list-shell button:focus {
+            outline: none;
+            border-color: rgba(17, 24, 39, 0.28);
+            box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.12);
+        }
+        .asset-list-mode-toggle {
+            --toggle-width: 38px;
+            --toggle-height: 22px;
+            display: inline-grid;
+            grid-template-columns: auto auto;
+            align-items: center;
+            gap: 10px;
+            min-height: 36px;
+            padding: 0 12px;
+            border: 1px solid rgba(10, 10, 10, 0.1);
+            background: rgba(255, 255, 255, 0.84);
+            color: #1f2937;
+            white-space: nowrap;
+        }
+        .asset-list-mode-toggle span:last-child {
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .asset-list-mode-toggle input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .asset-list-mode-toggle-ui {
+            position: relative;
+            width: var(--toggle-width);
+            height: var(--toggle-height);
+            border: 1px solid rgba(10, 10, 10, 0.14);
+            background: rgba(17, 24, 39, 0.08);
+        }
+        .asset-list-mode-toggle-ui::after {
+            content: "";
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: calc(var(--toggle-height) - 6px);
+            height: calc(var(--toggle-height) - 6px);
+            background: rgba(17, 24, 39, 0.82);
+            transition: transform 160ms ease, background-color 160ms ease;
+        }
+        .asset-list-mode-toggle input:checked + .asset-list-mode-toggle-ui::after {
+            transform: translateX(calc(var(--toggle-width) - var(--toggle-height)));
+            background: #c1121f;
+        }
+        .asset-list-columns {
+            position: relative;
+        }
+        .asset-list-columns button {
+            width: 100%;
+            justify-content: center;
+            font-size: 0.88rem;
+            letter-spacing: 0.03em;
+        }
+        .asset-list-columns-panel {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            z-index: 20;
+            width: min(320px, 88vw);
+            padding: 14px;
+            border: 1px solid var(--line-strong);
+            background: #fff;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+        }
+        .asset-list-columns-panel[hidden] {
+            display: none;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-columns-panel {
+            padding: 10px 12px;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+        }
+        .asset-list-columns-head {
+            margin-bottom: 10px;
+        }
+        .asset-list-columns-head strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+        .asset-list-columns-head p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .asset-list-column-option {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 8px;
+            align-items: center;
+            padding: 8px 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.06);
+        }
+        .asset-list-column-option:first-of-type {
+            border-top: 0;
+        }
+        .asset-list-column-option label {
+            font-size: 0.95rem;
+            color: #15202b;
+        }
+        .column-order-button {
+            width: 30px;
+            min-height: 30px;
+            padding: 0;
+        }
+        .asset-list-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-meta {
+            margin-bottom: 6px;
+            padding-top: 2px;
+            padding-bottom: 2px;
+            font-size: 0.76rem;
+        }
+        .asset-list-table-wrap {
+            overflow: auto;
+            border: 1px solid var(--line);
+            background: var(--surface-table);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-table-wrap {
+            border-left: 0;
+            border-right: 0;
+            box-shadow: none;
+        }
+        .asset-table {
+            width: 100%;
+            min-width: 1120px;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table {
+            min-width: 1040px;
+            background: #fff;
+        }
+        .asset-table th,
+        .asset-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            vertical-align: middle;
+            background: #fff;
+            font-family: var(--data-font);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table th,
+        .asset-list-shell[data-mode="dense"] .asset-table td {
+            padding: 5px 7px;
+            font-size: 0.81rem;
+            line-height: 1.25;
+        }
+        .asset-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #fafbfc;
+            color: #475467;
+            white-space: nowrap;
+            font-family: var(--mono-font);
+            font-size: 0.74rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table thead th {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+            background: linear-gradient(180deg, #f4f6f8 0%, #eceff3 100%);
+            font-size: 0.69rem;
+            font-weight: 700;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table tbody tr:nth-child(even) td {
+            background: #fcfcfd;
+        }
+        .asset-table tbody tr:hover td {
+            background: #f8fafc;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table tbody tr:hover td {
+            background: #f1f5f9;
+        }
+        .asset-table th.is-sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .asset-table th.is-sortable:hover {
+            background: #f4f6f8;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table th.is-sortable:hover {
+            background: linear-gradient(180deg, #eef2f6 0%, #e5eaf0 100%);
+        }
+        .asset-table .sticky-cell {
+            position: sticky;
+            z-index: 4;
+        }
+        .asset-table thead .sticky-cell {
+            z-index: 7;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table tbody .sticky-cell {
+            z-index: 5;
+            background: inherit;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table thead .sticky-cell {
+            z-index: 9;
+        }
+        .asset-table .sticky-shadow {
+            box-shadow: 1px 0 0 rgba(15, 23, 42, 0.08);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table .sticky-shadow {
+            box-shadow: 1px 0 0 rgba(15, 23, 42, 0.1), 8px 0 14px -12px rgba(15, 23, 42, 0.3);
+        }
+        .asset-table .cell-checkbox,
+        .asset-table .head-checkbox {
+            width: 46px;
+            min-width: 46px;
+            max-width: 46px;
+            text-align: center;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table .cell-checkbox,
+        .asset-list-shell[data-mode="dense"] .asset-table .head-checkbox {
+            width: 30px;
+            min-width: 30px;
+            max-width: 30px;
+        }
+        .asset-table .cell-inventory {
+            width: 164px;
+            min-width: 164px;
+            font-family: var(--mono-font);
+            font-size: 0.88rem;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table .cell-inventory {
+            width: 124px;
+            min-width: 124px;
+            font-size: 0.77rem;
+        }
+        .asset-table .cell-name {
+            width: 280px;
+            min-width: 280px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table .cell-name {
+            width: 192px;
+            min-width: 192px;
+        }
+        .asset-table .cell-status {
+            width: 170px;
+            min-width: 170px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table .cell-status {
+            width: 112px;
+            min-width: 112px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table td:not(.cell-name):not(.cell-status):not(.cell-inventory) {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .asset-table .cell-value {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-family: var(--mono-font);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table .cell-value {
+            width: 110px;
+            min-width: 110px;
+        }
+        .asset-table td[data-column-key="barcode"],
+        .asset-table td[data-column-key="serial_number"],
+        .asset-table td[data-column-key="external_id"],
+        .asset-table td[data-column-key="updated_at"] {
+            font-family: var(--mono-font);
+            font-variant-numeric: tabular-nums;
+        }
+        .asset-name-link {
+            color: #101828;
+            font-weight: 600;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-name-link {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #0f172a;
+        }
+        .asset-name-link:hover {
+            color: #c1121f;
+        }
+        .sort-indicator {
+            display: inline-block;
+            min-width: 1.1em;
+            margin-left: 4px;
+            color: #98a2b3;
+        }
+        .asset-list-shell[data-mode="dense"] .sort-indicator {
+            min-width: 0.9em;
+            margin-left: 3px;
+        }
+        .asset-status-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0 10px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(15, 23, 42, 0.04);
+            color: #344054;
+            font-family: var(--mono-font);
+            font-size: 0.78rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-status-pill {
+            min-height: 18px;
+            padding: 0 6px;
+            background: #f8fafc;
+            color: #475467;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+        }
+        .asset-table-empty,
+        .asset-table-loading {
+            padding: 28px 18px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-table-empty,
+        .asset-list-shell[data-mode="dense"] .asset-table-loading {
+            padding: 20px 12px;
+            font-size: 0.8rem;
+        }
+        .asset-list-pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-pagination {
+            margin-top: 8px;
+            padding-top: 2px;
+            padding-bottom: 6px;
+            font-size: 0.76rem;
+        }
+        .asset-list-pagination-controls {
+            display: flex;
+            gap: 8px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-pagination-controls {
+            gap: 6px;
+        }
+        .asset-list-pagination button[disabled] {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        @media (max-width: 1180px) {
+            .asset-list-toolbar {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        @media (max-width: 900px) {
+            .asset-list-toolbar {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 700px) {
+            .asset-list-table-wrap table,
+            .asset-list-table-wrap thead,
+            .asset-list-table-wrap tbody,
+            .asset-list-table-wrap tr,
+            .asset-list-table-wrap th,
+            .asset-list-table-wrap td {
+                display: revert;
+            }
+            .asset-list-table-wrap thead {
+                display: table-header-group;
+            }
+            .asset-list-table-wrap tr {
+                display: table-row;
+            }
+            .asset-list-table-wrap th,
+            .asset-list-table-wrap td {
+                display: table-cell;
+                padding: 10px 12px;
+            }
+            .asset-list-table-wrap td::before {
+                content: none;
+            }
+        }
+        @media (max-width: 640px) {
+            .asset-list-pagination {
+                align-items: stretch;
+            }
+            .asset-list-shell[data-mode="dense"] {
+                width: calc(100vw - 16px);
+                margin-left: calc(50% - 50vw + 8px);
+                margin-right: calc(50% - 50vw + 8px);
+            }
+            .asset-list-shell[data-mode="dense"] .asset-list-toolbar,
+            .asset-list-shell[data-mode="dense"] .asset-list-meta,
+            .asset-list-shell[data-mode="dense"] .asset-list-pagination {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+        }
+    </style>
+{% endblock %}
 
-        {% if assets %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Nazwa</th>
-                        <th>Numer inwentarzowy</th>
-                        <th>Typ składnika</th>
-                        <th>Kategoria</th>
-                        <th>Status</th>
-                        <th>Lokalizacja</th>
-                        <th>Osoba odpowiedzialna</th>
-                        <th>Data utworzenia</th>
-                        <th>Akcje</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for asset in assets %}
-                        <tr>
-                            <td data-label="Nazwa">
-                                <a href="{% url 'assets:detail' asset.id %}"><strong>{{ asset.name }}</strong></a><br>
-                                <span class="muted">{{ asset.manufacturer|default:"-" }}{% if asset.model %} / {{ asset.model }}{% endif %}</span>
-                            </td>
-                            <td data-label="Numer inwentarzowy">{{ asset.inventory_number }}</td>
-                            <td data-label="Typ składnika">{{ asset.get_asset_type_display }}</td>
-                            <td data-label="Kategoria">{{ asset.category }}</td>
-                            <td data-label="Status">
-                                <span class="status-pill">{{ asset.get_status_display }}</span><br>
-                                <span class="muted">{{ asset.get_technical_condition_display }}</span>
-                            </td>
-                            <td data-label="Lokalizacja">
-                                {{ asset.location|default:"-" }}
-                                {% if asset.room %}<br><span class="muted">Pomieszczenie: {{ asset.room }}</span>{% endif %}
-                            </td>
-                            <td data-label="Osoba odpowiedzialna">{{ asset.responsible_person|default:"-" }}</td>
-                            <td data-label="Data utworzenia">{{ asset.created_at|date:"Y-m-d H:i" }}</td>
-                            <td data-label="Akcje">
-                                <a class="button-secondary" href="{% url 'assets:detail' asset.id %}">Karta środka</a>
-                            </td>
-                        </tr>
+{% block app_header_actions %}
+    <label class="asset-list-mode-toggle" for="asset-dense-mode">
+        <input id="asset-dense-mode" type="checkbox">
+        <span class="asset-list-mode-toggle-ui" aria-hidden="true"></span>
+        <span>Tryb pracy na danych</span>
+    </label>
+{% endblock %}
+
+{% block content %}
+    <section
+        class="asset-list-shell"
+        data-api-url="{% url 'assets:api-list' %}"
+        data-detail-url-template="{% url 'assets:detail' 0 %}"
+        data-mode="standard"
+    >
+        <div class="asset-list-toolbar">
+            <div class="asset-list-field">
+                <label for="asset-search">Wyszukiwanie</label>
+                <input id="asset-search" type="search" placeholder="Nr inwentarzowy, nazwa, lokalizacja">
+            </div>
+            <div class="asset-list-field">
+                <label for="asset-status-filter">Status</label>
+                <select id="asset-status-filter">
+                    <option value="">Wszystkie statusy</option>
+                    {% for value, label in status_options %}
+                        <option value="{{ value }}">{{ label }}</option>
                     {% endfor %}
+                </select>
+            </div>
+            <div class="asset-list-field">
+                <label for="asset-location-filter">Lokalizacja</label>
+                <select id="asset-location-filter">
+                    <option value="">Wszystkie lokalizacje</option>
+                    {% for value in location_options %}
+                        <option value="{{ value }}">{{ value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="asset-list-columns">
+                <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
+                    Kolumny
+                </button>
+                <div id="asset-columns-panel" class="asset-list-columns-panel" hidden>
+                    <div class="asset-list-columns-head">
+                        <strong>Widoczne kolumny</strong>
+                        <p>Możesz ukrywać kolumny i zmieniać ich kolejność. Ustawienia zapisują się lokalnie.</p>
+                    </div>
+                    <div id="asset-columns-options"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="asset-list-meta">
+            <div id="asset-results-summary">Ładowanie danych...</div>
+            <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
+        </div>
+
+        <div class="asset-list-table-wrap">
+            <table class="asset-table">
+                <thead>
+                    <tr id="asset-table-head"></tr>
+                </thead>
+                <tbody id="asset-table-body">
+                    <tr>
+                        <td colspan="8" class="asset-table-loading">Ładowanie danych...</td>
+                    </tr>
                 </tbody>
             </table>
-        {% else %}
-            <p>Brak składników majątku w ewidencji.</p>
-        {% endif %}
+        </div>
+
+        <div class="asset-list-pagination">
+            <div id="asset-page-summary">Strona 1 z 1</div>
+            <div class="asset-list-pagination-controls">
+                <button id="asset-prev-page" type="button" class="button-secondary">Poprzednia</button>
+                <button id="asset-next-page" type="button" class="button-secondary">Następna</button>
+            </div>
+        </div>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        (function () {
+            const shell = document.querySelector(".asset-list-shell");
+            if (!shell) {
+                return;
+            }
+
+            const storageKeyColumns = "asset-list-columns-v1";
+            const storageKeyMode = "asset-list-mode-v1";
+            const apiUrl = shell.dataset.apiUrl;
+            const detailTemplate = shell.dataset.detailUrlTemplate;
+            const defaultPageSize = 50;
+            const searchDebounceMs = 300;
+
+            const defaultColumns = [
+                { key: "select", label: "", visible: true, sortable: false, sticky: true, className: "head-checkbox cell-checkbox" },
+                { key: "inventory_number", label: "Nr inwentarzowy", visible: true, sortable: true, sticky: true, className: "cell-inventory" },
+                { key: "name", label: "Nazwa", visible: true, sortable: true, sticky: true, className: "cell-name" },
+                { key: "status", label: "Status", visible: true, sortable: true, sticky: true, className: "cell-status" },
+                { key: "location", label: "Lokalizacja", visible: true, sortable: true, sticky: false, className: "" },
+                { key: "category", label: "Kategoria", visible: true, sortable: true, sticky: false, className: "" },
+                { key: "updated_at", label: "Data modyfikacji", visible: true, sortable: true, sticky: false, className: "" },
+                { key: "value", label: "Wartość", visible: true, sortable: true, sticky: false, className: "cell-value" }
+            ];
+
+            const labelByKey = {};
+            defaultColumns.forEach(function (column) {
+                labelByKey[column.key] = column.label || "Zaznacz";
+            });
+
+            const elements = {
+                searchInput: document.getElementById("asset-search"),
+                statusFilter: document.getElementById("asset-status-filter"),
+                locationFilter: document.getElementById("asset-location-filter"),
+                denseModeToggle: document.getElementById("asset-dense-mode"),
+                columnsToggle: document.getElementById("asset-columns-toggle"),
+                columnsPanel: document.getElementById("asset-columns-panel"),
+                columnsOptions: document.getElementById("asset-columns-options"),
+                tableHead: document.getElementById("asset-table-head"),
+                tableBody: document.getElementById("asset-table-body"),
+                resultsSummary: document.getElementById("asset-results-summary"),
+                activeSort: document.getElementById("asset-active-sort"),
+                pageSummary: document.getElementById("asset-page-summary"),
+                prevButton: document.getElementById("asset-prev-page"),
+                nextButton: document.getElementById("asset-next-page")
+            };
+
+            const state = {
+                page: 1,
+                pageSize: defaultPageSize,
+                search: "",
+                status: "",
+                location: "",
+                ordering: "-updated_at",
+                columns: loadColumns(),
+                mode: loadMode(),
+                lastPayload: null,
+                requestToken: 0,
+                activeController: null
+            };
+
+            let searchDebounceId = null;
+
+            applyMode(state.mode);
+            syncControls();
+            renderColumnPanel();
+            fetchAndRender();
+            bindEvents();
+
+            function bindEvents() {
+                elements.searchInput.addEventListener("input", function (event) {
+                    const value = event.target.value.trim();
+                    window.clearTimeout(searchDebounceId);
+                    searchDebounceId = window.setTimeout(function () {
+                        updateState({ search: value, page: 1 });
+                    }, searchDebounceMs);
+                });
+
+                elements.statusFilter.addEventListener("change", function (event) {
+                    updateState({ status: event.target.value, page: 1 });
+                });
+
+                elements.locationFilter.addEventListener("change", function (event) {
+                    updateState({ location: event.target.value, page: 1 });
+                });
+
+                elements.denseModeToggle.addEventListener("change", function (event) {
+                    const mode = event.target.checked ? "dense" : "standard";
+                    state.mode = mode;
+                    window.localStorage.setItem(storageKeyMode, mode);
+                    applyMode(mode);
+                    updateStickyOffsets();
+                });
+
+                elements.columnsToggle.addEventListener("click", function (event) {
+                    event.stopPropagation();
+                    const isExpanded = elements.columnsToggle.getAttribute("aria-expanded") === "true";
+                    elements.columnsToggle.setAttribute("aria-expanded", String(!isExpanded));
+                    elements.columnsPanel.hidden = isExpanded;
+                });
+
+                elements.columnsPanel.addEventListener("click", function (event) {
+                    event.stopPropagation();
+                });
+
+                document.addEventListener("click", function (event) {
+                    if (!elements.columnsPanel.hidden && !elements.columnsPanel.contains(event.target) && event.target !== elements.columnsToggle) {
+                        closeColumnsPanel();
+                    }
+                });
+
+                elements.prevButton.addEventListener("click", function () {
+                    if (elements.prevButton.disabled) {
+                        return;
+                    }
+                    updateState({ page: Math.max(1, state.page - 1) });
+                });
+
+                elements.nextButton.addEventListener("click", function () {
+                    if (elements.nextButton.disabled) {
+                        return;
+                    }
+                    updateState({ page: state.page + 1 });
+                });
+
+                window.addEventListener("resize", updateStickyOffsets);
+            }
+
+            function updateState(patch) {
+                state.page = patch.page !== undefined ? patch.page : state.page;
+                state.pageSize = patch.pageSize !== undefined ? patch.pageSize : state.pageSize;
+                state.search = patch.search !== undefined ? patch.search : state.search;
+                state.status = patch.status !== undefined ? patch.status : state.status;
+                state.location = patch.location !== undefined ? patch.location : state.location;
+                state.ordering = patch.ordering !== undefined ? patch.ordering : state.ordering;
+                syncControls();
+                fetchAndRender();
+            }
+
+            function fetchAndRender() {
+                const requestToken = state.requestToken + 1;
+                state.requestToken = requestToken;
+
+                if (state.activeController) {
+                    state.activeController.abort();
+                }
+
+                const controller = new AbortController();
+                state.activeController = controller;
+
+                renderLoadingState();
+
+                fetch(buildApiUrl(), {
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                    signal: controller.signal
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("Fetch failed");
+                        }
+                        return response.json();
+                    })
+                    .then(function (payload) {
+                        if (requestToken !== state.requestToken) {
+                            return;
+                        }
+
+                        state.lastPayload = payload;
+                        state.page = payload.pagination.page;
+                        state.pageSize = payload.pagination.page_size;
+                        state.search = payload.filters.search || "";
+                        state.status = payload.filters.status || "";
+                        state.location = payload.filters.location || "";
+                        state.ordering = payload.filters.ordering || "-updated_at";
+                        state.activeController = null;
+
+                        renderFromPayload(payload);
+                    })
+                    .catch(function (error) {
+                        if (error.name === "AbortError") {
+                            return;
+                        }
+
+                        state.activeController = null;
+                        renderErrorState();
+                    });
+            }
+
+            function renderFromPayload(payload) {
+                renderHead();
+                renderRows(payload.results || []);
+                renderPagination(payload.pagination);
+                updateSortLabel();
+                syncControls();
+                updateStickyOffsets();
+            }
+
+            function renderHead() {
+                const visibleColumns = getVisibleColumns();
+                elements.tableHead.innerHTML = "";
+
+                visibleColumns.forEach(function (column, visibleIndex) {
+                    const th = document.createElement("th");
+                    th.dataset.columnKey = column.key;
+                    th.className = buildColumnClassName(column, visibleIndex, visibleColumns);
+
+                    if (column.key === "select") {
+                        th.innerHTML = '<span class="visually-hidden">Wybór</span>';
+                    } else {
+                        th.textContent = column.label;
+                    }
+
+                    if (column.sortable) {
+                        th.classList.add("is-sortable");
+                        th.setAttribute("role", "button");
+                        th.tabIndex = 0;
+                        th.appendChild(buildSortIndicator(column.key));
+                        th.addEventListener("click", function () {
+                            updateState({ ordering: getNextOrdering(column.key), page: 1 });
+                        });
+                        th.addEventListener("keydown", function (event) {
+                            if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                updateState({ ordering: getNextOrdering(column.key), page: 1 });
+                            }
+                        });
+                    }
+
+                    elements.tableHead.appendChild(th);
+                });
+            }
+
+            function renderRows(rows) {
+                const visibleColumns = getVisibleColumns();
+                elements.tableBody.innerHTML = "";
+
+                if (!rows.length) {
+                    elements.tableBody.innerHTML = '<tr><td colspan="' + visibleColumns.length + '" class="asset-table-empty">Brak wyników dla bieżących filtrów.</td></tr>';
+                    return;
+                }
+
+                rows.forEach(function (row) {
+                    const tr = document.createElement("tr");
+
+                    visibleColumns.forEach(function (column, visibleIndex) {
+                        const td = document.createElement("td");
+                        td.dataset.columnKey = column.key;
+                        td.className = buildColumnClassName(column, visibleIndex, visibleColumns);
+
+                        if (column.key === "select") {
+                            td.innerHTML = '<input type="checkbox" aria-label="Zaznacz środek">';
+                        } else if (column.key === "name") {
+                            const link = document.createElement("a");
+                            link.href = buildDetailUrl(row.id);
+                            link.className = "asset-name-link";
+                            link.textContent = row.name || "-";
+                            td.appendChild(link);
+                        } else if (column.key === "status") {
+                            const pill = document.createElement("span");
+                            pill.className = "asset-status-pill";
+                            pill.textContent = row.status_display || "-";
+                            td.appendChild(pill);
+                        } else if (column.key === "updated_at") {
+                            td.textContent = row.updated_at_display || "-";
+                        } else if (column.key === "value") {
+                            td.textContent = row.value_display || "-";
+                        } else {
+                            td.textContent = row[column.key] || "-";
+                        }
+
+                        tr.appendChild(td);
+                    });
+
+                    elements.tableBody.appendChild(tr);
+                });
+            }
+
+            function renderPagination(pagination) {
+                const totalItems = pagination.total_items || 0;
+                const totalPages = Math.max(pagination.total_pages || 1, 1);
+                const start = totalItems === 0 ? 0 : ((pagination.page - 1) * pagination.page_size) + 1;
+                const end = totalItems === 0 ? 0 : Math.min(pagination.page * pagination.page_size, totalItems);
+
+                elements.resultsSummary.textContent = start + "-" + end + " z " + totalItems + " rekordów";
+                elements.pageSummary.textContent = "Strona " + pagination.page + " z " + totalPages;
+                elements.prevButton.disabled = !pagination.has_previous;
+                elements.nextButton.disabled = !pagination.has_next;
+            }
+
+            function renderLoadingState() {
+                const columnCount = Math.max(getVisibleColumns().length, 1);
+                elements.tableBody.innerHTML = '<tr><td colspan="' + columnCount + '" class="asset-table-loading">Ładowanie danych...</td></tr>';
+                elements.prevButton.disabled = true;
+                elements.nextButton.disabled = true;
+            }
+
+            function renderErrorState() {
+                const columnCount = Math.max(getVisibleColumns().length, 1);
+                elements.tableBody.innerHTML = '<tr><td colspan="' + columnCount + '" class="asset-table-empty">Nie udało się pobrać danych.</td></tr>';
+                elements.resultsSummary.textContent = "Błąd ładowania danych";
+                elements.pageSummary.textContent = "Strona -";
+                updateSortLabel();
+            }
+
+            function renderColumnPanel() {
+                elements.columnsOptions.innerHTML = "";
+
+                state.columns.forEach(function (column, index) {
+                    const row = document.createElement("div");
+                    row.className = "asset-list-column-option";
+
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.checked = column.visible;
+                    checkbox.disabled = column.key === "name";
+                    checkbox.addEventListener("change", function () {
+                        if (column.key === "name") {
+                            return;
+                        }
+                        column.visible = checkbox.checked;
+                        persistColumns();
+                        if (state.lastPayload) {
+                            renderFromPayload(state.lastPayload);
+                        } else {
+                            renderHead();
+                            renderLoadingState();
+                        }
+                        renderColumnPanel();
+                    });
+
+                    const label = document.createElement("label");
+                    label.textContent = column.label || "Zaznacz";
+
+                    const moveUp = document.createElement("button");
+                    moveUp.type = "button";
+                    moveUp.className = "column-order-button";
+                    moveUp.textContent = "↑";
+                    moveUp.disabled = index === 0;
+                    moveUp.addEventListener("click", function () {
+                        moveColumn(index, -1);
+                    });
+
+                    const moveDown = document.createElement("button");
+                    moveDown.type = "button";
+                    moveDown.className = "column-order-button";
+                    moveDown.textContent = "↓";
+                    moveDown.disabled = index === state.columns.length - 1;
+                    moveDown.addEventListener("click", function () {
+                        moveColumn(index, 1);
+                    });
+
+                    row.appendChild(checkbox);
+                    row.appendChild(label);
+                    row.appendChild(moveUp);
+                    row.appendChild(moveDown);
+                    elements.columnsOptions.appendChild(row);
+                });
+            }
+
+            function moveColumn(index, direction) {
+                const targetIndex = index + direction;
+                if (targetIndex < 0 || targetIndex >= state.columns.length) {
+                    return;
+                }
+
+                const nextColumns = state.columns.slice();
+                const moved = nextColumns.splice(index, 1)[0];
+                nextColumns.splice(targetIndex, 0, moved);
+                state.columns = nextColumns;
+                persistColumns();
+                renderColumnPanel();
+
+                if (state.lastPayload) {
+                    renderFromPayload(state.lastPayload);
+                } else {
+                    renderHead();
+                    renderLoadingState();
+                }
+            }
+
+            function persistColumns() {
+                const serializable = state.columns.map(function (column) {
+                    return { key: column.key, visible: column.visible };
+                });
+                window.localStorage.setItem(storageKeyColumns, JSON.stringify(serializable));
+            }
+
+            function loadColumns() {
+                try {
+                    const stored = JSON.parse(window.localStorage.getItem(storageKeyColumns));
+                    if (!Array.isArray(stored) || stored.length !== defaultColumns.length) {
+                        return defaultColumns.slice();
+                    }
+
+                    const baseByKey = {};
+                    defaultColumns.forEach(function (column) {
+                        baseByKey[column.key] = column;
+                    });
+
+                    return stored.map(function (storedColumn) {
+                        const base = baseByKey[storedColumn.key];
+                        if (!base) {
+                            return null;
+                        }
+                        return Object.assign({}, base, {
+                            visible: storedColumn.key === "name" ? true : Boolean(storedColumn.visible)
+                        });
+                    }).filter(Boolean);
+                } catch (error) {
+                    return defaultColumns.slice();
+                }
+            }
+
+            function loadMode() {
+                const stored = window.localStorage.getItem(storageKeyMode);
+                return stored === "dense" ? "dense" : "standard";
+            }
+
+            function applyMode(mode) {
+                shell.dataset.mode = mode;
+                elements.denseModeToggle.checked = mode === "dense";
+            }
+
+            function syncControls() {
+                if (elements.searchInput.value !== state.search) {
+                    elements.searchInput.value = state.search;
+                }
+                if (elements.statusFilter.value !== state.status) {
+                    elements.statusFilter.value = state.status;
+                }
+                if (elements.locationFilter.value !== state.location) {
+                    elements.locationFilter.value = state.location;
+                }
+            }
+
+            function buildApiUrl() {
+                const params = new URLSearchParams();
+                params.set("page", String(state.page));
+                params.set("page_size", String(state.pageSize));
+                params.set("search", state.search);
+                params.set("status", state.status);
+                params.set("location", state.location);
+                params.set("ordering", state.ordering);
+                return apiUrl + "?" + params.toString();
+            }
+
+            function buildDetailUrl(id) {
+                return detailTemplate.replace(/0\/$/, String(id) + "/");
+            }
+
+            function buildSortIndicator(columnKey) {
+                const indicator = document.createElement("span");
+                indicator.className = "sort-indicator";
+                indicator.textContent = getSortIndicator(columnKey);
+                return indicator;
+            }
+
+            function getSortIndicator(columnKey) {
+                const alias = getOrderingAlias(columnKey);
+                if (state.ordering === alias) {
+                    return "↑";
+                }
+                if (state.ordering === "-" + alias) {
+                    return "↓";
+                }
+                return "·";
+            }
+
+            function getNextOrdering(columnKey) {
+                const alias = getOrderingAlias(columnKey);
+                if (state.ordering === alias) {
+                    return "-" + alias;
+                }
+                return alias;
+            }
+
+            function getOrderingAlias(columnKey) {
+                return columnKey === "value" ? "purchase_value" : columnKey;
+            }
+
+            function updateSortLabel() {
+                const current = state.ordering.replace(/^-/, "");
+                const labelKey = current === "purchase_value" ? "value" : current;
+                const direction = state.ordering.startsWith("-") ? "↓" : "↑";
+                elements.activeSort.textContent = "Sortowanie: " + (labelByKey[labelKey] || current) + " " + direction;
+            }
+
+            function getVisibleColumns() {
+                return state.columns.filter(function (column) {
+                    return column.visible;
+                });
+            }
+
+            function buildColumnClassName(column, visibleIndex, visibleColumns) {
+                const classNames = [];
+                if (column.className) {
+                    classNames.push(column.className);
+                }
+                if (column.sticky) {
+                    classNames.push("sticky-cell");
+                }
+                if (isLastVisibleStickyColumn(column, visibleIndex, visibleColumns)) {
+                    classNames.push("sticky-shadow");
+                }
+                return classNames.join(" ");
+            }
+
+            function isLastVisibleStickyColumn(column, visibleIndex, visibleColumns) {
+                if (!column.sticky) {
+                    return false;
+                }
+                for (let index = visibleIndex + 1; index < visibleColumns.length; index += 1) {
+                    if (visibleColumns[index].sticky) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function updateStickyOffsets() {
+                const visibleStickyColumns = getVisibleColumns().filter(function (column) {
+                    return column.sticky;
+                });
+
+                let offset = 0;
+                visibleStickyColumns.forEach(function (column) {
+                    const cells = shell.querySelectorAll('[data-column-key="' + column.key + '"]');
+                    let width = 0;
+
+                    cells.forEach(function (cell) {
+                        cell.style.left = offset + "px";
+                        width = Math.max(width, Math.ceil(cell.getBoundingClientRect().width));
+                    });
+
+                    offset += width;
+                });
+            }
+
+            function closeColumnsPanel() {
+                elements.columnsPanel.hidden = true;
+                elements.columnsToggle.setAttribute("aria-expanded", "false");
+            }
+        })();
+    </script>
 {% endblock %}
