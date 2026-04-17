@@ -15,7 +15,7 @@ class AssetListView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "Ewidencja majÄ…tku"
+        context["page_title"] = "Ewidencja majątku"
         context["status_options"] = Asset.Status.choices
         context["location_options"] = list(
             Asset.objects.exclude(location="")
@@ -34,11 +34,11 @@ class AssetCreateView(CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "Dodaj skĹ‚adnik majÄ…tku"
+        context["page_title"] = "Dodaj składnik majątku"
         return context
 
     def form_valid(self, form):
-        messages.success(self.request, "SkĹ‚adnik majÄ…tku zostaĹ‚ zapisany.")
+        messages.success(self.request, "Składnik majątku został zapisany.")
         return super().form_valid(form)
 
 
@@ -49,7 +49,7 @@ def asset_detail(request, id):
         "assets/asset_detail.html",
         {
             "asset": asset,
-            "page_title": "Karta Ĺ›rodka",
+            "page_title": "Karta środka",
         },
     )
 
@@ -108,7 +108,7 @@ def asset_list_api(request):
             "updated_at": asset.updated_at.isoformat(),
             "updated_at_display": asset.updated_at.strftime("%Y-%m-%d %H:%M"),
             "value": str(asset.purchase_value) if asset.purchase_value is not None else "",
-            "value_display": f"{asset.purchase_value} zĹ‚" if asset.purchase_value is not None else "-",
+            "value_display": f"{asset.purchase_value} zł" if asset.purchase_value is not None else "-",
         }
         for asset in page_obj.object_list
     ]
