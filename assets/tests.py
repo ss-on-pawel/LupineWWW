@@ -5,6 +5,8 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
+from users.models import User
+
 from .models import Asset
 
 
@@ -67,6 +69,43 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
         self.assertEqual(payload["filters"]["ordering"], "-purchase_value")
+
+    def test_api_exposes_extended_system_columns(self):
+        user = User.objects.create_user(username="operator", first_name="Jan", last_name="Kowalski")
+        asset = Asset.objects.create(
+            name="Laptop Test",
+            inventory_number="EXT-001",
+            asset_type=Asset.AssetType.IT_EQUIPMENT,
+            manufacturer="Dell",
+            model="Latitude",
+            serial_number="SN-123",
+            barcode="5901234567890",
+            department="IT",
+            organizational_unit="Centrala",
+            room="201A",
+            responsible_person=user,
+            current_user=user,
+            technical_condition=Asset.TechnicalCondition.VERY_GOOD,
+            invoice_number="FV/2026/001",
+            external_id="ERP-001",
+            cost_center="MPK-01",
+            is_active=True,
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["asset_type_display"], "Sprzęt IT")
+        self.assertEqual(row["manufacturer"], "Dell")
+        self.assertEqual(row["serial_number"], "SN-123")
+        self.assertEqual(row["responsible_person"], "Jan Kowalski")
+        self.assertEqual(row["current_user"], "Jan Kowalski")
+        self.assertEqual(row["technical_condition_display"], "Bardzo dobry")
+        self.assertEqual(row["invoice_number"], "FV/2026/001")
+        self.assertEqual(row["external_id"], "ERP-001")
+        self.assertEqual(row["cost_center"], "MPK-01")
+        self.assertEqual(row["is_active_display"], "Tak")
 
 
 class AssetListViewTests(TestCase):
