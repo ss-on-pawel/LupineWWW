@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, TemplateView
 
+from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
 from .forms import AssetForm
 from .models import Asset
 
@@ -23,6 +24,7 @@ class AssetListView(TemplateView):
             .values_list("location", flat=True)
             .distinct()
         )
+        context["filter_schema"] = get_asset_filter_ui_schema()
         return context
 
 
@@ -113,6 +115,9 @@ def asset_list_api(request):
 
     if location:
         queryset = queryset.filter(location=location)
+
+    parsed_filters = parse_asset_filters(request.GET)
+    queryset = apply_asset_filters(queryset, parsed_filters)
 
     ordering_field = _resolve_asset_ordering(ordering)
     queryset = queryset.order_by(ordering_field, "id")

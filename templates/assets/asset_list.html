@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Ewidencja majątku{% endblock %}
 
@@ -274,6 +275,185 @@
             padding-top: 2px;
             padding-bottom: 2px;
             font-size: 0.76rem;
+        }
+        .asset-list-filters {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            border: 1px solid var(--line);
+            background: rgba(248, 250, 252, 0.88);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-filters {
+            gap: 6px;
+            margin-bottom: 6px;
+            padding: 8px 10px;
+            border-left: 0;
+            border-right: 0;
+            background: rgba(248, 250, 252, 0.78);
+        }
+        .asset-list-filters-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .asset-list-filters-head strong {
+            display: block;
+            margin-bottom: 2px;
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #101828;
+        }
+        .asset-list-filters-head p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.84rem;
+        }
+        .asset-list-filters-meta {
+            display: grid;
+            gap: 2px;
+        }
+        .asset-filter-count {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }
+        .asset-list-filters-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-left: auto;
+        }
+        .asset-list-filters-actions button {
+            min-height: 34px;
+            padding-left: 12px;
+            padding-right: 12px;
+            white-space: nowrap;
+        }
+        .asset-filter-grid-head {
+            display: grid;
+            grid-template-columns: 220px 180px minmax(220px, 1fr) 36px;
+            gap: 10px;
+            align-items: center;
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.64rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .asset-filter-grid-head > span:last-child {
+            visibility: hidden;
+        }
+        .asset-filter-list {
+            display: grid;
+            gap: 8px;
+        }
+        .asset-filter-row {
+            display: grid;
+            grid-template-columns: 220px 180px minmax(220px, 1fr) 36px;
+            gap: 10px;
+            align-items: center;
+        }
+        .asset-filter-field {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .asset-filter-select {
+            width: 100%;
+            min-height: 40px;
+            padding: 10px 12px;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            background: #fff;
+            color: #0f172a;
+            font-family: var(--ui-font);
+            font-size: 0.92rem;
+            line-height: 1.35;
+            appearance: auto;
+            -webkit-appearance: menulist;
+            -moz-appearance: menulist;
+            transform: none;
+            overflow: visible;
+        }
+        .asset-filter-select option {
+            color: #0f172a;
+            background: #fff;
+            font-family: var(--ui-font);
+            font-size: 0.92rem;
+            line-height: 1.35;
+        }
+        .asset-filter-select:focus {
+            outline: none;
+            border-color: rgba(17, 24, 39, 0.28);
+            box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.12);
+        }
+        .asset-filter-field label {
+            font-family: var(--mono-font);
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .asset-filter-value select[multiple] {
+            min-height: 108px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+        .asset-filter-remove {
+            width: 36px;
+            min-width: 36px;
+            min-height: 36px;
+            padding: 0;
+            font-size: 1rem;
+            line-height: 1;
+        }
+        .asset-filter-empty {
+            padding: 10px 12px;
+            border: 1px dashed rgba(15, 23, 42, 0.16);
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            background: rgba(248, 250, 252, 0.82);
+        }
+        .asset-filter-input {
+            width: 100%;
+            min-height: 40px;
+        }
+        .asset-filter-range {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 8px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-filter-row {
+            grid-template-columns: 196px 160px minmax(180px, 1fr) 32px;
+            gap: 8px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-filter-grid-head {
+            grid-template-columns: 196px 160px minmax(180px, 1fr) 32px;
+            gap: 8px;
+            font-size: 0.6rem;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-filter-select {
+            min-height: 34px;
+            padding: 7px 10px;
+            font-size: 0.86rem;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-filters-actions button,
+        .asset-list-shell[data-mode="dense"] .asset-filter-remove {
+            min-height: 32px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-filter-remove {
+            width: 32px;
+            min-width: 32px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-filter-input {
+            min-height: 34px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-filter-range {
+            gap: 6px;
         }
         .asset-list-table-wrap {
             position: relative;
@@ -648,6 +828,12 @@
             .asset-list-toolbar {
                 grid-template-columns: 1fr;
             }
+            .asset-filter-grid-head {
+                display: none;
+            }
+            .asset-filter-row {
+                grid-template-columns: 1fr;
+            }
         }
         @media (max-width: 700px) {
             .asset-list-table-wrap table,
@@ -710,7 +896,7 @@
         <div class="asset-list-toolbar">
             <div class="asset-list-field">
                 <label for="asset-search">Wyszukiwanie</label>
-                <input id="asset-search" type="search" placeholder="Nr inwentarzowy, nazwa, lokalizacja">
+                <input id="asset-search" type="search" placeholder="Szukaj: nazwa, nr inwentarzowy, użytkownik, lokalizacja...">
             </div>
             <div class="asset-list-field">
                 <label for="asset-status-filter">Status</label>
@@ -747,6 +933,28 @@
             </div>
         </div>
 
+        <section class="asset-list-filters" aria-label="Filtry danych">
+            <div class="asset-list-filters-head">
+                <div class="asset-list-filters-meta">
+                    <strong>Filtry danych</strong>
+                    <p>Warunki backendowe łączone operatorem AND.</p>
+                    <div id="asset-filter-count" class="asset-filter-count">Aktywne filtry: 0</div>
+                </div>
+                <div class="asset-list-filters-actions">
+                    <button id="asset-add-filter" type="button" class="button-secondary">+ Dodaj filtr</button>
+                    <button id="asset-clear-filters" type="button" class="button-secondary">Wyczyść</button>
+                </div>
+            </div>
+            <div class="asset-filter-grid-head" aria-hidden="true">
+                <span>Pole</span>
+                <span>Operator</span>
+                <span>Wartość</span>
+                <span>Usuń</span>
+            </div>
+            <div id="asset-filter-list" class="asset-filter-list"></div>
+            <div id="asset-filter-empty" class="asset-filter-empty">Brak dodatkowych warunków. Dodaj filtr, aby zawęzić dane po stronie backendu.</div>
+        </section>
+
         <div class="asset-list-meta">
             <div id="asset-results-summary">Ładowanie danych...</div>
             <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
@@ -776,11 +984,214 @@
 {% endblock %}
 
 {% block extra_scripts %}
+    {{ filter_schema|json_script:"asset-filter-schema" }}
+    <script src="{% static 'assets/asset_list_filters.js' %}"></script>
     <script>
         (function () {
             const shell = document.querySelector(".asset-list-shell");
             if (!shell) {
                 return;
+            }
+
+            function createInlineFilterHelpers() {
+                function createRegistry(schema) {
+                    const fieldMap = {};
+                    (Array.isArray(schema) ? schema : []).forEach(function (item) {
+                        if (!item || !item.field || !item.type || !Array.isArray(item.operators)) {
+                            return;
+                        }
+                        fieldMap[item.field] = {
+                            field: item.field,
+                            label: item.label || item.field,
+                            type: item.type,
+                            operators: item.operators.slice(),
+                            choices: Array.isArray(item.choices) ? item.choices.slice() : []
+                        };
+                    });
+                    return {
+                        fields: Object.keys(fieldMap).map(function (key) { return fieldMap[key]; }),
+                        fieldMap: fieldMap
+                    };
+                }
+
+                function getFieldDefinition(filterState, field) {
+                    return filterState.registry.fieldMap[field] || null;
+                }
+
+                function getDefaultOperator(definition) {
+                    return definition && definition.operators.length ? definition.operators[0] : "";
+                }
+
+                function getDefaultValue(definition, operator) {
+                    if (!definition) {
+                        return "";
+                    }
+                    if (definition.type === "enum" && operator === "in") {
+                        return [];
+                    }
+                    if ((definition.type === "number" || definition.type === "date") && operator === "between") {
+                        return { from: "", to: "" };
+                    }
+                    return "";
+                }
+
+                function normalizeValue(definition, operator, value) {
+                    if (!definition) {
+                        return value;
+                    }
+
+                    if (definition.type === "enum" && operator === "in") {
+                        return Array.isArray(value) ? value : (value ? [value] : []);
+                    }
+
+                    if ((definition.type === "number" || definition.type === "date") && operator === "between") {
+                        const normalized = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+                        return {
+                            from: normalized.from !== undefined ? normalized.from : "",
+                            to: normalized.to !== undefined ? normalized.to : ""
+                        };
+                    }
+
+                    if (Array.isArray(value)) {
+                        return value[0] || "";
+                    }
+
+                    if (value && typeof value === "object") {
+                        return "";
+                    }
+
+                    return value;
+                }
+
+                function normalizeCondition(filterState, seed) {
+                    const firstField = filterState.registry.fields[0];
+                    const field = seed && filterState.registry.fieldMap[seed.field] ? seed.field : (firstField ? firstField.field : "");
+                    const definition = getFieldDefinition(filterState, field) || firstField || null;
+                    const operator = seed && definition && definition.operators.indexOf(seed.operator) !== -1
+                        ? seed.operator
+                        : getDefaultOperator(definition);
+
+                    return {
+                        id: seed && seed.id ? seed.id : "f" + filterState.nextId++,
+                        field: field,
+                        operator: operator,
+                        value: normalizeValue(definition, operator, seed && seed.value !== undefined ? seed.value : getDefaultValue(definition, operator))
+                    };
+                }
+
+                function serializeConditions(filterState, conditions) {
+                    const params = new URLSearchParams();
+                    (Array.isArray(conditions) ? conditions : []).forEach(function (condition) {
+                        const definition = getFieldDefinition(filterState, condition.field);
+                        if (!definition || definition.operators.indexOf(condition.operator) === -1) {
+                            return;
+                        }
+
+                        if (definition.type === "enum" && condition.operator === "in") {
+                            const values = Array.isArray(condition.value)
+                                ? condition.value.map(function (item) { return String(item).trim(); }).filter(Boolean)
+                                : [];
+                            if (values.length) {
+                                params.set("filter__" + condition.field + "__" + condition.operator, values.join(","));
+                            }
+                            return;
+                        }
+
+                        if (condition.operator === "between") {
+                            const fromValue = condition.value && condition.value.from !== undefined
+                                ? String(condition.value.from).trim()
+                                : "";
+                            const toValue = condition.value && condition.value.to !== undefined
+                                ? String(condition.value.to).trim()
+                                : "";
+                            if (fromValue && toValue) {
+                                params.set("filter__" + condition.field + "__" + condition.operator, fromValue + "," + toValue);
+                            }
+                            return;
+                        }
+
+                        if (Array.isArray(condition.value)) {
+                            return;
+                        }
+
+                        const rawValue = condition.value === undefined || condition.value === null ? "" : String(condition.value).trim();
+                        if (rawValue) {
+                            params.set("filter__" + condition.field + "__" + condition.operator, rawValue);
+                        }
+                    });
+                    return params;
+                }
+
+                function getOperatorOptions(filterState, field) {
+                    const definition = getFieldDefinition(filterState, field);
+                    if (!definition) {
+                        return [];
+                    }
+                        const labels = {
+                            contains: "zawiera",
+                            equals: "równa się",
+                            in: "należy do",
+                            eq: "równe",
+                            gt: "większe niż",
+                            lt: "mniejsze niż",
+                            between: "między",
+                            before: "przed",
+                            after: "po"
+                        };
+                    return definition.operators.map(function (operator) {
+                        return {
+                            value: operator,
+                            label: labels[operator] || operator
+                        };
+                    });
+                }
+
+                function getValueInputConfig(filterState, field, operator) {
+                    const definition = getFieldDefinition(filterState, field);
+                    if (!definition) {
+                        return { inputType: "text", multiple: false, choices: [] };
+                    }
+                    if (definition.type === "enum") {
+                        return {
+                            inputType: "select",
+                            multiple: operator === "in",
+                            choices: definition.choices
+                        };
+                    }
+                    if (definition.type === "number") {
+                        if (operator === "between") {
+                            return { inputType: "number", multiple: false, choices: [], isRange: true };
+                        }
+                        return { inputType: "number", multiple: false, choices: [] };
+                    }
+                    if (definition.type === "date") {
+                        if (operator === "between") {
+                            return { inputType: "date", multiple: false, choices: [], isRange: true };
+                        }
+                        return { inputType: "date", multiple: false, choices: [] };
+                    }
+                    return { inputType: "text", multiple: false, choices: [] };
+                }
+
+                return {
+                    createFilterState: function (schema) {
+                        return { registry: createRegistry(schema), nextId: 1 };
+                    },
+                    createCondition: function (filterState, seed) {
+                        return normalizeCondition(filterState, seed || {});
+                    },
+                    sanitizeConditions: function (filterState, conditions) {
+                        return (Array.isArray(conditions) ? conditions : []).map(function (condition) {
+                            return normalizeCondition(filterState, condition || {});
+                        });
+                    },
+                    normalizeCondition: normalizeCondition,
+                    getFieldDefinition: getFieldDefinition,
+                    getOperatorOptions: getOperatorOptions,
+                    getValueInputConfig: getValueInputConfig,
+                    serializeConditions: serializeConditions,
+                    getDefaultOperator: getDefaultOperator
+                };
             }
 
             const storageKeyColumns = "asset-list-columns-v2";
@@ -789,6 +1200,10 @@
             const detailTemplate = shell.dataset.detailUrlTemplate;
             const defaultPageSize = 50;
             const searchDebounceMs = 300;
+            const filterSchemaNode = document.getElementById("asset-filter-schema");
+            const filterHelpers = window.AssetListFilters || createInlineFilterHelpers();
+            const filterSchema = filterSchemaNode ? JSON.parse(filterSchemaNode.textContent) : [];
+            const filterState = filterHelpers.createFilterState(filterSchema);
             const dateColumns = new Set([
                 "updated_at",
                 "purchase_date",
@@ -846,6 +1261,11 @@
                 searchInput: document.getElementById("asset-search"),
                 statusFilter: document.getElementById("asset-status-filter"),
                 locationFilter: document.getElementById("asset-location-filter"),
+                addFilterButton: document.getElementById("asset-add-filter"),
+                clearFiltersButton: document.getElementById("asset-clear-filters"),
+                filterCount: document.getElementById("asset-filter-count"),
+                filterList: document.getElementById("asset-filter-list"),
+                filterEmpty: document.getElementById("asset-filter-empty"),
                 denseModeToggle: document.getElementById("asset-dense-mode"),
                 columnsToggle: document.getElementById("asset-columns-toggle"),
                 columnsPanel: document.getElementById("asset-columns-panel"),
@@ -865,6 +1285,7 @@
                 search: "",
                 status: "",
                 location: "",
+                filters: [],
                 ordering: "-updated_at",
                 columns: loadColumns(),
                 mode: loadMode(),
@@ -877,6 +1298,7 @@
 
             applyMode(state.mode);
             syncControls();
+            renderFilterRows();
             renderColumnPanel();
             fetchAndRender();
             bindEvents();
@@ -896,6 +1318,44 @@
 
                 elements.locationFilter.addEventListener("change", function (event) {
                     updateState({ location: event.target.value, page: 1 });
+                });
+
+                elements.addFilterButton.addEventListener("click", function () {
+                    const nextFilters = state.filters.slice();
+                    nextFilters.push(filterHelpers.createCondition(filterState));
+                    updateState({ filters: nextFilters, page: 1 });
+                });
+
+                elements.clearFiltersButton.addEventListener("click", function () {
+                    if (!state.filters.length) {
+                        return;
+                    }
+                    updateState({ filters: [], page: 1 });
+                });
+
+                elements.filterList.addEventListener("change", function (event) {
+                    const row = event.target.closest("[data-filter-id]");
+                    if (!row) {
+                        return;
+                    }
+                    applyFilterRowChange(row);
+                });
+
+                elements.filterList.addEventListener("click", function (event) {
+                    const removeButton = event.target.closest("[data-role='remove-filter']");
+                    if (!removeButton) {
+                        return;
+                    }
+                    const row = removeButton.closest("[data-filter-id]");
+                    if (!row) {
+                        return;
+                    }
+                    updateState({
+                        filters: state.filters.filter(function (condition) {
+                            return condition.id !== row.dataset.filterId;
+                        }),
+                        page: 1
+                    });
                 });
 
                 elements.denseModeToggle.addEventListener("change", function (event) {
@@ -944,8 +1404,12 @@
                 state.search = patch.search !== undefined ? patch.search : state.search;
                 state.status = patch.status !== undefined ? patch.status : state.status;
                 state.location = patch.location !== undefined ? patch.location : state.location;
+                state.filters = patch.filters !== undefined
+                    ? filterHelpers.sanitizeConditions(filterState, patch.filters)
+                    : state.filters;
                 state.ordering = patch.ordering !== undefined ? patch.ordering : state.ordering;
                 syncControls();
+                renderFilterRows();
                 fetchAndRender();
             }
 
@@ -1003,6 +1467,251 @@
                 updateSortLabel();
                 syncControls();
                 updateStickyOffsets();
+            }
+
+            function renderFilterRows() {
+                elements.filterList.innerHTML = "";
+                elements.filterEmpty.hidden = state.filters.length > 0;
+                elements.clearFiltersButton.disabled = !state.filters.length;
+                elements.filterCount.textContent = "Aktywne filtry: " + getCompleteFilterCount();
+
+                state.filters.forEach(function (condition) {
+                    elements.filterList.appendChild(buildFilterRow(condition));
+                });
+            }
+
+            function getCompleteFilterCount() {
+                return state.filters.filter(function (condition) {
+                    if (condition && condition.operator === "between" && condition.value && typeof condition.value === "object" && !Array.isArray(condition.value)) {
+                        return String(condition.value.from || "").trim() !== "" && String(condition.value.to || "").trim() !== "";
+                    }
+                    if (Array.isArray(condition.value)) {
+                        return condition.value.some(function (item) {
+                            return String(item).trim() !== "";
+                        });
+                    }
+                    return String(condition.value || "").trim() !== "";
+                }).length;
+            }
+
+            function buildFilterRow(condition) {
+                const definition = filterHelpers.getFieldDefinition(filterState, condition.field);
+                const operatorOptions = filterHelpers.getOperatorOptions(filterState, condition.field);
+                const row = document.createElement("div");
+                row.className = "asset-filter-row";
+                row.dataset.filterId = condition.id;
+
+                const fieldWrapper = document.createElement("div");
+                fieldWrapper.className = "asset-filter-field";
+                const fieldLabel = document.createElement("label");
+                fieldLabel.className = "visually-hidden";
+                fieldLabel.textContent = "Pole";
+                const fieldSelect = document.createElement("select");
+                fieldSelect.className = "asset-filter-select";
+                fieldSelect.dataset.role = "field";
+                fieldSelect.setAttribute("aria-label", "Pole");
+                filterState.registry.fields.forEach(function (field) {
+                    const option = document.createElement("option");
+                    option.value = field.field;
+                    option.textContent = field.label;
+                    option.selected = field.field === condition.field;
+                    fieldSelect.appendChild(option);
+                });
+                fieldWrapper.appendChild(fieldLabel);
+                fieldWrapper.appendChild(fieldSelect);
+
+                const operatorWrapper = document.createElement("div");
+                operatorWrapper.className = "asset-filter-field";
+                const operatorLabel = document.createElement("label");
+                operatorLabel.className = "visually-hidden";
+                operatorLabel.textContent = "Operator";
+                const operatorSelect = document.createElement("select");
+                operatorSelect.className = "asset-filter-select";
+                operatorSelect.dataset.role = "operator";
+                operatorSelect.setAttribute("aria-label", "Operator");
+                operatorOptions.forEach(function (operator) {
+                    const option = document.createElement("option");
+                    option.value = operator.value;
+                    option.textContent = operator.label;
+                    option.selected = operator.value === condition.operator;
+                    operatorSelect.appendChild(option);
+                });
+                operatorWrapper.appendChild(operatorLabel);
+                operatorWrapper.appendChild(operatorSelect);
+
+                const valueWrapper = document.createElement("div");
+                valueWrapper.className = "asset-filter-field asset-filter-value";
+                const valueLabel = document.createElement("label");
+                valueLabel.className = "visually-hidden";
+                valueLabel.textContent = "Wartość";
+                valueWrapper.appendChild(valueLabel);
+                valueWrapper.appendChild(buildValueControl(condition, definition));
+
+                const actionWrapper = document.createElement("div");
+                actionWrapper.className = "asset-filter-field";
+                const actionLabel = document.createElement("label");
+                actionLabel.className = "visually-hidden";
+                actionLabel.textContent = "Usuń";
+                const removeButton = document.createElement("button");
+                removeButton.type = "button";
+                removeButton.className = "button-secondary asset-filter-remove";
+                removeButton.dataset.role = "remove-filter";
+                removeButton.setAttribute("aria-label", "Usuń filtr");
+                removeButton.title = "Usuń filtr";
+                removeButton.textContent = "×";
+                actionWrapper.appendChild(actionLabel);
+                actionWrapper.appendChild(removeButton);
+
+                row.appendChild(fieldWrapper);
+                row.appendChild(operatorWrapper);
+                row.appendChild(valueWrapper);
+                row.appendChild(actionWrapper);
+                return row;
+            }
+
+            function buildValueControl(condition, definition) {
+                const config = filterHelpers.getValueInputConfig(filterState, condition.field, condition.operator);
+                let control;
+
+                if (config.isRange) {
+                    const rangeValue = condition.value && typeof condition.value === "object" && !Array.isArray(condition.value)
+                        ? condition.value
+                        : { from: "", to: "" };
+                    const rangeWrapper = document.createElement("div");
+                    rangeWrapper.className = "asset-filter-range";
+
+                    const fromInput = document.createElement("input");
+                    fromInput.className = "asset-filter-input";
+                    fromInput.dataset.role = "value-from";
+                    fromInput.setAttribute("aria-label", "Wartość od");
+                    fromInput.type = config.inputType;
+                    fromInput.placeholder = "od";
+                    fromInput.value = rangeValue.from || "";
+                    if (config.inputType === "number") {
+                        fromInput.step = "any";
+                    }
+
+                    const toInput = document.createElement("input");
+                    toInput.className = "asset-filter-input";
+                    toInput.dataset.role = "value-to";
+                    toInput.setAttribute("aria-label", "Wartość do");
+                    toInput.type = config.inputType;
+                    toInput.placeholder = "do";
+                    toInput.value = rangeValue.to || "";
+                    if (config.inputType === "number") {
+                        toInput.step = "any";
+                    }
+
+                    rangeWrapper.appendChild(fromInput);
+                    rangeWrapper.appendChild(toInput);
+                    return rangeWrapper;
+                }
+
+                if (config.inputType === "select") {
+                    control = document.createElement("select");
+                    control.className = "asset-filter-select";
+                    control.dataset.role = "value";
+                    control.setAttribute("aria-label", "Wartość");
+                    if (config.multiple) {
+                        control.multiple = true;
+                        control.size = Math.min(Math.max(config.choices.length, 3), 6);
+                    } else {
+                        const emptyOption = document.createElement("option");
+                        emptyOption.value = "";
+                        emptyOption.textContent = "Wybierz";
+                        control.appendChild(emptyOption);
+                    }
+
+                    const selectedValues = Array.isArray(condition.value) ? condition.value : [condition.value];
+                    config.choices.forEach(function (choice) {
+                        const option = document.createElement("option");
+                        option.value = choice.value;
+                        option.textContent = choice.label;
+                        option.selected = selectedValues.indexOf(choice.value) !== -1;
+                        control.appendChild(option);
+                    });
+                    return control;
+                }
+
+                control = document.createElement("input");
+                control.className = "asset-filter-input";
+                control.dataset.role = "value";
+                control.type = config.inputType;
+                if (config.inputType === "number") {
+                    control.step = "any";
+                    control.placeholder = "np. 1000";
+                } else if (config.inputType === "date") {
+                    control.placeholder = "YYYY-MM-DD";
+                }
+                control.value = Array.isArray(condition.value) ? "" : (condition.value || "");
+                if (definition && definition.type === "text") {
+                    control.placeholder = "Wpisz wartość";
+                }
+                if (definition && definition.type === "text") {
+                    control.placeholder = "Wpisz tekst...";
+                }
+                return control;
+            }
+
+            function applyFilterRowChange(row) {
+                const condition = state.filters.find(function (item) {
+                    return item.id === row.dataset.filterId;
+                });
+                if (!condition) {
+                    return;
+                }
+
+                const fieldSelect = row.querySelector("[data-role='field']");
+                const operatorSelect = row.querySelector("[data-role='operator']");
+                const valueControl = row.querySelector("[data-role='value']");
+                let field = fieldSelect ? fieldSelect.value : condition.field;
+                let definition = filterHelpers.getFieldDefinition(filterState, field);
+                let operator = operatorSelect ? operatorSelect.value : condition.operator;
+
+                if (!definition) {
+                    return;
+                }
+
+                if (filterHelpers.getOperatorOptions(filterState, field).every(function (item) { return item.value !== operator; })) {
+                    operator = filterHelpers.getDefaultOperator(definition);
+                }
+
+                let value = "";
+                if (valueControl) {
+                    if (valueControl.tagName === "SELECT" && valueControl.multiple) {
+                        value = Array.from(valueControl.selectedOptions).map(function (option) {
+                            return option.value;
+                        });
+                    } else {
+                        value = valueControl.value;
+                    }
+                } else if (operator === "between") {
+                    const valueFromControl = row.querySelector("[data-role='value-from']");
+                    const valueToControl = row.querySelector("[data-role='value-to']");
+                    value = {
+                        from: valueFromControl ? valueFromControl.value : "",
+                        to: valueToControl ? valueToControl.value : ""
+                    };
+                }
+
+                if (definition.type === "enum" && operator === "in" && !Array.isArray(value)) {
+                    value = value ? [value] : [];
+                } else if (definition.type === "enum" && operator !== "in" && Array.isArray(value)) {
+                    value = value[0] || "";
+                }
+
+                const nextFilters = state.filters.map(function (item) {
+                    if (item.id !== condition.id) {
+                        return item;
+                    }
+                    return filterHelpers.normalizeCondition(filterState, {
+                        id: item.id,
+                        field: field,
+                        operator: operator,
+                        value: value
+                    });
+                });
+                updateState({ filters: nextFilters, page: 1 });
             }
 
             function renderHead() {
@@ -1257,6 +1966,10 @@
                 params.set("status", state.status);
                 params.set("location", state.location);
                 params.set("ordering", state.ordering);
+                const serializedFilters = filterHelpers.serializeConditions(filterState, state.filters);
+                serializedFilters.forEach(function (value, key) {
+                    params.set(key, value);
+                });
                 return apiUrl + "?" + params.toString();
             }
 
@@ -1404,4 +2117,5 @@
         })();
     </script>
 {% endblock %}
+
 

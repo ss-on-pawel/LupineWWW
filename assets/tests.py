@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from io import StringIO
 
@@ -30,6 +31,17 @@ class AssetListApiTests(TestCase):
             location="Board Room",
             category="IT",
             purchase_value=Decimal("9999.99"),
+            purchase_date=date(2024, 6, 15),
+        )
+
+        cls.date_outside = Asset.objects.create(
+            name="Archive Router",
+            inventory_number="ARC-001",
+            status=Asset.Status.RESERVED,
+            location="Archive",
+            category="IT",
+            purchase_value=Decimal("2500"),
+            purchase_date=date(2023, 3, 10),
         )
 
     def test_api_uses_default_pagination(self):
@@ -41,7 +53,7 @@ class AssetListApiTests(TestCase):
         self.assertEqual(len(payload["results"]), 50)
         self.assertEqual(payload["pagination"]["page"], 1)
         self.assertEqual(payload["pagination"]["page_size"], 50)
-        self.assertEqual(payload["pagination"]["total_items"], 61)
+        self.assertEqual(payload["pagination"]["total_items"], 62)
         self.assertTrue(payload["pagination"]["has_next"])
 
     def test_api_filters_and_searches(self):
@@ -69,6 +81,95 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
         self.assertEqual(payload["filters"]["ordering"], "-purchase_value")
+
+    def test_api_applies_backend_filters_from_query_params(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {
+                "filter__status__equals": Asset.Status.RESERVED,
+                "filter__purchase_value__gt": "5000",
+                "filter__name__contains": "Laptop",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
+
+    def test_api_supports_enum_in_filters(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"filter__status__in": ",".join([Asset.Status.RESERVED, Asset.Status.IN_USE])},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 32)
+
+    def test_api_supports_number_between_filters(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"filter__purchase_value__between": "9900,10000"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
+
+    def test_api_supports_date_between_filters(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"filter__purchase_date__between": "2024-01-01,2024-12-31"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
+
+    def test_api_ignores_incomplete_between_filters(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"filter__purchase_value__between": "1000,"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 62)
+
+    def test_api_ignores_invalid_between_filters(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"filter__purchase_date__between": "2024-12-31,2024-01-01"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 62)
+
+    def test_api_combines_between_with_other_filters(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {
+                "filter__purchase_date__between": "2024-01-01,2024-12-31",
+                "filter__status__equals": Asset.Status.RESERVED,
+                "filter__name__contains": "Laptop",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
 
     def test_api_exposes_extended_system_columns(self):
         user = User.objects.create_user(username="operator", first_name="Jan", last_name="Kowalski")
