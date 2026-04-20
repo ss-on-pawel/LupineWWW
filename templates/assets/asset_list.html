@@ -277,12 +277,15 @@
             font-size: 0.76rem;
         }
         .asset-list-filters {
+            position: relative;
+            z-index: 20;
             display: grid;
             gap: 8px;
             margin-bottom: 10px;
             padding: 10px 12px;
             border: 1px solid var(--line);
             background: rgba(248, 250, 252, 0.88);
+            overflow: visible;
         }
         .asset-list-shell[data-mode="dense"] .asset-list-filters {
             gap: 6px;
@@ -353,10 +356,28 @@
             gap: 8px;
         }
         .asset-filter-row {
+            position: relative;
             display: grid;
             grid-template-columns: 220px 180px minmax(220px, 1fr) 36px;
             gap: 10px;
             align-items: center;
+            transition: opacity 140ms ease, background-color 140ms ease;
+            overflow: visible;
+        }
+        .asset-filter-row.filter--inactive {
+            opacity: 1;
+        }
+        .asset-filter-row.filter--inactive .asset-filter-field > label,
+        .asset-filter-row.filter--inactive .asset-filter-input,
+        .asset-filter-row.filter--inactive .asset-filter-select {
+            color: rgba(15, 23, 42, 0.72);
+            border-color: rgba(15, 23, 42, 0.12);
+        }
+        .asset-filter-row.filter--active {
+            opacity: 1;
+        }
+        .asset-filter-row.filter--invalid {
+            opacity: 1;
         }
         .asset-filter-field {
             display: flex;
@@ -398,11 +419,6 @@
             text-transform: uppercase;
             color: var(--text-muted);
         }
-        .asset-filter-value select[multiple] {
-            min-height: 108px;
-            padding-top: 8px;
-            padding-bottom: 8px;
-        }
         .asset-filter-remove {
             width: 36px;
             min-width: 36px;
@@ -424,8 +440,23 @@
         }
         .asset-filter-range {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
             gap: 8px;
+            align-items: center;
+        }
+        .asset-filter-range-separator {
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+        .asset-filter-row.filter--invalid .asset-filter-value .asset-filter-input,
+        .asset-filter-row.filter--invalid .asset-filter-value .asset-filter-select {
+            border-color: rgba(220, 38, 38, 0.42);
+            box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.08);
+        }
+        .asset-filter-row.filter--invalid .asset-filter-range-separator {
+            color: rgba(185, 28, 28, 0.75);
         }
         .asset-list-shell[data-mode="dense"] .asset-filter-row {
             grid-template-columns: 196px 160px minmax(180px, 1fr) 32px;
@@ -607,11 +638,15 @@
             width: 138px;
             min-width: 138px;
             max-width: 138px;
+            overflow: visible;
+            text-overflow: clip;
         }
         .asset-list-shell[data-mode="dense"] .asset-table .cell-status {
             width: 118px;
             min-width: 118px;
             max-width: 118px;
+            overflow: visible;
+            text-overflow: clip;
         }
         .asset-table td[data-column-key="asset_type"],
         .asset-table th[data-column-key="asset_type"],
@@ -757,6 +792,7 @@
             font-size: 0.78rem;
             letter-spacing: 0.06em;
             text-transform: uppercase;
+            white-space: nowrap;
         }
         .asset-list-shell[data-mode="dense"] .asset-status-pill {
             min-height: 18px;
@@ -1004,7 +1040,9 @@
                             field: item.field,
                             label: item.label || item.field,
                             type: item.type,
-                            operators: item.operators.slice(),
+                            operators: item.type === "enum"
+                                ? item.operators.filter(function (operator) { return operator !== "in"; })
+                                : item.operators.slice(),
                             choices: Array.isArray(item.choices) ? item.choices.slice() : []
                         };
                     });
@@ -1026,9 +1064,6 @@
                     if (!definition) {
                         return "";
                     }
-                    if (definition.type === "enum" && operator === "in") {
-                        return [];
-                    }
                     if ((definition.type === "number" || definition.type === "date") && operator === "between") {
                         return { from: "", to: "" };
                     }
@@ -1038,10 +1073,6 @@
                 function normalizeValue(definition, operator, value) {
                     if (!definition) {
                         return value;
-                    }
-
-                    if (definition.type === "enum" && operator === "in") {
-                        return Array.isArray(value) ? value : (value ? [value] : []);
                     }
 
                     if ((definition.type === "number" || definition.type === "date") && operator === "between") {
@@ -1087,34 +1118,22 @@
                             return;
                         }
 
-                        if (definition.type === "enum" && condition.operator === "in") {
-                            const values = Array.isArray(condition.value)
-                                ? condition.value.map(function (item) { return String(item).trim(); }).filter(Boolean)
-                                : [];
-                            if (values.length) {
-                                params.set("filter__" + condition.field + "__" + condition.operator, values.join(","));
-                            }
-                            return;
-                        }
+                        const spec = resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
 
-                        if (condition.operator === "between") {
-                            const fromValue = condition.value && condition.value.from !== undefined
-                                ? String(condition.value.from).trim()
-                                : "";
-                            const toValue = condition.value && condition.value.to !== undefined
-                                ? String(condition.value.to).trim()
-                                : "";
+                        if (spec.kind === "range") {
+                            const fromValue = String(spec.value.from || "").trim();
+                            const toValue = String(spec.value.to || "").trim();
                             if (fromValue && toValue) {
                                 params.set("filter__" + condition.field + "__" + condition.operator, fromValue + "," + toValue);
                             }
                             return;
                         }
 
-                        if (Array.isArray(condition.value)) {
+                        if (Array.isArray(spec.value)) {
                             return;
                         }
 
-                        const rawValue = condition.value === undefined || condition.value === null ? "" : String(condition.value).trim();
+                        const rawValue = spec.value === undefined || spec.value === null ? "" : String(spec.value).trim();
                         if (rawValue) {
                             params.set("filter__" + condition.field + "__" + condition.operator, rawValue);
                         }
@@ -1130,7 +1149,6 @@
                         const labels = {
                             contains: "zawiera",
                             equals: "równa się",
-                            in: "należy do",
                             eq: "równe",
                             gt: "większe niż",
                             lt: "mniejsze niż",
@@ -1154,7 +1172,7 @@
                     if (definition.type === "enum") {
                         return {
                             inputType: "select",
-                            multiple: operator === "in",
+                            multiple: false,
                             choices: definition.choices
                         };
                     }
@@ -1173,6 +1191,180 @@
                     return { inputType: "text", multiple: false, choices: [] };
                 }
 
+                function resolveValueInputSpec(filterState, field, operator, value) {
+                    const definition = getFieldDefinition(filterState, field);
+                    const config = getValueInputConfig(filterState, field, operator);
+                    const normalizedValue = normalizeValue(definition, operator, value);
+
+                    if (!definition) {
+                        return {
+                            kind: "single",
+                            control: "input",
+                            inputType: "text",
+                            value: "",
+                            placeholder: ""
+                        };
+                    }
+
+                    if (config.isRange) {
+                        return {
+                            kind: "range",
+                            control: "range",
+                            valueType: config.inputType,
+                            value: normalizedValue,
+                            placeholders: { from: "od", to: "do" }
+                        };
+                    }
+
+                    if (config.inputType === "select") {
+                        return {
+                            kind: "single",
+                            control: "select",
+                            value: normalizedValue,
+                            placeholder: "Wybierz",
+                            options: config.choices
+                        };
+                    }
+
+                    return {
+                        kind: "single",
+                        control: "input",
+                        inputType: config.inputType,
+                        value: normalizedValue,
+                        placeholder: config.inputType === "number"
+                            ? "np. 1000"
+                            : (config.inputType === "date" ? "YYYY-MM-DD" : "Wpisz tekst...")
+                    };
+                }
+
+                function renderValueControl(spec) {
+                    if (spec.kind === "range") {
+                        const wrapper = document.createElement("div");
+                        wrapper.className = "asset-filter-range";
+
+                        const fromInput = document.createElement("input");
+                        fromInput.className = "asset-filter-input";
+                        fromInput.dataset.role = "value-range-part";
+                        fromInput.dataset.part = "from";
+                        fromInput.setAttribute("aria-label", "Warto\u015b\u0107 od");
+                        fromInput.type = spec.valueType;
+                        fromInput.placeholder = spec.placeholders.from;
+                        fromInput.value = spec.value.from || "";
+                        if (spec.valueType === "number") {
+                            fromInput.step = "any";
+                        }
+
+                        const separator = document.createElement("span");
+                        separator.className = "asset-filter-range-separator";
+                        separator.setAttribute("aria-hidden", "true");
+                        separator.textContent = "-";
+
+                        const toInput = document.createElement("input");
+                        toInput.className = "asset-filter-input";
+                        toInput.dataset.role = "value-range-part";
+                        toInput.dataset.part = "to";
+                        toInput.setAttribute("aria-label", "Warto\u015b\u0107 do");
+                        toInput.type = spec.valueType;
+                        toInput.placeholder = spec.placeholders.to;
+                        toInput.value = spec.value.to || "";
+                        if (spec.valueType === "number") {
+                            toInput.step = "any";
+                        }
+
+                        wrapper.appendChild(fromInput);
+                        wrapper.appendChild(separator);
+                        wrapper.appendChild(toInput);
+                        return wrapper;
+                    }
+
+                    if (spec.control === "select") {
+                        const select = document.createElement("select");
+                        select.className = "asset-filter-select";
+                        select.dataset.role = "value";
+                        select.setAttribute("aria-label", "Warto\u015b\u0107");
+                        const emptyOption = document.createElement("option");
+                        emptyOption.value = "";
+                        emptyOption.textContent = spec.placeholder || "Wybierz";
+                        select.appendChild(emptyOption);
+
+                        const selectedValues = Array.isArray(spec.value) ? spec.value : [spec.value];
+                        spec.options.forEach(function (choice) {
+                            const option = document.createElement("option");
+                            option.value = choice.value;
+                            option.textContent = choice.label;
+                            option.selected = selectedValues.indexOf(choice.value) !== -1;
+                            select.appendChild(option);
+                        });
+                        return select;
+                    }
+
+                    const input = document.createElement("input");
+                    input.className = "asset-filter-input";
+                    input.dataset.role = "value";
+                    input.type = spec.inputType;
+                    input.value = Array.isArray(spec.value) ? "" : (spec.value || "");
+                    if (spec.placeholder) {
+                        input.placeholder = spec.placeholder;
+                    }
+                    if (spec.inputType === "number") {
+                        input.step = "any";
+                    }
+                    return input;
+                }
+
+                function shouldResetValue(currentSpec, nextSpec) {
+                    const currentSignature = currentSpec.kind === "range"
+                        ? [currentSpec.kind, currentSpec.control, currentSpec.valueType].join(":")
+                        : [currentSpec.kind, currentSpec.control, currentSpec.inputType || "", "single"].join(":");
+                    const nextSignature = nextSpec.kind === "range"
+                        ? [nextSpec.kind, nextSpec.control, nextSpec.valueType].join(":")
+                        : [nextSpec.kind, nextSpec.control, nextSpec.inputType || "", "single"].join(":");
+                    return currentSignature !== nextSignature;
+                }
+
+                function isFilterActive(filterState, condition) {
+                    const spec = resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+                    if (spec.kind === "range") {
+                        return String(spec.value.from || "").trim() !== "" && String(spec.value.to || "").trim() !== "";
+                    }
+                    return String(spec.value || "").trim() !== "";
+                }
+
+                function getActiveFiltersCount(filterState, conditions) {
+                    return (Array.isArray(conditions) ? conditions : []).filter(function (condition) {
+                        return isFilterActive(filterState, condition);
+                    }).length;
+                }
+
+                function isFilterInvalid(filterState, condition) {
+                    const spec = resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+                    if (spec.kind !== "range" || !isFilterActive(filterState, condition)) {
+                        return false;
+                    }
+
+                    const fromValue = String(spec.value.from || "").trim();
+                    const toValue = String(spec.value.to || "").trim();
+
+                    if (spec.valueType === "number") {
+                        const fromNumber = Number.parseFloat(fromValue);
+                        const toNumber = Number.parseFloat(toValue);
+                        return !Number.isNaN(fromNumber) && !Number.isNaN(toNumber) && fromNumber > toNumber;
+                    }
+
+                    if (spec.valueType === "date") {
+                        return fromValue > toValue;
+                    }
+
+                    return false;
+                }
+
+                function getFilterUiState(filterState, condition) {
+                    if (isFilterInvalid(filterState, condition)) {
+                        return "invalid";
+                    }
+                    return isFilterActive(filterState, condition) ? "active" : "inactive";
+                }
+
                 return {
                     createFilterState: function (schema) {
                         return { registry: createRegistry(schema), nextId: 1 };
@@ -1188,9 +1380,17 @@
                     normalizeCondition: normalizeCondition,
                     getFieldDefinition: getFieldDefinition,
                     getOperatorOptions: getOperatorOptions,
-                    getValueInputConfig: getValueInputConfig,
+                    resolveValueInputSpec: resolveValueInputSpec,
+                    renderValueControl: renderValueControl,
                     serializeConditions: serializeConditions,
-                    getDefaultOperator: getDefaultOperator
+                    isFilterActive: isFilterActive,
+                    getActiveFiltersCount: getActiveFiltersCount,
+                    isFilterInvalid: isFilterInvalid,
+                    getFilterUiState: getFilterUiState,
+                    isConditionComplete: isFilterActive,
+                    shouldResetValue: shouldResetValue,
+                    getDefaultOperator: getDefaultOperator,
+                    getDefaultValue: getDefaultValue
                 };
             }
 
@@ -1293,8 +1493,7 @@
                 requestToken: 0,
                 activeController: null
             };
-
-            let searchDebounceId = null;
+let searchDebounceId = null;
 
             applyMode(state.mode);
             syncControls();
@@ -1338,7 +1537,7 @@
                     if (!row) {
                         return;
                     }
-                    applyFilterRowChange(row);
+                    applyFilterRowChange(row, event.target);
                 });
 
                 elements.filterList.addEventListener("click", function (event) {
@@ -1375,12 +1574,6 @@
 
                 elements.columnsPanel.addEventListener("click", function (event) {
                     event.stopPropagation();
-                });
-
-                document.addEventListener("click", function (event) {
-                    if (!elements.columnsPanel.hidden && !elements.columnsPanel.contains(event.target) && event.target !== elements.columnsToggle) {
-                        closeColumnsPanel();
-                    }
                 });
 
                 elements.prevButton.addEventListener("click", function () {
@@ -1473,32 +1666,25 @@
                 elements.filterList.innerHTML = "";
                 elements.filterEmpty.hidden = state.filters.length > 0;
                 elements.clearFiltersButton.disabled = !state.filters.length;
-                elements.filterCount.textContent = "Aktywne filtry: " + getCompleteFilterCount();
+                elements.filterCount.textContent = "Aktywne filtry: " + getActiveFiltersCount();
 
                 state.filters.forEach(function (condition) {
                     elements.filterList.appendChild(buildFilterRow(condition));
                 });
             }
 
-            function getCompleteFilterCount() {
-                return state.filters.filter(function (condition) {
-                    if (condition && condition.operator === "between" && condition.value && typeof condition.value === "object" && !Array.isArray(condition.value)) {
-                        return String(condition.value.from || "").trim() !== "" && String(condition.value.to || "").trim() !== "";
-                    }
-                    if (Array.isArray(condition.value)) {
-                        return condition.value.some(function (item) {
-                            return String(item).trim() !== "";
-                        });
-                    }
-                    return String(condition.value || "").trim() !== "";
-                }).length;
+            function getActiveFiltersCount() {
+                return filterHelpers.getActiveFiltersCount(filterState, state.filters);
             }
 
             function buildFilterRow(condition) {
                 const definition = filterHelpers.getFieldDefinition(filterState, condition.field);
                 const operatorOptions = filterHelpers.getOperatorOptions(filterState, condition.field);
+                const valueSpec = filterHelpers.resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+                const filterUiState = filterHelpers.getFilterUiState(filterState, condition);
                 const row = document.createElement("div");
                 row.className = "asset-filter-row";
+                row.classList.add("filter--" + filterUiState);
                 row.dataset.filterId = condition.id;
 
                 const fieldWrapper = document.createElement("div");
@@ -1545,7 +1731,7 @@
                 valueLabel.className = "visually-hidden";
                 valueLabel.textContent = "Wartość";
                 valueWrapper.appendChild(valueLabel);
-                valueWrapper.appendChild(buildValueControl(condition, definition));
+                valueWrapper.appendChild(buildValueControl(condition, definition, valueSpec));
 
                 const actionWrapper = document.createElement("div");
                 actionWrapper.className = "asset-filter-field";
@@ -1569,10 +1755,11 @@
                 return row;
             }
 
-            function buildValueControl(condition, definition) {
-                const config = filterHelpers.getValueInputConfig(filterState, condition.field, condition.operator);
-                let control;
+            function buildValueControl(condition, definition, valueSpec) {
+                const spec = valueSpec || filterHelpers.resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+                return filterHelpers.renderValueControl(spec);
 
+                /* legacy renderer removed
                 if (config.isRange) {
                     const rangeValue = condition.value && typeof condition.value === "object" && !Array.isArray(condition.value)
                         ? condition.value
@@ -1651,9 +1838,92 @@
                     control.placeholder = "Wpisz tekst...";
                 }
                 return control;
+                */
             }
 
-            function applyFilterRowChange(row) {
+            function updateFilterValue(filterId, nextValue) {
+                updateState({
+                    filters: state.filters.map(function (condition) {
+                        if (condition.id !== filterId) {
+                            return condition;
+                        }
+                        return filterHelpers.normalizeCondition(filterState, {
+                            id: condition.id,
+                            field: condition.field,
+                            operator: condition.operator,
+                            value: nextValue
+                        });
+                    }),
+                    page: 1
+                });
+            }
+
+            function updateFilterRangeValue(filterId, part, nextValue) {
+                updateState({
+                    filters: state.filters.map(function (condition) {
+                        if (condition.id !== filterId) {
+                            return condition;
+                        }
+                        const currentValue = condition.value && typeof condition.value === "object" && !Array.isArray(condition.value)
+                            ? condition.value
+                            : { from: "", to: "" };
+                        return filterHelpers.normalizeCondition(filterState, {
+                            id: condition.id,
+                            field: condition.field,
+                            operator: condition.operator,
+                            value: Object.assign({}, currentValue, {
+                                [part]: nextValue
+                            })
+                        });
+                    }),
+                    page: 1
+                });
+            }
+
+            function updateFilterDefinition(filterId, nextField, nextOperator) {
+                updateState({
+                    filters: state.filters.map(function (condition) {
+                        if (condition.id !== filterId) {
+                            return condition;
+                        }
+
+                        const definition = filterHelpers.getFieldDefinition(filterState, nextField);
+                        if (!definition) {
+                            return condition;
+                        }
+
+                        let operator = nextOperator;
+                        if (filterHelpers.getOperatorOptions(filterState, nextField).every(function (item) { return item.value !== operator; })) {
+                            operator = filterHelpers.getDefaultOperator(definition);
+                        }
+
+                        const currentSpec = filterHelpers.resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+                        const nextSpec = filterHelpers.resolveValueInputSpec(filterState, nextField, operator, condition.value);
+                        const nextValue = filterHelpers.shouldResetValue(currentSpec, nextSpec)
+                            ? filterHelpers.getDefaultValue(definition, operator)
+                            : condition.value;
+
+                        return filterHelpers.normalizeCondition(filterState, {
+                            id: condition.id,
+                            field: nextField,
+                            operator: operator,
+                            value: nextValue
+                        });
+                    }),
+                    page: 1
+                });
+            }
+
+            function readSingleControlValue(control) {
+                if (control.tagName === "SELECT" && control.multiple) {
+                    return Array.from(control.selectedOptions).map(function (option) {
+                        return option.value;
+                    });
+                }
+                return control.value;
+            }
+
+            function applyFilterRowChange(row, target) {
                 const condition = state.filters.find(function (item) {
                     return item.id === row.dataset.filterId;
                 });
@@ -1663,55 +1933,25 @@
 
                 const fieldSelect = row.querySelector("[data-role='field']");
                 const operatorSelect = row.querySelector("[data-role='operator']");
-                const valueControl = row.querySelector("[data-role='value']");
-                let field = fieldSelect ? fieldSelect.value : condition.field;
-                let definition = filterHelpers.getFieldDefinition(filterState, field);
-                let operator = operatorSelect ? operatorSelect.value : condition.operator;
+                const field = fieldSelect ? fieldSelect.value : condition.field;
+                const operator = operatorSelect ? operatorSelect.value : condition.operator;
+                const role = target && target.dataset ? target.dataset.role : "";
 
-                if (!definition) {
+                if (role === "field" || role === "operator") {
+                    updateFilterDefinition(condition.id, field, operator);
                     return;
                 }
 
-                if (filterHelpers.getOperatorOptions(filterState, field).every(function (item) { return item.value !== operator; })) {
-                    operator = filterHelpers.getDefaultOperator(definition);
+                if (role === "value") {
+                    updateFilterValue(condition.id, readSingleControlValue(target));
+                    return;
                 }
 
-                let value = "";
-                if (valueControl) {
-                    if (valueControl.tagName === "SELECT" && valueControl.multiple) {
-                        value = Array.from(valueControl.selectedOptions).map(function (option) {
-                            return option.value;
-                        });
-                    } else {
-                        value = valueControl.value;
-                    }
-                } else if (operator === "between") {
-                    const valueFromControl = row.querySelector("[data-role='value-from']");
-                    const valueToControl = row.querySelector("[data-role='value-to']");
-                    value = {
-                        from: valueFromControl ? valueFromControl.value : "",
-                        to: valueToControl ? valueToControl.value : ""
-                    };
+                if (role === "value-range-part") {
+                    updateFilterRangeValue(condition.id, target.dataset.part, target.value);
+                    return;
                 }
 
-                if (definition.type === "enum" && operator === "in" && !Array.isArray(value)) {
-                    value = value ? [value] : [];
-                } else if (definition.type === "enum" && operator !== "in" && Array.isArray(value)) {
-                    value = value[0] || "";
-                }
-
-                const nextFilters = state.filters.map(function (item) {
-                    if (item.id !== condition.id) {
-                        return item;
-                    }
-                    return filterHelpers.normalizeCondition(filterState, {
-                        id: item.id,
-                        field: field,
-                        operator: operator,
-                        value: value
-                    });
-                });
-                updateState({ filters: nextFilters, page: 1 });
             }
 
             function renderHead() {
@@ -2117,5 +2357,8 @@
         })();
     </script>
 {% endblock %}
+
+
+
 
 

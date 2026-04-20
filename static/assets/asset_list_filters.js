@@ -11,27 +11,257 @@
                 field: item.field,
                 label: item.label || item.field,
                 type: item.type,
-                operators: item.operators.slice(),
+                operators: item.type === "enum"
+                    ? item.operators.filter(function (operator) { return operator !== "in"; })
+                    : item.operators.slice(),
                 choices: Array.isArray(item.choices) ? item.choices.slice() : []
             };
         });
 
-        const fields = Object.keys(fieldMap).map(function (key) {
-            return fieldMap[key];
-        });
-
         return {
-            fields: fields,
+            fields: Object.keys(fieldMap).map(function (key) {
+                return fieldMap[key];
+            }),
             fieldMap: fieldMap
         };
     }
 
     function createFilterState(schema) {
-        const registry = createRegistry(schema);
         return {
-            registry: registry,
+            registry: createRegistry(schema),
             nextId: 1
         };
+    }
+
+    function getFieldDefinition(filterState, field) {
+        return filterState.registry.fieldMap[field] || null;
+    }
+
+    function isAllowedOperator(definition, operator) {
+        return Boolean(definition && definition.operators.indexOf(operator) !== -1);
+    }
+
+    function getDefaultOperator(definition) {
+        return definition && definition.operators.length ? definition.operators[0] : "";
+    }
+
+    function getDefaultValue(definition, operator) {
+        if (!definition) {
+            return "";
+        }
+
+        if ((definition.type === "number" || definition.type === "date") && operator === "between") {
+            return { from: "", to: "" };
+        }
+
+        return "";
+    }
+
+    function normalizeValue(definition, operator, value) {
+        if (!definition) {
+            return value;
+        }
+
+        if ((definition.type === "number" || definition.type === "date") && operator === "between") {
+            const normalized = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+            return {
+                from: normalized.from !== undefined ? normalized.from : "",
+                to: normalized.to !== undefined ? normalized.to : ""
+            };
+        }
+
+        if (Array.isArray(value)) {
+            return value[0] || "";
+        }
+
+        if (value && typeof value === "object") {
+            return "";
+        }
+
+        return value;
+    }
+
+    function resolveValueInputSpec(filterState, field, operator, value) {
+        const definition = getFieldDefinition(filterState, field);
+        if (!definition || !isAllowedOperator(definition, operator)) {
+            return {
+                kind: "single",
+                control: "input",
+                inputType: "text",
+                value: "",
+                placeholder: ""
+            };
+        }
+
+        const normalizedValue = normalizeValue(definition, operator, value);
+
+        if (definition.type === "enum") {
+            return {
+                kind: "single",
+                control: "select",
+                value: normalizedValue,
+                placeholder: "Wybierz",
+                options: definition.choices.slice()
+            };
+        }
+
+        if ((definition.type === "number" || definition.type === "date") && operator === "between") {
+            return {
+                kind: "range",
+                control: "range",
+                valueType: definition.type,
+                value: normalizedValue,
+                placeholders: {
+                    from: "od",
+                    to: "do"
+                }
+            };
+        }
+
+        if (definition.type === "number") {
+            return {
+                kind: "single",
+                control: "input",
+                inputType: "number",
+                value: normalizedValue,
+                placeholder: "np. 1000",
+                step: "any"
+            };
+        }
+
+        if (definition.type === "date") {
+            return {
+                kind: "single",
+                control: "input",
+                inputType: "date",
+                value: normalizedValue,
+                placeholder: "YYYY-MM-DD"
+            };
+        }
+
+        return {
+            kind: "single",
+            control: "input",
+            inputType: "text",
+            value: normalizedValue,
+            placeholder: "Wpisz tekst..."
+        };
+    }
+
+    function getValueShapeSignature(spec) {
+        if (!spec) {
+            return "";
+        }
+
+        if (spec.kind === "range") {
+            return [spec.kind, spec.control, spec.valueType].join(":");
+        }
+
+        return [
+            spec.kind,
+            spec.control,
+            spec.inputType || "",
+            "single"
+        ].join(":");
+    }
+
+    function shouldResetValue(currentSpec, nextSpec) {
+        return getValueShapeSignature(currentSpec) !== getValueShapeSignature(nextSpec);
+    }
+
+    function createTextNode(value) {
+        return document.createTextNode(value);
+    }
+
+    function renderValueControl(spec) {
+        if (spec.kind === "range") {
+            const wrapper = document.createElement("div");
+            wrapper.className = "asset-filter-range";
+
+            const fromInput = document.createElement("input");
+            fromInput.className = "asset-filter-input";
+            fromInput.dataset.role = "value-range-part";
+            fromInput.dataset.part = "from";
+            fromInput.setAttribute("aria-label", "Warto\u015b\u0107 od");
+            fromInput.type = spec.valueType;
+            fromInput.placeholder = spec.placeholders.from;
+            fromInput.value = spec.value.from || "";
+            if (spec.valueType === "number") {
+                fromInput.step = "any";
+            }
+
+            const separator = document.createElement("span");
+            separator.className = "asset-filter-range-separator";
+            separator.setAttribute("aria-hidden", "true");
+            separator.appendChild(createTextNode("-"));
+
+            const toInput = document.createElement("input");
+            toInput.className = "asset-filter-input";
+            toInput.dataset.role = "value-range-part";
+            toInput.dataset.part = "to";
+            toInput.setAttribute("aria-label", "Warto\u015b\u0107 do");
+            toInput.type = spec.valueType;
+            toInput.placeholder = spec.placeholders.to;
+            toInput.value = spec.value.to || "";
+            if (spec.valueType === "number") {
+                toInput.step = "any";
+            }
+
+            wrapper.appendChild(fromInput);
+            wrapper.appendChild(separator);
+            wrapper.appendChild(toInput);
+            return wrapper;
+        }
+
+        if (spec.control === "select") {
+            const select = document.createElement("select");
+            select.className = "asset-filter-select";
+            select.dataset.role = "value";
+            select.setAttribute("aria-label", "Warto\u015b\u0107");
+
+            const emptyOption = document.createElement("option");
+            emptyOption.value = "";
+            emptyOption.textContent = spec.placeholder || "Wybierz";
+            select.appendChild(emptyOption);
+
+            const selectedValues = Array.isArray(spec.value) ? spec.value : [spec.value];
+            spec.options.forEach(function (choice) {
+                const option = document.createElement("option");
+                option.value = choice.value;
+                option.textContent = choice.label;
+                option.selected = selectedValues.indexOf(choice.value) !== -1;
+                select.appendChild(option);
+            });
+
+            return select;
+        }
+
+        const input = document.createElement("input");
+        input.className = "asset-filter-input";
+        input.dataset.role = "value";
+        input.type = spec.inputType || "text";
+        input.value = Array.isArray(spec.value) ? "" : (spec.value || "");
+        if (spec.placeholder) {
+            input.placeholder = spec.placeholder;
+        }
+        if (spec.step) {
+            input.step = spec.step;
+        }
+        return input;
+    }
+
+    function getOperatorOptions(filterState, field) {
+        const definition = getFieldDefinition(filterState, field);
+        if (!definition) {
+            return [];
+        }
+
+        return definition.operators.map(function (operator) {
+            return {
+                value: operator,
+                label: getOperatorLabel(operator)
+            };
+        });
     }
 
     function createCondition(filterState, seed) {
@@ -49,7 +279,11 @@
             id: id,
             field: field,
             operator: operator,
-            value: normalizeValue(definition, operator, seed && seed.value !== undefined ? seed.value : getDefaultValue(definition, operator))
+            value: normalizeValue(
+                definition,
+                operator,
+                seed && seed.value !== undefined ? seed.value : getDefaultValue(definition, operator)
+            )
         };
     }
 
@@ -63,54 +297,51 @@
         return createCondition(filterState, condition || {});
     }
 
-    function getFieldDefinition(filterState, field) {
-        return filterState.registry.fieldMap[field] || null;
+    function isFilterActive(filterState, condition) {
+        const spec = resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+
+        if (spec.kind === "range") {
+            return String(spec.value.from || "").trim() !== "" && String(spec.value.to || "").trim() !== "";
+        }
+
+        return String(spec.value || "").trim() !== "";
     }
 
-    function getOperatorOptions(filterState, field) {
-        const definition = getFieldDefinition(filterState, field);
-        if (!definition) {
-            return [];
-        }
-
-        return definition.operators.map(function (operator) {
-            return {
-                value: operator,
-                label: getOperatorLabel(operator)
-            };
-        });
+    function getActiveFiltersCount(filterState, conditions) {
+        return (Array.isArray(conditions) ? conditions : []).filter(function (condition) {
+            return isFilterActive(filterState, condition);
+        }).length;
     }
 
-    function getValueInputConfig(filterState, field, operator) {
-        const definition = getFieldDefinition(filterState, field);
-        if (!definition) {
-            return { mode: "text", inputType: "text", multiple: false, choices: [] };
+    function isFilterInvalid(filterState, condition) {
+        const spec = resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
+
+        if (spec.kind !== "range" || !isFilterActive(filterState, condition)) {
+            return false;
         }
 
-        if (definition.type === "enum") {
-            return {
-                mode: "enum",
-                inputType: "select",
-                multiple: operator === "in",
-                choices: definition.choices
-            };
+        const fromValue = String(spec.value.from || "").trim();
+        const toValue = String(spec.value.to || "").trim();
+
+        if (spec.valueType === "number") {
+            const fromNumber = Number.parseFloat(fromValue);
+            const toNumber = Number.parseFloat(toValue);
+            return !Number.isNaN(fromNumber) && !Number.isNaN(toNumber) && fromNumber > toNumber;
         }
 
-        if (definition.type === "number") {
-            if (operator === "between") {
-                return { mode: "number-range", inputType: "number", multiple: false, choices: [], isRange: true };
-            }
-            return { mode: "number", inputType: "number", multiple: false, choices: [] };
+        if (spec.valueType === "date") {
+            return fromValue > toValue;
         }
 
-        if (definition.type === "date") {
-            if (operator === "between") {
-                return { mode: "date-range", inputType: "date", multiple: false, choices: [], isRange: true };
-            }
-            return { mode: "date", inputType: "date", multiple: false, choices: [] };
+        return false;
+    }
+
+    function getFilterUiState(filterState, condition) {
+        if (isFilterInvalid(filterState, condition)) {
+            return "invalid";
         }
 
-        return { mode: "text", inputType: "text", multiple: false, choices: [] };
+        return isFilterActive(filterState, condition) ? "active" : "inactive";
     }
 
     function serializeConditions(filterState, conditions) {
@@ -134,89 +365,30 @@
             return null;
         }
 
-        if (definition.type === "enum" && condition.operator === "in") {
-            const values = Array.isArray(condition.value)
-                ? condition.value.map(function (item) { return String(item).trim(); }).filter(Boolean)
-                : [];
-            return values.length ? values.join(",") : null;
-        }
+        const spec = resolveValueInputSpec(filterState, condition.field, condition.operator, condition.value);
 
-        if (condition.operator === "between") {
-            const fromValue = condition.value && condition.value.from !== undefined
-                ? String(condition.value.from).trim()
-                : "";
-            const toValue = condition.value && condition.value.to !== undefined
-                ? String(condition.value.to).trim()
-                : "";
+        if (spec.kind === "range") {
+            const fromValue = String(spec.value.from || "").trim();
+            const toValue = String(spec.value.to || "").trim();
             return fromValue && toValue ? fromValue + "," + toValue : null;
         }
 
-        if (Array.isArray(condition.value)) {
+        if (Array.isArray(spec.value)) {
             return null;
         }
 
-        const rawValue = condition.value === undefined || condition.value === null ? "" : String(condition.value).trim();
+        const rawValue = spec.value === undefined || spec.value === null ? "" : String(spec.value).trim();
         return rawValue ? rawValue : null;
-    }
-
-    function getDefaultOperator(definition) {
-        return definition && definition.operators.length ? definition.operators[0] : "";
-    }
-
-    function getDefaultValue(definition, operator) {
-        if (!definition) {
-            return "";
-        }
-        if (definition.type === "enum" && operator === "in") {
-            return [];
-        }
-        if ((definition.type === "number" || definition.type === "date") && operator === "between") {
-            return { from: "", to: "" };
-        }
-        return "";
-    }
-
-    function normalizeValue(definition, operator, value) {
-        if (!definition) {
-            return value;
-        }
-
-        if (definition.type === "enum" && operator === "in") {
-            return Array.isArray(value) ? value : (value ? [value] : []);
-        }
-
-        if ((definition.type === "number" || definition.type === "date") && operator === "between") {
-            const normalized = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-            return {
-                from: normalized.from !== undefined ? normalized.from : "",
-                to: normalized.to !== undefined ? normalized.to : ""
-            };
-        }
-
-        if (Array.isArray(value)) {
-            return value[0] || "";
-        }
-
-        if (value && typeof value === "object") {
-            return "";
-        }
-
-        return value;
-    }
-
-    function isAllowedOperator(definition, operator) {
-        return Boolean(definition && definition.operators.indexOf(operator) !== -1);
     }
 
     function getOperatorLabel(operator) {
         const labels = {
             contains: "zawiera",
-            equals: "równa się",
-            in: "należy do",
-            eq: "równe",
-            gt: "większe niż",
-            lt: "mniejsze niż",
-            between: "między",
+            equals: "r\u00f3wna si\u0119",
+            eq: "r\u00f3wne",
+            gt: "wi\u0119ksze ni\u017c",
+            lt: "mniejsze ni\u017c",
+            between: "mi\u0119dzy",
             before: "przed",
             after: "po"
         };
@@ -230,8 +402,16 @@
         normalizeCondition: normalizeCondition,
         getFieldDefinition: getFieldDefinition,
         getOperatorOptions: getOperatorOptions,
-        getValueInputConfig: getValueInputConfig,
+        resolveValueInputSpec: resolveValueInputSpec,
+        renderValueControl: renderValueControl,
         serializeConditions: serializeConditions,
+        serializeConditionValue: serializeConditionValue,
+        isFilterActive: isFilterActive,
+        getActiveFiltersCount: getActiveFiltersCount,
+        isFilterInvalid: isFilterInvalid,
+        getFilterUiState: getFilterUiState,
+        isConditionComplete: isFilterActive,
+        shouldResetValue: shouldResetValue,
         getOperatorLabel: getOperatorLabel,
         getDefaultOperator: getDefaultOperator,
         getDefaultValue: getDefaultValue
