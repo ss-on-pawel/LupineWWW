@@ -35,8 +35,8 @@
             position: relative;
             z-index: 100;
             display: grid;
-            grid-template-columns: minmax(320px, 1.9fr) repeat(2, minmax(180px, 1fr)) auto;
-            gap: 10px;
+            grid-template-columns: minmax(360px, 1fr) auto;
+            gap: 16px;
             align-items: end;
             margin-bottom: 12px;
             padding: 14px 0 16px;
@@ -45,8 +45,29 @@
             background: var(--surface-soft);
             backdrop-filter: blur(10px);
         }
+        .asset-list-toolbar > .asset-list-field:first-child {
+            min-width: 0;
+        }
+        .asset-list-toolbar-controls {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            justify-content: end;
+            min-width: 0;
+        }
+        .asset-toolbar-record-group {
+            display: grid;
+            gap: 10px;
+            align-items: end;
+        }
+        .asset-toolbar-record-group {
+            grid-template-columns: auto auto auto;
+            padding-left: 12px;
+            margin-left: 2px;
+            border-left: 1px solid rgba(15, 23, 42, 0.1);
+        }
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar {
-            grid-template-columns: minmax(240px, 2.4fr) repeat(2, minmax(150px, 1fr)) auto;
+            grid-template-columns: minmax(280px, 1fr) auto;
             gap: 8px;
             align-items: center;
             margin-bottom: 6px;
@@ -54,6 +75,13 @@
             padding-bottom: 8px;
             background: rgba(255, 255, 255, 0.58);
             backdrop-filter: blur(6px);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-toolbar-controls {
+            gap: 8px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-toolbar-record-group {
+            gap: 8px;
+            padding-left: 10px;
         }
         .asset-list-field {
             display: flex;
@@ -66,6 +94,12 @@
         }
         .asset-list-field.is-action {
             justify-content: flex-end;
+        }
+        .asset-list-toolbar-controls .asset-list-field {
+            min-width: 0;
+        }
+        .asset-toolbar-record-group .asset-list-field {
+            min-width: 0;
         }
         .asset-list-field label {
             font-family: var(--mono-font);
@@ -168,6 +202,11 @@
             justify-content: center;
             font-size: 0.88rem;
             letter-spacing: 0.03em;
+        }
+        .asset-toolbar-action {
+            min-width: 0;
+            white-space: nowrap;
+            justify-content: center;
         }
         .asset-list-columns-panel {
             position: absolute;
@@ -280,45 +319,47 @@
             position: relative;
             z-index: 20;
             display: grid;
-            gap: 8px;
+            gap: 6px;
             margin-bottom: 10px;
-            padding: 10px 12px;
+            padding: 8px 12px;
             border: 1px solid var(--line);
             background: rgba(248, 250, 252, 0.88);
             overflow: visible;
         }
         .asset-list-shell[data-mode="dense"] .asset-list-filters {
-            gap: 6px;
+            gap: 4px;
             margin-bottom: 6px;
-            padding: 8px 10px;
+            padding: 6px 10px;
             border-left: 0;
             border-right: 0;
             background: rgba(248, 250, 252, 0.78);
         }
         .asset-list-filters-head {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
+            justify-content: flex-start;
+            align-items: baseline;
+            gap: 10px;
             flex-wrap: wrap;
         }
         .asset-list-filters-head strong {
             display: block;
-            margin-bottom: 2px;
             font-family: var(--mono-font);
             font-size: 0.72rem;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             color: #101828;
         }
-        .asset-list-filters-head p {
-            margin: 0;
-            color: var(--text-muted);
-            font-size: 0.84rem;
-        }
         .asset-list-filters-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .asset-list-filters-workbar {
             display: grid;
-            gap: 2px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: end;
         }
         .asset-filter-count {
             color: var(--text-muted);
@@ -327,21 +368,22 @@
         }
         .asset-list-filters-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
-            margin-left: auto;
+            align-items: center;
+            justify-content: flex-end;
         }
         .asset-list-filters-actions button {
-            min-height: 34px;
-            padding-left: 12px;
-            padding-right: 12px;
+            min-height: 32px;
+            padding-left: 10px;
+            padding-right: 10px;
             white-space: nowrap;
         }
         .asset-filter-grid-head {
             display: grid;
             grid-template-columns: 220px 180px minmax(220px, 1fr) 36px;
             gap: 10px;
-            align-items: center;
+            align-items: end;
             color: var(--text-muted);
             font-family: var(--mono-font);
             font-size: 0.64rem;
@@ -360,7 +402,7 @@
             display: grid;
             grid-template-columns: 220px 180px minmax(220px, 1fr) 36px;
             gap: 10px;
-            align-items: center;
+            align-items: end;
             transition: opacity 140ms ease, background-color 140ms ease;
             overflow: visible;
         }
@@ -383,9 +425,11 @@
             display: flex;
             flex-direction: column;
             min-width: 0;
+            justify-content: flex-end;
         }
         .asset-filter-select {
             width: 100%;
+            height: 40px;
             min-height: 40px;
             padding: 10px 12px;
             border: 1px solid rgba(15, 23, 42, 0.14);
@@ -422,7 +466,8 @@
         .asset-filter-remove {
             width: 36px;
             min-width: 36px;
-            min-height: 36px;
+            height: 40px;
+            min-height: 40px;
             padding: 0;
             font-size: 1rem;
             line-height: 1;
@@ -436,13 +481,21 @@
         }
         .asset-filter-input {
             width: 100%;
+            height: 40px;
             min-height: 40px;
+            padding: 10px 12px;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            background: #fff;
+            color: #0f172a;
+            font-family: var(--ui-font);
+            font-size: 0.92rem;
+            line-height: 1.35;
         }
         .asset-filter-range {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
             gap: 8px;
-            align-items: center;
+            align-items: end;
         }
         .asset-filter-range-separator {
             color: var(--text-muted);
@@ -467,13 +520,18 @@
             gap: 8px;
             font-size: 0.6rem;
         }
+        .asset-list-shell[data-mode="dense"] .asset-list-filters-workbar {
+            gap: 8px;
+        }
         .asset-list-shell[data-mode="dense"] .asset-filter-select {
+            height: 34px;
             min-height: 34px;
             padding: 7px 10px;
             font-size: 0.86rem;
         }
         .asset-list-shell[data-mode="dense"] .asset-list-filters-actions button,
         .asset-list-shell[data-mode="dense"] .asset-filter-remove {
+            height: 32px;
             min-height: 32px;
         }
         .asset-list-shell[data-mode="dense"] .asset-filter-remove {
@@ -481,7 +539,10 @@
             min-width: 32px;
         }
         .asset-list-shell[data-mode="dense"] .asset-filter-input {
+            height: 34px;
             min-height: 34px;
+            padding: 7px 10px;
+            font-size: 0.86rem;
         }
         .asset-list-shell[data-mode="dense"] .asset-filter-range {
             gap: 6px;
@@ -857,12 +918,25 @@
         }
         @media (max-width: 1180px) {
             .asset-list-toolbar {
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: minmax(260px, 1fr) auto;
+                gap: 12px;
             }
         }
         @media (max-width: 900px) {
             .asset-list-toolbar {
                 grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            .asset-list-toolbar-controls {
+                justify-content: stretch;
+                flex-wrap: wrap;
+                align-items: end;
+            }
+            .asset-toolbar-record-group {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .asset-toolbar-record-group {
+                margin-left: auto;
             }
             .asset-filter-grid-head {
                 display: none;
@@ -896,6 +970,17 @@
             }
         }
         @media (max-width: 640px) {
+            .asset-toolbar-record-group {
+                grid-template-columns: 1fr;
+            }
+            .asset-toolbar-record-group {
+                width: 100%;
+                padding-left: 0;
+                margin-left: 0;
+                border-left: 0;
+                padding-top: 8px;
+                border-top: 1px solid rgba(15, 23, 42, 0.08);
+            }
             .asset-list-pagination {
                 align-items: stretch;
             }
@@ -934,58 +1019,73 @@
                 <label for="asset-search">Wyszukiwanie</label>
                 <input id="asset-search" type="search" placeholder="Szukaj: nazwa, nr inwentarzowy, użytkownik, lokalizacja...">
             </div>
-            <div class="asset-list-field">
-                <label for="asset-status-filter">Status</label>
-                <select id="asset-status-filter">
-                    <option value="">Wszystkie statusy</option>
-                    {% for value, label in status_options %}
-                        <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="asset-list-field">
-                <label for="asset-location-filter">Lokalizacja</label>
-                <select id="asset-location-filter">
-                    <option value="">Wszystkie lokalizacje</option>
-                    {% for value in location_options %}
-                        <option value="{{ value }}">{{ value }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="asset-list-field is-action">
-                <label class="asset-list-field-label-placeholder" for="asset-columns-toggle" aria-hidden="true">Kolumny</label>
-                <div class="asset-list-columns">
-                    <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
-                        Kolumny
-                    </button>
-                    <div id="asset-columns-panel" class="asset-list-columns-panel" hidden>
-                        <div class="asset-list-columns-head">
-                            <strong>Widoczne kolumny</strong>
-                            <p>Możesz ukrywać kolumny i zmieniać ich kolejność. Ustawienia zapisują się lokalnie.</p>
+            <div class="asset-list-toolbar-controls">
+                <div class="asset-list-field is-action">
+                    <label class="asset-list-field-label-placeholder" for="asset-columns-toggle" aria-hidden="true">Kolumny</label>
+                    <div class="asset-list-columns">
+                        <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
+                            Kolumny
+                        </button>
+                        <div id="asset-columns-panel" class="asset-list-columns-panel" hidden>
+                            <div class="asset-list-columns-head">
+                                <strong>Widoczne kolumny</strong>
+                                <p>Możesz ukrywać kolumny i zmieniać ich kolejność. Ustawienia zapisują się lokalnie.</p>
+                            </div>
+                            <div id="asset-columns-options"></div>
                         </div>
-                        <div id="asset-columns-options"></div>
+                    </div>
+                </div>
+                <div class="asset-toolbar-record-group">
+                    <div class="asset-list-field is-action">
+                        <label class="asset-list-field-label-placeholder" for="asset-edit-record" aria-hidden="true">Edytuj</label>
+                        <button id="asset-edit-record" type="button" class="button-secondary asset-toolbar-action" disabled>Edytuj</button>
+                    </div>
+                    <div class="asset-list-field is-action">
+                        <label class="asset-list-field-label-placeholder" for="asset-delete-record" aria-hidden="true">Usuń</label>
+                        <button id="asset-delete-record" type="button" class="button-secondary asset-toolbar-action" disabled>Usuń</button>
+                    </div>
+                    <div class="asset-list-field is-action">
+                        <label class="asset-list-field-label-placeholder" for="asset-add-record" aria-hidden="true">Dodaj środek</label>
+                        <button id="asset-add-record" type="button" class="button-primary asset-toolbar-action">Dodaj środek</button>
                     </div>
                 </div>
             </div>
+        </div>
+        <div hidden aria-hidden="true">
+            <label for="asset-status-filter">Status</label>
+            <select id="asset-status-filter">
+                <option value="">Wszystkie statusy</option>
+                {% for value, label in status_options %}
+                    <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <label for="asset-location-filter">Lokalizacja</label>
+            <select id="asset-location-filter">
+                <option value="">Wszystkie lokalizacje</option>
+                {% for value in location_options %}
+                    <option value="{{ value }}">{{ value }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <section class="asset-list-filters" aria-label="Filtry danych">
             <div class="asset-list-filters-head">
                 <div class="asset-list-filters-meta">
                     <strong>Filtry danych</strong>
-                    <p>Warunki backendowe łączone operatorem AND.</p>
                     <div id="asset-filter-count" class="asset-filter-count">Aktywne filtry: 0</div>
+                </div>
+            </div>
+            <div class="asset-list-filters-workbar">
+                <div class="asset-filter-grid-head" aria-hidden="true">
+                    <span>Pole</span>
+                    <span>Operator</span>
+                    <span>Wartość</span>
+                    <span>Usuń</span>
                 </div>
                 <div class="asset-list-filters-actions">
                     <button id="asset-add-filter" type="button" class="button-secondary">+ Dodaj filtr</button>
                     <button id="asset-clear-filters" type="button" class="button-secondary">Wyczyść</button>
                 </div>
-            </div>
-            <div class="asset-filter-grid-head" aria-hidden="true">
-                <span>Pole</span>
-                <span>Operator</span>
-                <span>Wartość</span>
-                <span>Usuń</span>
             </div>
             <div id="asset-filter-list" class="asset-filter-list"></div>
             <div id="asset-filter-empty" class="asset-filter-empty">Brak dodatkowych warunków. Dodaj filtr, aby zawęzić dane po stronie backendu.</div>
