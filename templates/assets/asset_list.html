@@ -34,19 +34,16 @@
         .asset-list-toolbar {
             position: relative;
             z-index: 100;
-            display: grid;
-            grid-template-columns: minmax(360px, 1fr) auto;
+            display: flex;
+            justify-content: flex-end;
             gap: 16px;
             align-items: end;
-            margin-bottom: 12px;
-            padding: 14px 0 16px;
+            margin-bottom: 10px;
+            padding: 14px 0 12px;
             border-top: 1px solid var(--line);
             border-bottom: 1px solid var(--line);
             background: var(--surface-soft);
             backdrop-filter: blur(10px);
-        }
-        .asset-list-toolbar > .asset-list-field:first-child {
-            min-width: 0;
         }
         .asset-list-toolbar-controls {
             display: flex;
@@ -54,6 +51,7 @@
             align-items: end;
             justify-content: end;
             min-width: 0;
+            width: 100%;
         }
         .asset-toolbar-record-group {
             display: grid;
@@ -67,7 +65,7 @@
             border-left: 1px solid rgba(15, 23, 42, 0.1);
         }
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar {
-            grid-template-columns: minmax(280px, 1fr) auto;
+            justify-content: flex-end;
             gap: 8px;
             align-items: center;
             margin-bottom: 6px;
@@ -123,6 +121,105 @@
             min-height: 40px;
             font-family: var(--ui-font);
         }
+        .asset-list-workrow {
+            display: grid;
+            grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr);
+            gap: 12px;
+            align-items: stretch;
+            margin-bottom: 10px;
+        }
+        .asset-list-worksegment {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            min-width: 0;
+            min-height: 100%;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            background: rgba(248, 250, 252, 0.52);
+            box-sizing: border-box;
+        }
+        .asset-list-worksegment-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 8px 12px 6px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .asset-list-worksegment-head strong {
+            display: block;
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #101828;
+        }
+        .asset-list-worksegment-meta {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }
+        .asset-list-worksegment-body {
+            display: grid;
+            align-content: start;
+            gap: 8px;
+            min-width: 0;
+            padding: 8px 12px;
+        }
+        .asset-list-worksegment--search .asset-list-worksegment-body {
+            align-items: start;
+        }
+        .asset-list-worksegment-body > .asset-list-filters {
+            padding: 0;
+            margin: 0;
+            border: 0;
+            background: transparent;
+        }
+        .asset-list-worksegment-body > .asset-list-filters .asset-list-filters-head {
+            display: none;
+        }
+        .asset-list-worksegment-body > .asset-list-field {
+            min-width: 0;
+        }
+        .asset-list-worksegment-body > .asset-list-field label {
+            display: none;
+        }
+        .asset-list-worksegment-body > .asset-list-field input {
+            width: 100%;
+            min-height: 40px;
+            font-family: var(--ui-font);
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-workrow {
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-head {
+            padding: 6px 10px 5px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-head strong {
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-body {
+            gap: 6px;
+            padding: 6px 10px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-body > .asset-list-filters {
+            margin: 0;
+            padding: 0;
+            border-left: 0;
+            border-right: 0;
+            background: transparent;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-body > .asset-list-field input {
+            min-height: 34px;
+            padding-top: 7px;
+            padding-bottom: 7px;
+            padding-left: 10px;
+            padding-right: 10px;
+            font-size: 0.86rem;
+        }
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar input,
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar select,
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar button {
@@ -160,6 +257,136 @@
             background: rgba(255, 255, 255, 0.84);
             color: #1f2937;
             white-space: nowrap;
+        }
+        .asset-header-controls {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            min-width: 0;
+        }
+        .asset-topbar-actions {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            flex-wrap: wrap;
+            min-width: 0;
+        }
+        .asset-header-mode {
+            display: inline-flex;
+            align-items: center;
+            min-width: 0;
+            padding-left: 12px;
+            border-left: 1px solid rgba(10, 10, 10, 0.1);
+        }
+        .asset-topbar-action {
+            min-height: 34px;
+            padding: 0 10px;
+            font-size: 0.78rem;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+        .asset-topbar-action[hidden] {
+            display: none;
+        }
+        @media (max-width: 980px) {
+            .asset-header-controls {
+                justify-content: flex-start;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .asset-header-mode {
+                padding-left: 0;
+                border-left: 0;
+            }
+        }
+        .asset-nav-label {
+            display: inline-flex;
+            align-items: center;
+            min-height: 36px;
+            padding: 0 14px;
+            color: #0a0a0a;
+            font-size: 0.88rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .asset-layout-shell {
+            display: grid;
+            gap: 0;
+            min-width: 0;
+        }
+        .asset-layout-header,
+        .asset-layout-toolbar,
+        .asset-layout-work,
+        .asset-layout-table {
+            display: grid;
+            gap: 0;
+            min-width: 0;
+        }
+        .asset-layout-toolbar-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+            padding: 8px 0 10px;
+            border-bottom: 1px solid var(--line);
+            min-width: 0;
+        }
+        .asset-management-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 0;
+            padding: 0;
+            border-bottom: 0;
+        }
+        .asset-management-toolbar[hidden] {
+            display: none;
+        }
+        .asset-management-toolbar-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .asset-inventory-actions {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-start;
+            min-width: 0;
+        }
+        .asset-management-toolbar-separator {
+            width: 1px;
+            height: 24px;
+            background: rgba(15, 23, 42, 0.1);
+        }
+        .asset-list-table-tools {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-management-toolbar {
+            gap: 8px;
+            margin-bottom: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-management-toolbar-separator {
+            height: 20px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-layout-toolbar-actions {
+            gap: 8px;
+            margin-bottom: 6px;
+            padding-top: 6px;
+            padding-bottom: 6px;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-table-tools {
+            margin-bottom: 6px;
         }
         .asset-list-mode-toggle span:last-child {
             font-size: 0.78rem;
@@ -315,12 +542,29 @@
             padding-bottom: 2px;
             font-size: 0.76rem;
         }
+        .asset-list-inventory-banner {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border: 1px solid var(--line);
+            background: rgba(248, 250, 252, 0.88);
+            color: #101828;
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-list-inventory-banner {
+            margin-bottom: 6px;
+            padding: 6px 10px;
+            font-size: 0.68rem;
+            letter-spacing: 0.1em;
+        }
         .asset-list-filters {
             position: relative;
             z-index: 20;
             display: grid;
             gap: 6px;
-            margin-bottom: 10px;
+            margin-bottom: 0;
             padding: 8px 12px;
             border: 1px solid var(--line);
             background: rgba(248, 250, 252, 0.88);
@@ -787,6 +1031,18 @@
             min-width: 5.5rem;
             max-width: 7.5rem;
         }
+        .asset-table td[data-column-key="terminal"],
+        .asset-table th[data-column-key="terminal"],
+        .asset-table td[data-column-key="odczyt"],
+        .asset-table th[data-column-key="odczyt"],
+        .asset-table td[data-column-key="reczne"],
+        .asset-table th[data-column-key="reczne"],
+        .asset-table td[data-column-key="ilosc_faktyczna"],
+        .asset-table th[data-column-key="ilosc_faktyczna"] {
+            width: 7.5rem;
+            min-width: 6.5rem;
+            max-width: 8.5rem;
+        }
         .asset-table .cell-value {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -864,6 +1120,13 @@
             font-weight: 600;
             letter-spacing: 0.08em;
         }
+        .asset-inventory-manual-input {
+            width: 100%;
+            min-width: 0;
+            min-height: 32px;
+            padding: 6px 8px;
+            box-sizing: border-box;
+        }
         .asset-table-empty,
         .asset-table-loading {
             padding: 28px 18px;
@@ -918,19 +1181,18 @@
         }
         @media (max-width: 1180px) {
             .asset-list-toolbar {
-                grid-template-columns: minmax(260px, 1fr) auto;
                 gap: 12px;
             }
         }
         @media (max-width: 900px) {
-            .asset-list-toolbar {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
             .asset-list-toolbar-controls {
                 justify-content: stretch;
                 flex-wrap: wrap;
                 align-items: end;
+            }
+            .asset-list-workrow {
+                grid-template-columns: 1fr;
+                gap: 10px;
             }
             .asset-toolbar-record-group {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -999,12 +1261,22 @@
     </style>
 {% endblock %}
 
+{% block app_nav %}
+    <span class="asset-nav-label">Ewidencja majątku</span>
+    <a href="#">Raporty</a>
+    <a href="#">Ustawienia</a>
+{% endblock %}
+
 {% block app_header_actions %}
-    <label class="asset-list-mode-toggle" for="asset-dense-mode">
-        <input id="asset-dense-mode" type="checkbox">
-        <span class="asset-list-mode-toggle-ui" aria-hidden="true"></span>
-        <span>Tryb pracy na danych</span>
-    </label>
+    <div class="asset-header-mode" aria-label="Tryb widoku ewidencji">
+        <div>
+            <label class="asset-list-mode-toggle" for="asset-dense-mode">
+                <input id="asset-dense-mode" type="checkbox">
+                <span class="asset-list-mode-toggle-ui" aria-hidden="true"></span>
+                <span id="asset-work-mode-label">Tryb pracy na danych</span>
+            </label>
+        </div>
+    </div>
 {% endblock %}
 
 {% block content %}
@@ -1014,14 +1286,79 @@
         data-detail-url-template="{% url 'assets:detail' 0 %}"
         data-mode="standard"
     >
-        <div class="asset-list-toolbar">
-            <div class="asset-list-field">
-                <label for="asset-search">Wyszukiwanie</label>
-                <input id="asset-search" type="search" placeholder="Szukaj: nazwa, nr inwentarzowy, użytkownik, lokalizacja...">
+        <div class="asset-layout-shell">
+            <div class="asset-layout-header"></div>
+            <div class="asset-layout-toolbar">
+                <div class="asset-layout-toolbar-actions">
+                    <div id="asset-management-toolbar" class="asset-management-toolbar" hidden aria-label="Narzędzia zarządzania">
+                        <div class="asset-management-toolbar-group">
+                            <button id="asset-management-edit" type="button" class="button-secondary" disabled>Edytuj</button>
+                            <button id="asset-management-delete" type="button" class="button-secondary" disabled>Usuń</button>
+                        </div>
+                        <div class="asset-management-toolbar-separator" aria-hidden="true"></div>
+                        <div class="asset-management-toolbar-group">
+                            <button id="asset-management-add" type="button" class="button-secondary">Dodaj środek</button>
+                        </div>
+                    </div>
+                    <div class="asset-inventory-actions" data-role="inventory-actions"></div>
+                </div>
             </div>
-            <div class="asset-list-toolbar-controls">
-                <div class="asset-list-field is-action">
-                    <label class="asset-list-field-label-placeholder" for="asset-columns-toggle" aria-hidden="true">Kolumny</label>
+            <div class="asset-layout-work">
+                <div class="asset-list-field asset-layout-search-field" data-role="search-field">
+                    <label for="asset-layout-search">Wyszukiwanie</label>
+                    <input id="asset-layout-search" data-role="search-input" type="search" placeholder="Szukaj: nazwa, nr inwentarzowy, użytkownik, lokalizacja...">
+                </div>
+                <div hidden aria-hidden="true">
+                    <label for="asset-status-filter">Status</label>
+                    <select id="asset-status-filter">
+                        <option value="">Wszystkie statusy</option>
+                        {% for value, label in status_options %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="asset-location-filter">Lokalizacja</label>
+                    <select id="asset-location-filter">
+                        <option value="">Wszystkie lokalizacje</option>
+                        {% for value in location_options %}
+                            <option value="{{ value }}">{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <section class="asset-list-filters" aria-label="Filtry danych">
+                    <div class="asset-list-filters-head">
+                        <div class="asset-list-filters-meta">
+                            <strong>Filtry danych</strong>
+                            <div id="asset-filter-count" class="asset-filter-count">Aktywne filtry: 0</div>
+                        </div>
+                    </div>
+                    <div class="asset-list-filters-workbar">
+                        <div class="asset-filter-grid-head" aria-hidden="true">
+                            <span>Pole</span>
+                            <span>Operator</span>
+                            <span>Wartość</span>
+                            <span>Usuń</span>
+                        </div>
+                        <div class="asset-list-filters-actions">
+                            <button id="asset-add-filter" type="button" class="button-secondary">+ Dodaj filtr</button>
+                            <button id="asset-clear-filters" type="button" class="button-secondary">Wyczyść</button>
+                        </div>
+                    </div>
+                    <div id="asset-filter-list" class="asset-filter-list"></div>
+                    <div id="asset-filter-empty" class="asset-filter-empty">Brak dodatkowych warunków. Dodaj filtr, aby zawęzić dane po stronie backendu.</div>
+                </section>
+            </div>
+            <div class="asset-layout-table">
+                <div class="asset-list-meta">
+                    <div id="asset-results-summary">Ładowanie danych...</div>
+                    <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
+                </div>
+
+                <div id="asset-inventory-banner" class="asset-list-inventory-banner" hidden>
+                    INWENTARYZACJA: [brak aktywnej sesji]
+                </div>
+
+                <div class="asset-list-table-tools">
                     <div class="asset-list-columns">
                         <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
                             Kolumny
@@ -1035,85 +1372,27 @@
                         </div>
                     </div>
                 </div>
-                <div class="asset-toolbar-record-group">
-                    <div class="asset-list-field is-action">
-                        <label class="asset-list-field-label-placeholder" for="asset-edit-record" aria-hidden="true">Edytuj</label>
-                        <button id="asset-edit-record" type="button" class="button-secondary asset-toolbar-action" disabled>Edytuj</button>
+
+                <div class="asset-list-table-wrap">
+                    <table class="asset-table">
+                        <thead>
+                            <tr id="asset-table-head"></tr>
+                        </thead>
+                        <tbody id="asset-table-body">
+                            <tr>
+                                <td colspan="8" class="asset-table-loading">Ładowanie danych...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="asset-list-pagination">
+                    <div id="asset-page-summary">Strona 1 z 1</div>
+                    <div class="asset-list-pagination-controls">
+                        <button id="asset-prev-page" type="button" class="button-secondary">Poprzednia</button>
+                        <button id="asset-next-page" type="button" class="button-secondary">Następna</button>
                     </div>
-                    <div class="asset-list-field is-action">
-                        <label class="asset-list-field-label-placeholder" for="asset-delete-record" aria-hidden="true">Usuń</label>
-                        <button id="asset-delete-record" type="button" class="button-secondary asset-toolbar-action" disabled>Usuń</button>
-                    </div>
-                    <div class="asset-list-field is-action">
-                        <label class="asset-list-field-label-placeholder" for="asset-add-record" aria-hidden="true">Dodaj środek</label>
-                        <button id="asset-add-record" type="button" class="button-primary asset-toolbar-action">Dodaj środek</button>
-                    </div>
                 </div>
-            </div>
-        </div>
-        <div hidden aria-hidden="true">
-            <label for="asset-status-filter">Status</label>
-            <select id="asset-status-filter">
-                <option value="">Wszystkie statusy</option>
-                {% for value, label in status_options %}
-                    <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-            </select>
-            <label for="asset-location-filter">Lokalizacja</label>
-            <select id="asset-location-filter">
-                <option value="">Wszystkie lokalizacje</option>
-                {% for value in location_options %}
-                    <option value="{{ value }}">{{ value }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <section class="asset-list-filters" aria-label="Filtry danych">
-            <div class="asset-list-filters-head">
-                <div class="asset-list-filters-meta">
-                    <strong>Filtry danych</strong>
-                    <div id="asset-filter-count" class="asset-filter-count">Aktywne filtry: 0</div>
-                </div>
-            </div>
-            <div class="asset-list-filters-workbar">
-                <div class="asset-filter-grid-head" aria-hidden="true">
-                    <span>Pole</span>
-                    <span>Operator</span>
-                    <span>Wartość</span>
-                    <span>Usuń</span>
-                </div>
-                <div class="asset-list-filters-actions">
-                    <button id="asset-add-filter" type="button" class="button-secondary">+ Dodaj filtr</button>
-                    <button id="asset-clear-filters" type="button" class="button-secondary">Wyczyść</button>
-                </div>
-            </div>
-            <div id="asset-filter-list" class="asset-filter-list"></div>
-            <div id="asset-filter-empty" class="asset-filter-empty">Brak dodatkowych warunków. Dodaj filtr, aby zawęzić dane po stronie backendu.</div>
-        </section>
-
-        <div class="asset-list-meta">
-            <div id="asset-results-summary">Ładowanie danych...</div>
-            <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
-        </div>
-
-        <div class="asset-list-table-wrap">
-            <table class="asset-table">
-                <thead>
-                    <tr id="asset-table-head"></tr>
-                </thead>
-                <tbody id="asset-table-body">
-                    <tr>
-                        <td colspan="8" class="asset-table-loading">Ładowanie danych...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="asset-list-pagination">
-            <div id="asset-page-summary">Strona 1 z 1</div>
-            <div class="asset-list-pagination-controls">
-                <button id="asset-prev-page" type="button" class="button-secondary">Poprzednia</button>
-                <button id="asset-next-page" type="button" class="button-secondary">Następna</button>
             </div>
         </div>
     </section>
@@ -1495,7 +1774,8 @@
             }
 
             const storageKeyColumns = "asset-list-columns-v2";
-            const storageKeyMode = "asset-list-mode-v1";
+            const storageKeyLayoutMode = "asset-list-mode-v1";
+            const storageKeyWorkMode = "asset-list-work-mode-v1";
             const apiUrl = shell.dataset.apiUrl;
             const detailTemplate = shell.dataset.detailUrlTemplate;
             const defaultPageSize = 50;
@@ -1551,6 +1831,22 @@
                 { key: "insurance_until", label: "Ubezpieczenie do", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "is_active", label: "Aktywny", visible: false, sortable: true, sticky: false, className: "" }
             ];
+            const inventoryModeColumns = [
+                { key: "terminal", label: "Terminal", visible: true, sortable: false, sticky: false, className: "" },
+                { key: "odczyt", label: "Odczyt", visible: true, sortable: false, sticky: false, className: "" },
+                { key: "reczne", label: "Ręczne", visible: true, sortable: false, sticky: false, className: "" },
+                { key: "ilosc_faktyczna", label: "Ilość faktyczna", visible: true, sortable: false, sticky: false, className: "" }
+            ];
+            const inventoryModeColumnKeys = [
+                "inventory_number",
+                "name",
+                "location",
+                "status",
+                "terminal",
+                "odczyt",
+                "reczne",
+                "ilosc_faktyczna"
+            ];
 
             const labelByKey = {};
             defaultColumns.forEach(function (column) {
@@ -1558,7 +1854,7 @@
             });
 
             const elements = {
-                searchInput: document.getElementById("asset-search"),
+                searchInput: shell.querySelector('[data-role="search-input"]'),
                 statusFilter: document.getElementById("asset-status-filter"),
                 locationFilter: document.getElementById("asset-location-filter"),
                 addFilterButton: document.getElementById("asset-add-filter"),
@@ -1566,10 +1862,17 @@
                 filterCount: document.getElementById("asset-filter-count"),
                 filterList: document.getElementById("asset-filter-list"),
                 filterEmpty: document.getElementById("asset-filter-empty"),
-                denseModeToggle: document.getElementById("asset-dense-mode"),
+                filtersSection: shell.querySelector(".asset-list-filters"),
+                workModeToggle: document.getElementById("asset-dense-mode"),
+                workModeLabel: document.getElementById("asset-work-mode-label"),
+                managementToolbar: document.getElementById("asset-management-toolbar"),
+                managementEditButton: document.getElementById("asset-management-edit"),
+                managementDeleteButton: document.getElementById("asset-management-delete"),
+                managementAddButton: document.getElementById("asset-management-add"),
                 columnsToggle: document.getElementById("asset-columns-toggle"),
                 columnsPanel: document.getElementById("asset-columns-panel"),
                 columnsOptions: document.getElementById("asset-columns-options"),
+                inventoryBanner: document.getElementById("asset-inventory-banner"),
                 tableHead: document.getElementById("asset-table-head"),
                 tableBody: document.getElementById("asset-table-body"),
                 resultsSummary: document.getElementById("asset-results-summary"),
@@ -1588,14 +1891,18 @@
                 filters: [],
                 ordering: "-updated_at",
                 columns: loadColumns(),
-                mode: loadMode(),
+                layoutMode: loadLayoutMode(),
+                mode: loadWorkMode(),
+                inventoryManual: {},
                 lastPayload: null,
                 requestToken: 0,
                 activeController: null
             };
 let searchDebounceId = null;
 
-            applyMode(state.mode);
+            arrangeSearchAndFiltersLayout();
+            ensureInventoryToolbarActions();
+            applyLayoutMode(state.layoutMode);
             syncControls();
             renderFilterRows();
             renderColumnPanel();
@@ -1657,12 +1964,10 @@ let searchDebounceId = null;
                     });
                 });
 
-                elements.denseModeToggle.addEventListener("change", function (event) {
-                    const mode = event.target.checked ? "dense" : "standard";
-                    state.mode = mode;
-                    window.localStorage.setItem(storageKeyMode, mode);
-                    applyMode(mode);
-                    updateStickyOffsets();
+                elements.workModeToggle.addEventListener("change", function (event) {
+                    updateState({
+                        mode: event.target.checked ? "inventory" : "management"
+                    });
                 });
 
                 elements.columnsToggle.addEventListener("click", function (event) {
@@ -1674,6 +1979,26 @@ let searchDebounceId = null;
 
                 elements.columnsPanel.addEventListener("click", function (event) {
                     event.stopPropagation();
+                });
+
+                elements.extraRecordButton.addEventListener("click", function () {
+                    if (state.mode === "inventory") {
+                        console.info("Raport różnic");
+                    }
+                });
+
+                elements.managementEditButton.addEventListener("click", handleEditRecordAction);
+
+                elements.managementDeleteButton.addEventListener("click", handleDeleteRecordAction);
+
+                elements.managementAddButton.addEventListener("click", handleAddRecordAction);
+
+                elements.tableBody.addEventListener("change", function (event) {
+                    const input = event.target.closest("[data-role='inventory-manual']");
+                    if (!input) {
+                        return;
+                    }
+                    updateInventoryManualValue(input.dataset.assetId, input.value);
                 });
 
                 elements.prevButton.addEventListener("click", function () {
@@ -1701,6 +2026,8 @@ let searchDebounceId = null;
                     ? filterHelpers.sanitizeConditions(filterState, patch.filters)
                     : state.filters;
                 state.ordering = patch.ordering !== undefined ? patch.ordering : state.ordering;
+                state.mode = patch.mode !== undefined ? patch.mode : state.mode;
+                window.localStorage.setItem(storageKeyWorkMode, state.mode);
                 syncControls();
                 renderFilterRows();
                 fetchAndRender();
@@ -2106,6 +2433,30 @@ let searchDebounceId = null;
                         td.dataset.columnKey = column.key;
                         td.className = buildColumnClassName(column, visibleIndex, visibleColumns);
 
+                        if (column.key === "terminal") {
+                            td.textContent = "-";
+                            tr.appendChild(td);
+                            return;
+                        }
+
+                        if (column.key === "odczyt") {
+                            td.textContent = String(getInventoryReadValue(row));
+                            tr.appendChild(td);
+                            return;
+                        }
+
+                        if (column.key === "reczne") {
+                            td.appendChild(buildInventoryManualInput(row));
+                            tr.appendChild(td);
+                            return;
+                        }
+
+                        if (column.key === "ilosc_faktyczna") {
+                            td.textContent = String(getInventoryActualQuantity(row));
+                            tr.appendChild(td);
+                            return;
+                        }
+
                         if (column.key === "select") {
                             td.innerHTML = '<input type="checkbox" aria-label="Zaznacz środek">';
                         } else if (column.key === "name") {
@@ -2276,14 +2627,145 @@ let searchDebounceId = null;
                 }
             }
 
-            function loadMode() {
-                const stored = window.localStorage.getItem(storageKeyMode);
+            function loadLayoutMode() {
+                const stored = window.localStorage.getItem(storageKeyLayoutMode);
                 return stored === "dense" ? "dense" : "standard";
             }
 
-            function applyMode(mode) {
+            function applyLayoutMode(mode) {
                 shell.dataset.mode = mode;
-                elements.denseModeToggle.checked = mode === "dense";
+            }
+
+            function loadWorkMode() {
+                const stored = window.localStorage.getItem(storageKeyWorkMode);
+                return stored === "inventory" ? "inventory" : "management";
+            }
+
+            function ensureInventoryToolbarActions() {
+                const inventoryActions = shell.querySelector('[data-role="inventory-actions"]');
+                if (!inventoryActions) {
+                    return;
+                }
+
+                let extraField = document.getElementById("asset-extra-record-field");
+                let extraButton = document.getElementById("asset-extra-record");
+                if (!extraField || !extraButton) {
+                    extraField = document.createElement("div");
+                    extraField.id = "asset-extra-record-field";
+                    extraField.className = "asset-list-field is-action";
+                    extraField.hidden = true;
+
+                    const extraLabel = document.createElement("label");
+                    extraLabel.className = "asset-list-field-label-placeholder";
+                    extraLabel.htmlFor = "asset-extra-record";
+                    extraLabel.setAttribute("aria-hidden", "true");
+                    extraLabel.textContent = "Raport różnic";
+
+                    extraButton = document.createElement("button");
+                    extraButton.id = "asset-extra-record";
+                    extraButton.type = "button";
+                    extraButton.className = "button-secondary asset-toolbar-action";
+                    extraButton.textContent = "Raport różnic";
+
+                    extraField.appendChild(extraLabel);
+                    extraField.appendChild(extraButton);
+                }
+
+                if (extraField.parentElement !== inventoryActions) {
+                    inventoryActions.appendChild(extraField);
+                }
+
+                elements.extraRecordField = extraField;
+                elements.extraRecordButton = extraButton;
+            }
+
+            function arrangeSearchAndFiltersLayout() {
+                const searchField = shell.querySelector('[data-role="search-field"]');
+                const filtersSection = elements.filtersSection;
+                if (!searchField || !filtersSection) {
+                    return;
+                }
+
+                let workrow = shell.querySelector(".asset-list-workrow");
+                if (!workrow) {
+                    const workContainer = filtersSection.parentElement;
+                    workrow = document.createElement("div");
+                    workrow.className = "asset-list-workrow";
+                    workContainer.insertBefore(workrow, filtersSection);
+                }
+
+                let filtersSegment = workrow.querySelector(".asset-list-worksegment--filters");
+                let filtersHead = filtersSegment ? filtersSegment.querySelector(".asset-list-worksegment-head") : null;
+                let filtersMeta = filtersHead ? filtersHead.querySelector(".asset-list-worksegment-meta") : null;
+                let filtersBody = filtersSegment ? filtersSegment.querySelector(".asset-list-worksegment-body") : null;
+                if (!filtersSegment) {
+                    filtersSegment = document.createElement("section");
+                    filtersSegment.className = "asset-list-worksegment asset-list-worksegment--filters";
+
+                    filtersHead = document.createElement("div");
+                    filtersHead.className = "asset-list-worksegment-head";
+
+                    const filtersTitle = document.createElement("strong");
+                    filtersTitle.textContent = "Filtry danych";
+
+                    filtersMeta = document.createElement("div");
+                    filtersMeta.className = "asset-list-worksegment-meta";
+                    filtersMeta.id = "asset-filter-count";
+                    filtersMeta.textContent = "Aktywne filtry: 0";
+
+                    filtersHead.appendChild(filtersTitle);
+                    filtersHead.appendChild(filtersMeta);
+
+                    filtersBody = document.createElement("div");
+                    filtersBody.className = "asset-list-worksegment-body";
+
+                    filtersSegment.appendChild(filtersHead);
+                    filtersSegment.appendChild(filtersBody);
+                    workrow.appendChild(filtersSegment);
+                }
+
+                let searchSegment = workrow.querySelector(".asset-list-worksegment--search");
+                let searchBody = searchSegment ? searchSegment.querySelector(".asset-list-worksegment-body") : null;
+                if (!searchSegment) {
+                    searchSegment = document.createElement("section");
+                    searchSegment.className = "asset-list-worksegment asset-list-worksegment--search";
+
+                    const searchHead = document.createElement("div");
+                    searchHead.className = "asset-list-worksegment-head";
+
+                    const searchTitle = document.createElement("strong");
+                    searchTitle.textContent = "Wyszukiwanie";
+                    searchHead.appendChild(searchTitle);
+
+                    searchBody = document.createElement("div");
+                    searchBody.className = "asset-list-worksegment-body";
+
+                    searchSegment.appendChild(searchHead);
+                    searchSegment.appendChild(searchBody);
+                    workrow.appendChild(searchSegment);
+                }
+
+                const legacyFilterCount = document.getElementById("asset-filter-count");
+                if (legacyFilterCount && legacyFilterCount !== filtersMeta) {
+                    legacyFilterCount.id = "";
+                    legacyFilterCount.remove();
+                }
+
+                const searchLabel = searchField.querySelector("label");
+                if (searchLabel) {
+                    searchLabel.className = "visually-hidden";
+                }
+
+                searchField.className = "asset-list-field";
+
+                if (filtersSection.parentElement !== filtersBody) {
+                    filtersBody.appendChild(filtersSection);
+                }
+                if (searchField.parentElement !== searchBody) {
+                    searchBody.appendChild(searchField);
+                }
+
+                elements.filterCount = filtersMeta;
             }
 
             function syncControls() {
@@ -2296,6 +2778,94 @@ let searchDebounceId = null;
                 if (elements.locationFilter.value !== state.location) {
                     elements.locationFilter.value = state.location;
                 }
+                elements.workModeToggle.checked = state.mode === "inventory";
+                elements.workModeLabel.textContent = state.mode === "inventory"
+                    ? "TRYB INWENTARYZACYJNY"
+                    : "ZARZĄDZANIE MAJĄTKIEM";
+                elements.inventoryBanner.hidden = state.mode !== "inventory";
+                syncManagementToolbar();
+                syncToolbarControls();
+            }
+
+            function syncTopbarActions() {
+                return;
+                const isInventoryMode = state.mode === "inventory";
+
+                if (!isInventoryMode) {
+                    elements.topbarColumnsButton.textContent = "Kolumny";
+                    elements.topbarEditButton.textContent = "Edytuj";
+                    elements.topbarDeleteButton.textContent = "Usuń";
+                    elements.topbarAddButton.textContent = "Dodaj środek";
+                    elements.topbarExtraButton.hidden = true;
+                    return;
+                }
+
+                elements.topbarColumnsButton.textContent = "▶ Rozpocznij inwentaryzację";
+                elements.topbarEditButton.textContent = "✔ Zatwierdź";
+                elements.topbarDeleteButton.textContent = "✖ Wyczyść";
+                elements.topbarAddButton.textContent = "Spis z natury";
+                elements.topbarExtraButton.textContent = "Raport różnic";
+                elements.topbarExtraButton.hidden = false;
+            }
+
+            function syncManagementToolbar() {
+                elements.managementToolbar.hidden = state.mode !== "management";
+            }
+
+            function syncToolbarControls() {
+                closeColumnsPanel();
+                elements.columnsToggle.textContent = "Kolumny";
+                elements.columnsToggle.className = "button-secondary";
+                elements.columnsToggle.disabled = false;
+
+                elements.managementEditButton.textContent = "Edytuj";
+                elements.managementEditButton.className = "button-secondary";
+                elements.managementEditButton.disabled = true;
+
+                elements.managementDeleteButton.textContent = "Usu?";
+                elements.managementDeleteButton.className = "button-secondary";
+                elements.managementDeleteButton.disabled = true;
+
+                elements.managementAddButton.textContent = "Dodaj ?rodek";
+                elements.managementAddButton.className = "button-secondary";
+                elements.managementAddButton.disabled = false;
+
+                if (elements.extraRecordField) {
+                    elements.extraRecordField.hidden = true;
+                }
+                if (elements.extraRecordButton) {
+                    elements.extraRecordButton.hidden = true;
+                    elements.extraRecordButton.disabled = false;
+                }
+                return;
+            }
+
+            function handleEditRecordAction() {
+                if (state.mode === "inventory") {
+                    console.info("Zatwierdź");
+                }
+            }
+
+            function handleDeleteRecordAction() {
+                if (state.mode === "inventory") {
+                    state.inventoryManual = {};
+                    if (state.lastPayload) {
+                        renderFromPayload(state.lastPayload);
+                    }
+                }
+            }
+
+            function handleAddRecordAction() {
+                if (state.mode === "inventory") {
+                    console.info("Spis z natury");
+                }
+            }
+
+            function triggerToolbarAction(button) {
+                if (!button || button.hidden || button.disabled) {
+                    return;
+                }
+                button.click();
             }
 
             function buildApiUrl() {
@@ -2400,9 +2970,66 @@ let searchDebounceId = null;
             }
 
             function getVisibleColumns() {
+                return getColumnsForMode(state.mode);
+            }
+
+            function getColumnsForMode(mode) {
+                if (mode === "inventory") {
+                    return inventoryModeColumnKeys.map(function (key) {
+                        const column = defaultColumns.find(function (item) {
+                            return item.key === key;
+                        }) || inventoryModeColumns.find(function (item) {
+                            return item.key === key;
+                        });
+                        return column ? Object.assign({}, column, { visible: true }) : null;
+                    }).filter(Boolean);
+                }
+
                 return state.columns.filter(function (column) {
                     return column.visible;
                 });
+            }
+
+            function buildInventoryManualInput(row) {
+                const input = document.createElement("input");
+                input.type = "number";
+                input.className = "asset-inventory-manual-input";
+                input.dataset.role = "inventory-manual";
+                input.dataset.assetId = String(row.id);
+                input.value = getInventoryManualValue(row);
+                input.setAttribute("aria-label", "Ręczne dla środka " + (row.name || row.inventory_number || row.id));
+                return input;
+            }
+
+            function getInventoryReadValue() {
+                return 0;
+            }
+
+            function getInventoryManualValue(row) {
+                const manualValue = state.inventoryManual[row.id];
+                return manualValue === undefined ? "" : manualValue;
+            }
+
+            function getInventoryActualQuantity(row) {
+                const manualValue = state.inventoryManual[row.id];
+                return getInventoryReadValue(row) + (manualValue === undefined ? 0 : manualValue);
+            }
+
+            function updateInventoryManualValue(assetId, rawValue) {
+                if (!assetId) {
+                    return;
+                }
+
+                if (rawValue === "") {
+                    delete state.inventoryManual[assetId];
+                } else {
+                    const parsed = Number(rawValue);
+                    state.inventoryManual[assetId] = Number.isFinite(parsed) ? parsed : 0;
+                }
+
+                if (state.lastPayload) {
+                    renderFromPayload(state.lastPayload);
+                }
             }
 
             function buildColumnClassName(column, visibleIndex, visibleColumns) {
@@ -2457,8 +3084,5 @@ let searchDebounceId = null;
         })();
     </script>
 {% endblock %}
-
-
-
 
 

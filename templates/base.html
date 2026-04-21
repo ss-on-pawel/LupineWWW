@@ -337,9 +337,11 @@
                 <span class="app-brand-wordmark">LUPINE</span>
             </a>
             <nav class="app-nav" aria-label="Nawigacja główna">
-                <a class="is-active" href="{% url 'assets:list' %}">Ewidencja</a>
-                <a href="#">Raporty</a>
-                <a href="#">Ustawienia</a>
+                {% block app_nav %}
+                    <a class="is-active" href="{% url 'assets:list' %}">Ewidencja</a>
+                    <a href="#">Raporty</a>
+                    <a href="#">Ustawienia</a>
+                {% endblock %}
             </nav>
             <div class="app-header-actions">
                 {% block app_header_actions %}
