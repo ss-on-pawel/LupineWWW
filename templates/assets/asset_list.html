@@ -19,6 +19,12 @@
             font-family: var(--ui-font);
             background: transparent;
         }
+        .asset-list-shell[data-work-mode="management"] {
+            width: calc(100vw - 32px);
+            max-width: none;
+            margin-left: calc(50% - 50vw + 16px);
+            margin-right: calc(50% - 50vw + 16px);
+        }
         .asset-list-shell[data-mode="dense"] {
             width: calc(100vw - 32px);
             max-width: none;
@@ -38,7 +44,7 @@
             justify-content: flex-end;
             gap: 16px;
             align-items: end;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             padding: 14px 0 12px;
             border-top: 1px solid var(--line);
             border-bottom: 1px solid var(--line);
@@ -128,6 +134,10 @@
             align-items: stretch;
             margin-bottom: 10px;
         }
+        .asset-list-shell[data-work-mode="management"] .asset-list-workrow {
+            gap: 8px;
+            margin-bottom: 10px;
+        }
         .asset-list-worksegment {
             display: grid;
             grid-template-rows: auto minmax(0, 1fr);
@@ -144,14 +154,18 @@
             align-items: baseline;
             gap: 10px;
             flex-wrap: wrap;
-            padding: 8px 12px 6px;
+            padding: 8px 12px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-worksegment-head {
+            padding: 8px 12px;
         }
         .asset-list-worksegment-head strong {
             display: block;
             font-family: var(--mono-font);
-            font-size: 0.72rem;
-            letter-spacing: 0.12em;
+            margin-bottom: 6px;
+            font-size: 11px;
+            letter-spacing: 0.16em;
             text-transform: uppercase;
             color: #101828;
         }
@@ -165,6 +179,10 @@
             align-content: start;
             gap: 8px;
             min-width: 0;
+            padding: 8px 12px;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-worksegment-body {
+            gap: 6px;
             padding: 8px 12px;
         }
         .asset-list-worksegment--search .asset-list-worksegment-body {
@@ -187,7 +205,10 @@
         }
         .asset-list-worksegment-body > .asset-list-field input {
             width: 100%;
+            height: 40px;
             min-height: 40px;
+            padding: 0 12px;
+            font-size: 14px;
             font-family: var(--ui-font);
         }
         .asset-list-shell[data-mode="dense"] .asset-list-workrow {
@@ -244,19 +265,80 @@
             border-color: rgba(17, 24, 39, 0.28);
             box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.12);
         }
-        .asset-list-mode-toggle {
-            --toggle-width: 38px;
-            --toggle-height: 22px;
-            display: inline-grid;
-            grid-template-columns: auto auto;
+        .asset-work-mode {
+            display: inline-flex;
             align-items: center;
-            gap: 10px;
-            min-height: 36px;
-            padding: 0 12px;
-            border: 1px solid rgba(10, 10, 10, 0.1);
-            background: rgba(255, 255, 255, 0.84);
-            color: #1f2937;
+            gap: 4px;
+            min-height: 40px;
+            padding: 0;
+            border: 0;
+            background: transparent;
             white-space: nowrap;
+        }
+        .asset-work-mode input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .asset-work-mode-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            height: 40px;
+            padding: 0 8px;
+            border: 0;
+            background: transparent;
+            color: #667085;
+            font-family: var(--ui-font);
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            text-transform: none;
+            box-shadow: none;
+            cursor: pointer;
+        }
+        .asset-work-mode-button:hover {
+            color: #475467;
+            background: transparent;
+        }
+        .asset-work-mode-button:focus,
+        .asset-work-mode-button:focus-visible {
+            outline: none;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        .asset-work-mode-button::after {
+            content: "";
+            position: absolute;
+            left: 8px;
+            right: 8px;
+            bottom: 6px;
+            height: 1px;
+            background: transparent;
+            opacity: 0;
+        }
+        .asset-work-mode[data-mode="management"] [data-mode-option="management"] {
+            color: #101828;
+            font-weight: 600;
+        }
+        .asset-work-mode[data-mode="management"] [data-mode-option="management"]::after {
+            background: rgba(193, 18, 31, 0.88);
+            box-shadow: 0 0 4px rgba(193, 18, 31, 0.12);
+            opacity: 1;
+        }
+        .asset-work-mode[data-mode="inventory"] [data-mode-option="management"] {
+            color: #667085;
+        }
+        .asset-work-mode[data-mode="inventory"] [data-mode-option="inventory"] {
+            color: #101828;
+            font-weight: 600;
+        }
+        .asset-work-mode[data-mode="inventory"] [data-mode-option="inventory"]::after {
+            background: rgba(193, 18, 31, 0.88);
+            box-shadow: 0 0 4px rgba(193, 18, 31, 0.12);
+            opacity: 1;
         }
         .asset-header-controls {
             display: inline-flex;
@@ -325,6 +407,9 @@
             gap: 0;
             min-width: 0;
         }
+        .asset-layout-table {
+            overflow-x: clip;
+        }
         .asset-layout-toolbar-actions {
             display: flex;
             align-items: center;
@@ -335,6 +420,11 @@
             padding: 8px 0 10px;
             border-bottom: 1px solid var(--line);
             min-width: 0;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-layout-toolbar-actions {
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 5px 0 6px;
         }
         .asset-management-toolbar {
             display: flex;
@@ -364,11 +454,29 @@
             background: rgba(15, 23, 42, 0.1);
         }
         .asset-list-table-tools {
+            position: relative;
             display: flex;
             justify-content: flex-end;
             align-items: center;
             gap: 8px;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            padding: 4px 0 6px;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+            min-width: 0;
+        }
+        .asset-list-table-tools-cluster {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-left: auto;
+            min-width: 0;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-table-tools {
+            margin-bottom: 10px;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-table-tools-cluster {
+            gap: 10px;
         }
         .asset-list-shell[data-mode="dense"] .asset-management-toolbar {
             gap: 8px;
@@ -388,45 +496,32 @@
         .asset-list-shell[data-mode="dense"] .asset-list-table-tools {
             margin-bottom: 6px;
         }
-        .asset-list-mode-toggle span:last-child {
-            font-size: 0.78rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+        .asset-work-mode-button:last-child {
+            font-size: 14px;
+            letter-spacing: 0.01em;
+            text-transform: none;
         }
-        .asset-list-mode-toggle input {
+        .asset-work-mode input {
             position: absolute;
             opacity: 0;
             pointer-events: none;
         }
-        .asset-list-mode-toggle-ui {
-            position: relative;
-            width: var(--toggle-width);
-            height: var(--toggle-height);
-            border: 1px solid rgba(10, 10, 10, 0.14);
-            background: rgba(17, 24, 39, 0.08);
-        }
-        .asset-list-mode-toggle-ui::after {
-            content: "";
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: calc(var(--toggle-height) - 6px);
-            height: calc(var(--toggle-height) - 6px);
-            background: rgba(17, 24, 39, 0.82);
-            transition: transform 160ms ease, background-color 160ms ease;
-        }
-        .asset-list-mode-toggle input:checked + .asset-list-mode-toggle-ui::after {
-            transform: translateX(calc(var(--toggle-width) - var(--toggle-height)));
-            background: #c1121f;
-        }
         .asset-list-columns {
             position: relative;
             z-index: 101;
-            width: 100%;
+            width: auto;
+            flex: 0 0 auto;
+            margin-left: 0;
+        }
+        .asset-list-columns.is-open > button {
+            border-color: rgba(15, 23, 42, 0.24);
+            background: rgba(248, 250, 252, 0.96);
         }
         .asset-list-columns > button {
-            width: 100%;
+            width: auto;
             justify-content: center;
+            min-height: 34px;
+            padding: 0 12px;
             font-size: 0.88rem;
             letter-spacing: 0.03em;
         }
@@ -442,9 +537,10 @@
             z-index: 1200;
             display: grid;
             grid-template-rows: auto minmax(0, 1fr);
-            width: min(420px, calc(100vw - 24px));
+            width: min(760px, calc(100vw - 56px));
+            max-width: 100%;
             max-height: min(72vh, 520px);
-            padding: 14px;
+            padding: 16px 18px;
             border: 1px solid var(--line-strong);
             background: #fff;
             color: #0f172a;
@@ -524,23 +620,25 @@
             font-size: 0.86rem;
         }
         .asset-list-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 10px;
+            display: grid;
+            justify-items: end;
+            gap: 2px;
+            margin-bottom: 0;
             color: var(--text-muted);
             font-family: var(--mono-font);
             font-size: 0.8rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+            text-align: right;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-meta {
+            font-size: 0.76rem;
         }
         .asset-list-shell[data-mode="dense"] .asset-list-meta {
-            margin-bottom: 6px;
-            padding-top: 2px;
-            padding-bottom: 2px;
             font-size: 0.76rem;
+        }
+        .asset-list-meta > div {
+            white-space: nowrap;
         }
         .asset-list-inventory-banner {
             margin-bottom: 10px;
@@ -552,6 +650,12 @@
             font-size: 0.72rem;
             letter-spacing: 0.12em;
             text-transform: uppercase;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-inventory-banner {
+            margin-bottom: 6px;
+            padding: 6px 10px;
+            font-size: 0.68rem;
+            letter-spacing: 0.1em;
         }
         .asset-list-shell[data-mode="dense"] .asset-list-inventory-banner {
             margin-bottom: 6px;
@@ -800,6 +904,37 @@
             box-shadow: 0 18px 40px rgba(15, 23, 42, 0.04);
             overscroll-behavior-x: contain;
             -webkit-overflow-scrolling: touch;
+            padding-bottom: 18px;
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-list-table-wrap {
+            box-shadow: none;
+        }
+        .asset-table-sticky-scrollbar {
+            position: sticky;
+            bottom: 0;
+            z-index: 35;
+            margin-top: -18px;
+            padding-top: 4px;
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+            background: linear-gradient(to top, rgba(248, 249, 251, 0.98), rgba(248, 249, 251, 0.88));
+        }
+        .asset-table-sticky-scrollbar[hidden] {
+            display: none;
+        }
+        .asset-table-sticky-scrollbar-track {
+            overflow-x: auto;
+            overflow-y: hidden;
+            width: 100%;
+            max-width: 100%;
+            height: 14px;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.92);
+            overscroll-behavior-x: contain;
+        }
+        .asset-table-sticky-scrollbar-spacer {
+            height: 1px;
         }
         .asset-list-shell[data-mode="dense"] .asset-list-table-wrap {
             border-left: 0;
@@ -819,7 +954,7 @@
         }
         .asset-table th,
         .asset-table td {
-            padding: 12px 14px;
+            padding: 10px 12px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.08);
             vertical-align: middle;
             white-space: nowrap;
@@ -827,6 +962,10 @@
             text-overflow: ellipsis;
             background: var(--asset-row-bg, #fff);
             font-family: var(--data-font);
+        }
+        .asset-list-shell[data-work-mode="management"] .asset-table th,
+        .asset-list-shell[data-work-mode="management"] .asset-table td {
+            padding: 10px 12px;
         }
         .asset-list-shell[data-mode="dense"] .asset-table th,
         .asset-list-shell[data-mode="dense"] .asset-table td {
@@ -836,20 +975,22 @@
         }
         .asset-table tbody tr {
             --asset-row-bg: #fff;
+            height: 48px;
         }
         .asset-table thead th {
             position: sticky;
             top: 0;
             z-index: 5;
+            height: 42px;
             background: #fafbfc;
             color: #475467;
             white-space: nowrap;
             overflow: visible;
             text-overflow: clip;
             font-family: var(--mono-font);
-            font-size: 0.74rem;
+            font-size: 12px;
             font-weight: 600;
-            letter-spacing: 0.12em;
+            letter-spacing: 0.14em;
             text-transform: uppercase;
             background-clip: padding-box;
         }
@@ -909,12 +1050,18 @@
             min-width: 44px;
             max-width: 44px;
             text-align: center;
+            vertical-align: middle;
         }
         .asset-list-shell[data-mode="dense"] .asset-table .cell-checkbox,
         .asset-list-shell[data-mode="dense"] .asset-table .head-checkbox {
             width: 34px;
             min-width: 34px;
             max-width: 34px;
+        }
+        .asset-table .cell-checkbox input,
+        .asset-table .head-checkbox input {
+            display: block;
+            margin: 0 auto;
         }
         .asset-table .cell-inventory {
             width: 156px;
@@ -930,9 +1077,9 @@
             font-size: 0.77rem;
         }
         .asset-table .cell-name {
-            width: 340px;
-            min-width: 260px;
-            max-width: 420px;
+            width: 320px;
+            min-width: 240px;
+            max-width: 400px;
         }
         .asset-list-shell[data-mode="dense"] .asset-table .cell-name {
             width: 280px;
@@ -940,9 +1087,9 @@
             max-width: 360px;
         }
         .asset-table .cell-status {
-            width: 138px;
-            min-width: 138px;
-            max-width: 138px;
+            width: 120px;
+            min-width: 120px;
+            max-width: 120px;
             overflow: visible;
             text-overflow: clip;
         }
@@ -957,9 +1104,9 @@
         .asset-table th[data-column-key="asset_type"],
         .asset-table td[data-column-key="technical_condition"],
         .asset-table th[data-column-key="technical_condition"] {
-            width: 11.5rem;
-            min-width: 9.5rem;
-            max-width: 14rem;
+            width: 9rem;
+            min-width: 7.5rem;
+            max-width: 10.5rem;
         }
         .asset-table td[data-column-key="location"],
         .asset-table th[data-column-key="location"],
@@ -967,9 +1114,9 @@
         .asset-table th[data-column-key="manufacturer"],
         .asset-table td[data-column-key="department"],
         .asset-table th[data-column-key="department"] {
-            width: 14rem;
-            min-width: 11rem;
-            max-width: 18rem;
+            width: 12rem;
+            min-width: 9.5rem;
+            max-width: 15rem;
         }
         .asset-table td[data-column-key="category"],
         .asset-table th[data-column-key="category"],
@@ -987,9 +1134,9 @@
         .asset-table th[data-column-key="responsible_person"],
         .asset-table td[data-column-key="current_user"],
         .asset-table th[data-column-key="current_user"] {
-            width: 12rem;
-            min-width: 9rem;
-            max-width: 16rem;
+            width: 10rem;
+            min-width: 8rem;
+            max-width: 13rem;
         }
         .asset-table td[data-column-key="updated_at"],
         .asset-table th[data-column-key="updated_at"],
@@ -1005,15 +1152,15 @@
         .asset-table th[data-column-key="warranty_until"],
         .asset-table td[data-column-key="insurance_until"],
         .asset-table th[data-column-key="insurance_until"] {
-            width: 10.5rem;
-            min-width: 9.5rem;
-            max-width: 12rem;
+            width: 9rem;
+            min-width: 8rem;
+            max-width: 10rem;
         }
         .asset-table .cell-value,
         .asset-table th[data-column-key="purchase_value"] {
-            width: 10.5rem;
-            min-width: 9rem;
-            max-width: 12rem;
+            width: 8.5rem;
+            min-width: 7.5rem;
+            max-width: 9.5rem;
         }
         .asset-table td[data-column-key="serial_number"],
         .asset-table th[data-column-key="serial_number"],
@@ -1021,9 +1168,9 @@
         .asset-table th[data-column-key="barcode"],
         .asset-table td[data-column-key="external_id"],
         .asset-table th[data-column-key="external_id"] {
-            width: 12.5rem;
-            min-width: 10.5rem;
-            max-width: 15rem;
+            width: 10.5rem;
+            min-width: 9rem;
+            max-width: 12rem;
         }
         .asset-table td[data-column-key="is_active"],
         .asset-table th[data-column-key="is_active"] {
@@ -1100,13 +1247,13 @@
         .asset-status-pill {
             display: inline-flex;
             align-items: center;
-            min-height: 28px;
+            height: 28px;
             padding: 0 10px;
             border: 1px solid rgba(15, 23, 42, 0.1);
             background: rgba(15, 23, 42, 0.04);
             color: #344054;
             font-family: var(--mono-font);
-            font-size: 0.78rem;
+            font-size: 11px;
             letter-spacing: 0.06em;
             text-transform: uppercase;
             white-space: nowrap;
@@ -1261,20 +1408,14 @@
     </style>
 {% endblock %}
 
-{% block app_nav %}
-    <span class="asset-nav-label">Ewidencja majątku</span>
-    <a href="#">Raporty</a>
-    <a href="#">Ustawienia</a>
-{% endblock %}
-
 {% block app_header_actions %}
     <div class="asset-header-mode" aria-label="Tryb widoku ewidencji">
-        <div>
-            <label class="asset-list-mode-toggle" for="asset-dense-mode">
-                <input id="asset-dense-mode" type="checkbox">
-                <span class="asset-list-mode-toggle-ui" aria-hidden="true"></span>
-                <span id="asset-work-mode-label">Tryb pracy na danych</span>
+        <div id="asset-work-mode-shell" class="asset-work-mode" data-mode="management">
+            <label for="asset-work-mode-toggle">
+                <input id="asset-work-mode-toggle" type="checkbox">
             </label>
+            <button id="asset-work-mode-management" class="asset-work-mode-button" type="button" data-mode-option="management" aria-pressed="true">Zarządzanie</button>
+            <button id="asset-work-mode-inventory" class="asset-work-mode-button" type="button" data-mode-option="inventory" aria-pressed="false">Inwentaryzacja</button>
         </div>
     </div>
 {% endblock %}
@@ -1349,27 +1490,28 @@
                 </section>
             </div>
             <div class="asset-layout-table">
-                <div class="asset-list-meta">
-                    <div id="asset-results-summary">Ładowanie danych...</div>
-                    <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
-                </div>
-
                 <div id="asset-inventory-banner" class="asset-list-inventory-banner" hidden>
                     INWENTARYZACJA: [brak aktywnej sesji]
                 </div>
 
                 <div class="asset-list-table-tools">
-                    <div class="asset-list-columns">
-                        <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
-                            Kolumny
-                        </button>
-                        <div id="asset-columns-panel" class="asset-list-columns-panel" hidden>
-                            <div class="asset-list-columns-head">
-                                <strong>Widoczne kolumny</strong>
-                                <p>Możesz ukrywać kolumny i zmieniać ich kolejność. Ustawienia zapisują się lokalnie.</p>
-                            </div>
-                            <div id="asset-columns-options"></div>
+                    <div class="asset-list-table-tools-cluster">
+                        <div class="asset-list-meta">
+                            <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
+                            <div id="asset-results-summary">Ładowanie danych...</div>
                         </div>
+                        <div class="asset-list-columns">
+                            <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
+                                Kolumny
+                            </button>
+                        </div>
+                    </div>
+                    <div id="asset-columns-panel" class="asset-list-columns-panel" hidden>
+                        <div class="asset-list-columns-head">
+                            <strong>Widoczne kolumny</strong>
+                            <p>Możesz ukrywać kolumny i zmieniać ich kolejność. Ustawienia zapisują się lokalnie.</p>
+                        </div>
+                        <div id="asset-columns-options"></div>
                     </div>
                 </div>
 
@@ -1384,6 +1526,11 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <div id="asset-table-sticky-scrollbar" class="asset-table-sticky-scrollbar" hidden>
+                    <div id="asset-table-sticky-scrollbar-track" class="asset-table-sticky-scrollbar-track">
+                        <div id="asset-table-sticky-scrollbar-spacer" class="asset-table-sticky-scrollbar-spacer"></div>
+                    </div>
                 </div>
 
                 <div class="asset-list-pagination">
@@ -1863,18 +2010,26 @@
                 filterList: document.getElementById("asset-filter-list"),
                 filterEmpty: document.getElementById("asset-filter-empty"),
                 filtersSection: shell.querySelector(".asset-list-filters"),
-                workModeToggle: document.getElementById("asset-dense-mode"),
-                workModeLabel: document.getElementById("asset-work-mode-label"),
+                workModeToggle: document.getElementById("asset-work-mode-toggle"),
+                workModeShell: document.getElementById("asset-work-mode-shell"),
+                workModeManagementButton: document.getElementById("asset-work-mode-management"),
+                workModeInventoryButton: document.getElementById("asset-work-mode-inventory"),
                 managementToolbar: document.getElementById("asset-management-toolbar"),
                 managementEditButton: document.getElementById("asset-management-edit"),
                 managementDeleteButton: document.getElementById("asset-management-delete"),
                 managementAddButton: document.getElementById("asset-management-add"),
+                columnsContainer: shell.querySelector(".asset-list-table-tools"),
+                columnsTrigger: shell.querySelector(".asset-list-columns"),
                 columnsToggle: document.getElementById("asset-columns-toggle"),
                 columnsPanel: document.getElementById("asset-columns-panel"),
                 columnsOptions: document.getElementById("asset-columns-options"),
                 inventoryBanner: document.getElementById("asset-inventory-banner"),
+                tableWrap: shell.querySelector(".asset-list-table-wrap"),
                 tableHead: document.getElementById("asset-table-head"),
                 tableBody: document.getElementById("asset-table-body"),
+                stickyScrollbar: document.getElementById("asset-table-sticky-scrollbar"),
+                stickyScrollbarTrack: document.getElementById("asset-table-sticky-scrollbar-track"),
+                stickyScrollbarSpacer: document.getElementById("asset-table-sticky-scrollbar-spacer"),
                 resultsSummary: document.getElementById("asset-results-summary"),
                 activeSort: document.getElementById("asset-active-sort"),
                 pageSummary: document.getElementById("asset-page-summary"),
@@ -1970,15 +2125,33 @@ let searchDebounceId = null;
                     });
                 });
 
+                elements.workModeManagementButton.addEventListener("click", function () {
+                    setWorkMode("management");
+                });
+
+                elements.workModeInventoryButton.addEventListener("click", function () {
+                    setWorkMode("inventory");
+                });
+
                 elements.columnsToggle.addEventListener("click", function (event) {
                     event.stopPropagation();
-                    const isExpanded = elements.columnsToggle.getAttribute("aria-expanded") === "true";
-                    elements.columnsToggle.setAttribute("aria-expanded", String(!isExpanded));
-                    elements.columnsPanel.hidden = isExpanded;
+                    toggleColumnsPanel();
                 });
 
                 elements.columnsPanel.addEventListener("click", function (event) {
                     event.stopPropagation();
+                });
+
+                document.addEventListener("click", function (event) {
+                    if (!elements.columnsContainer.contains(event.target)) {
+                        closeColumnsPanel();
+                    }
+                });
+
+                document.addEventListener("keydown", function (event) {
+                    if (event.key === "Escape") {
+                        closeColumnsPanel();
+                    }
                 });
 
                 elements.extraRecordButton.addEventListener("click", function () {
@@ -2001,6 +2174,14 @@ let searchDebounceId = null;
                     updateInventoryManualValue(input.dataset.assetId, input.value);
                 });
 
+                elements.tableWrap.addEventListener("scroll", function () {
+                    syncStickyScrollbarPosition("table");
+                });
+
+                elements.stickyScrollbarTrack.addEventListener("scroll", function () {
+                    syncStickyScrollbarPosition("sticky");
+                });
+
                 elements.prevButton.addEventListener("click", function () {
                     if (!elements.prevButton.disabled) {
                         updateState({ page: Math.max(1, state.page - 1) });
@@ -2013,7 +2194,10 @@ let searchDebounceId = null;
                     }
                 });
 
-                window.addEventListener("resize", updateStickyOffsets);
+                window.addEventListener("resize", function () {
+                    updateStickyOffsets();
+                    syncStickyScrollbar();
+                });
             }
 
             function updateState(patch) {
@@ -2087,6 +2271,7 @@ let searchDebounceId = null;
                 updateSortLabel();
                 syncControls();
                 updateStickyOffsets();
+                syncStickyScrollbar();
             }
 
             function renderFilterRows() {
@@ -2498,6 +2683,7 @@ let searchDebounceId = null;
                 elements.tableBody.innerHTML = '<tr><td colspan="' + columnCount + '" class="asset-table-loading">Ładowanie danych...</td></tr>';
                 elements.prevButton.disabled = true;
                 elements.nextButton.disabled = true;
+                syncStickyScrollbar();
             }
 
             function renderErrorState() {
@@ -2506,6 +2692,7 @@ let searchDebounceId = null;
                 elements.resultsSummary.textContent = "Błąd ładowania danych";
                 elements.pageSummary.textContent = "Strona -";
                 updateSortLabel();
+                syncStickyScrollbar();
             }
 
             function renderColumnPanel() {
@@ -2779,9 +2966,10 @@ let searchDebounceId = null;
                     elements.locationFilter.value = state.location;
                 }
                 elements.workModeToggle.checked = state.mode === "inventory";
-                elements.workModeLabel.textContent = state.mode === "inventory"
-                    ? "TRYB INWENTARYZACYJNY"
-                    : "ZARZĄDZANIE MAJĄTKIEM";
+                elements.workModeShell.dataset.mode = state.mode;
+                elements.workModeManagementButton.setAttribute("aria-pressed", String(state.mode === "management"));
+                elements.workModeInventoryButton.setAttribute("aria-pressed", String(state.mode === "inventory"));
+                shell.dataset.workMode = state.mode;
                 elements.inventoryBanner.hidden = state.mode !== "inventory";
                 syncManagementToolbar();
                 syncToolbarControls();
@@ -2808,15 +2996,27 @@ let searchDebounceId = null;
                 elements.topbarExtraButton.hidden = false;
             }
 
+            function setWorkMode(mode) {
+                if (mode !== "management" && mode !== "inventory") {
+                    return;
+                }
+                elements.workModeToggle.checked = mode === "inventory";
+                elements.workModeToggle.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+
             function syncManagementToolbar() {
                 elements.managementToolbar.hidden = state.mode !== "management";
             }
 
             function syncToolbarControls() {
-                closeColumnsPanel();
+                if (state.mode === "inventory") {
+                    closeColumnsPanel();
+                }
+                elements.columnsTrigger.hidden = state.mode === "inventory";
+                elements.columnsPanel.hidden = state.mode === "inventory" || elements.columnsPanel.hidden;
                 elements.columnsToggle.textContent = "Kolumny";
                 elements.columnsToggle.className = "button-secondary";
-                elements.columnsToggle.disabled = false;
+                elements.columnsToggle.disabled = state.mode === "inventory";
 
                 elements.managementEditButton.textContent = "Edytuj";
                 elements.managementEditButton.className = "button-secondary";
@@ -3077,9 +3277,87 @@ let searchDebounceId = null;
                 });
             }
 
+            function syncStickyScrollbar() {
+                const table = elements.tableWrap.querySelector(".asset-table");
+                if (!table) {
+                    elements.stickyScrollbar.hidden = true;
+                    return;
+                }
+
+                const hasHorizontalOverflow = table.scrollWidth > elements.tableWrap.clientWidth + 1;
+                elements.stickyScrollbar.hidden = !hasHorizontalOverflow;
+
+                if (!hasHorizontalOverflow) {
+                    elements.stickyScrollbarTrack.scrollLeft = 0;
+                    return;
+                }
+
+                elements.stickyScrollbarSpacer.style.width = table.scrollWidth + "px";
+                elements.stickyScrollbarTrack.scrollLeft = elements.tableWrap.scrollLeft;
+            }
+
+            function syncStickyScrollbarPosition(source) {
+                if (source === "table") {
+                    if (elements.stickyScrollbar.hidden) {
+                        return;
+                    }
+                    if (elements.stickyScrollbarTrack.scrollLeft !== elements.tableWrap.scrollLeft) {
+                        elements.stickyScrollbarTrack.scrollLeft = elements.tableWrap.scrollLeft;
+                    }
+                    return;
+                }
+
+                if (elements.tableWrap.scrollLeft !== elements.stickyScrollbarTrack.scrollLeft) {
+                    elements.tableWrap.scrollLeft = elements.stickyScrollbarTrack.scrollLeft;
+                }
+            }
+
             function closeColumnsPanel() {
-                elements.columnsPanel.hidden = true;
-                elements.columnsToggle.setAttribute("aria-expanded", "false");
+                toggleColumnsPanel(false);
+            }
+
+            function toggleColumnsPanel(forceOpen) {
+                const shouldOpen = typeof forceOpen === "boolean"
+                    ? forceOpen
+                    : elements.columnsPanel.hidden;
+
+                elements.columnsPanel.hidden = !shouldOpen;
+                elements.columnsToggle.setAttribute("aria-expanded", String(shouldOpen));
+                elements.columnsTrigger.classList.toggle("is-open", shouldOpen);
+
+                if (shouldOpen) {
+                    positionColumnsPanel();
+                } else {
+                    resetColumnsPanelPosition();
+                }
+            }
+
+            function positionColumnsPanel() {
+                resetColumnsPanelPosition();
+
+                const gap = 8;
+                const containerRect = elements.columnsContainer.getBoundingClientRect();
+                const availableBelow = window.innerHeight - containerRect.bottom - gap;
+                const availableAbove = containerRect.top - gap;
+                const panelHeight = elements.columnsPanel.offsetHeight;
+                const openAbove = panelHeight > availableBelow && availableAbove > availableBelow;
+                const maxHeight = Math.max((openAbove ? availableAbove : availableBelow) - gap, 180);
+
+                if (openAbove) {
+                    elements.columnsPanel.style.top = "auto";
+                    elements.columnsPanel.style.bottom = "calc(100% + 8px)";
+                } else {
+                    elements.columnsPanel.style.top = "calc(100% + 8px)";
+                    elements.columnsPanel.style.bottom = "auto";
+                }
+
+                elements.columnsPanel.style.maxHeight = maxHeight + "px";
+            }
+
+            function resetColumnsPanelPosition() {
+                elements.columnsPanel.style.top = "";
+                elements.columnsPanel.style.bottom = "";
+                elements.columnsPanel.style.maxHeight = "";
             }
         })();
     </script>

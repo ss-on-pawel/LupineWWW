@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}{{ location.name }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .location-detail-shell {
+            display: grid;
+            gap: 10px;
+        }
+        .location-detail-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.76rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .location-detail-breadcrumb span {
+            color: #344054;
+        }
+        .location-detail-back {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            min-height: 34px;
+            padding: 0 12px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            font-size: 0.9rem;
+        }
+        .location-detail-back:hover,
+        .location-detail-back:focus-visible {
+            border-color: rgba(15, 23, 42, 0.2);
+            background: rgba(15, 23, 42, 0.04);
+        }
+        .location-detail-header {
+            display: grid;
+            gap: 8px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .location-detail-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .location-detail-delete-form {
+            display: inline-flex;
+            margin: 0;
+        }
+        .location-detail-kicker,
+        .location-detail-section-label {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .location-detail-title {
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 3.1rem);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+        }
+        .location-detail-card {
+            padding: 16px 18px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background:
+                linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+                rgba(255, 255, 255, 0.9);
+            background-size: 28px 28px, 28px 28px, auto;
+        }
+        .location-detail-section-title {
+            margin: 4px 0 0;
+            font-size: 1.25rem;
+            line-height: 1.2;
+            letter-spacing: -0.03em;
+        }
+        .location-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0;
+            margin-top: 12px;
+            border-top: 1px solid rgba(15, 23, 42, 0.1);
+            border-left: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.72);
+        }
+        .location-detail-item {
+            min-height: 72px;
+            padding: 14px 16px;
+            border-right: 1px solid rgba(15, 23, 42, 0.1);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .location-detail-item.is-wide {
+            grid-column: 1 / -1;
+        }
+        .location-detail-item-label {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .location-detail-item-value {
+            margin: 8px 0 0;
+            color: #101828;
+            font-size: 1rem;
+            line-height: 1.5;
+            font-weight: 600;
+        }
+        .location-detail-item-value.is-mono {
+            font-family: var(--mono-font);
+            font-size: 0.94rem;
+            font-weight: 500;
+        }
+        .location-assets-table-wrap {
+            margin-top: 12px;
+            overflow-x: auto;
+        }
+        .location-assets-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .location-assets-table th,
+        .location-assets-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            text-align: left;
+            vertical-align: top;
+        }
+        .location-assets-table th {
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .location-assets-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+        .location-assets-code {
+            font-family: var(--mono-font);
+            color: #344054;
+            font-size: 0.92rem;
+        }
+        .location-assets-name {
+            color: #101828;
+            font-weight: 600;
+        }
+        .location-assets-status {
+            color: #344054;
+        }
+        .location-assets-actions {
+            color: #667085;
+            font-family: var(--mono-font);
+            font-size: 1rem;
+        }
+        .location-assets-empty {
+            margin: 12px 0 0;
+            color: var(--app-muted);
+            line-height: 1.5;
+        }
+        @media (max-width: 780px) {
+            .location-detail-grid {
+                grid-template-columns: 1fr;
+            }
+            .location-detail-item.is-wide {
+                grid-column: auto;
+            }
+        }
+        @media (max-width: 700px) {
+            .location-detail-card {
+                padding: 16px;
+                border-left: 0;
+                border-right: 0;
+                margin-left: -16px;
+                margin-right: -16px;
+            }
+            .location-assets-table th,
+            .location-assets-table td {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="location-detail-shell">
+        <a class="location-detail-back" href="{% url 'locations:list' %}">&larr; Powrót do lokalizacji</a>
+
+        <nav class="location-detail-breadcrumb" aria-label="Breadcrumb">
+            <span>Lokalizacje</span>
+            {% for item in breadcrumbs %}
+                <span>/</span><span>{{ item }}</span>
+            {% endfor %}
+        </nav>
+
+        <header class="location-detail-header">
+            <p class="location-detail-kicker">Szczegóły lokalizacji</p>
+            <h1 class="location-detail-title">{{ location.name }}</h1>
+            <div class="location-detail-actions">
+                <a class="ui-btn ui-btn--primary" href="{% url 'locations:create-child' location.id %}">
+                    <span class="ui-btn-icon">+</span>
+                    <span>Dodaj podlokalizację</span>
+                </a>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'locations:update' location.id %}">
+                    <span class="ui-btn-icon">E</span>
+                    <span>Edytuj</span>
+                </a>
+                <form class="location-detail-delete-form" method="post" action="{% url 'locations:delete' location.id %}">
+                    {% csrf_token %}
+                    <button class="ui-btn ui-btn--danger" type="submit">
+                        <span class="ui-btn-icon">x</span>
+                        <span>Usuń</span>
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <section class="location-detail-card" aria-labelledby="location-info-title">
+            <p class="location-detail-section-label">Sekcja</p>
+            <h2 id="location-info-title" class="location-detail-section-title">Informacje o lokalizacji</h2>
+            <div class="location-detail-grid">
+                <div class="location-detail-item">
+                    <p class="location-detail-item-label">Nazwa</p>
+                    <p class="location-detail-item-value">{{ location.name }}</p>
+                </div>
+                <div class="location-detail-item">
+                    <p class="location-detail-item-label">Kod</p>
+                    <p class="location-detail-item-value is-mono">{{ location.code }}</p>
+                </div>
+                <div class="location-detail-item">
+                    <p class="location-detail-item-label">Lokalizacja nadrzędna</p>
+                    <p class="location-detail-item-value">{{ location.parent_name }}</p>
+                </div>
+                <div class="location-detail-item is-wide">
+                    <p class="location-detail-item-label">Pełna ścieżka</p>
+                    <p class="location-detail-item-value">{{ location.path }}</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="location-detail-card" aria-labelledby="location-content-title">
+            <p class="location-detail-section-label">Sekcja</p>
+            <h2 id="location-content-title" class="location-detail-section-title">Zawartość lokalizacji ({{ assigned_assets_count }})</h2>
+            {% if assigned_assets %}
+                <div class="location-assets-table-wrap">
+                    <table class="location-assets-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Nr inwentarzowy</th>
+                                <th scope="col">Nazwa</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Lokalizacja</th>
+                                <th scope="col">Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for asset in assigned_assets %}
+                                <tr>
+                                    <td data-label="Nr inwentarzowy">
+                                        <span class="location-assets-code">{{ asset.inventory_number }}</span>
+                                    </td>
+                                    <td data-label="Nazwa">
+                                        <span class="location-assets-name">{{ asset.name }}</span>
+                                    </td>
+                                    <td data-label="Status">
+                                        <span class="location-assets-status">{{ asset.get_status_display }}</span>
+                                    </td>
+                                    <td data-label="Lokalizacja">
+                                        <span class="location-assets-status">{{ asset.location|default:"—" }}</span>
+                                    </td>
+                                    <td data-label="Akcje">
+                                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' asset.id %}">
+                                            <span class="ui-btn-icon">›</span>
+                                            <span>Otwórz</span>
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="location-assets-empty">Brak środków przypisanych do tej lokalizacji.</p>
+            {% endif %}
+        </section>
+    </section>
+{% endblock %}

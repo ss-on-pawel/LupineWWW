@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Lokalizacje{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .locations-shell {
+            display: grid;
+            gap: 12px;
+        }
+        .locations-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .locations-kicker,
+        .locations-table th {
+            font-family: var(--mono-font);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .locations-kicker {
+            margin: 0 0 10px;
+            color: var(--app-muted);
+            font-size: 0.72rem;
+        }
+        .locations-title {
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+        }
+        .locations-subtitle {
+            margin: 12px 0 0;
+            max-width: 560px;
+            color: var(--app-muted);
+            line-height: 1.6;
+        }
+        .locations-card {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.86);
+        }
+        .locations-actions {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+        }
+        .locations-tools {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+        }
+        .locations-search {
+            display: flex;
+            align-items: stretch;
+            flex: 1 1 320px;
+            min-width: min(100%, 320px);
+            max-width: 520px;
+        }
+        .locations-search input {
+            min-height: 36px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+        .locations-row-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .locations-table-wrap {
+            overflow-x: auto;
+        }
+        .locations-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .locations-table th,
+        .locations-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            text-align: left;
+        }
+        .locations-table th {
+            color: var(--app-muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+        .locations-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+        .locations-name-cell {
+            --level-indent: 0px;
+        }
+        .locations-name {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding-left: var(--level-indent);
+            font-weight: 600;
+            color: #101828;
+        }
+        .locations-level-marker {
+            color: #98a2b3;
+            font-family: var(--mono-font);
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+        .locations-level-marker[hidden] {
+            display: none;
+        }
+        .locations-code {
+            font-family: var(--mono-font);
+            color: #344054;
+            font-size: 0.92rem;
+        }
+        .locations-parent {
+            color: #344054;
+        }
+        .locations-path {
+            color: #475467;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .locations-row-actions .ui-btn {
+            min-height: 34px;
+            padding-left: 12px;
+            padding-right: 12px;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 700px) {
+            .locations-header {
+                align-items: start;
+            }
+            .locations-card {
+                border-left: 0;
+                border-right: 0;
+                margin-left: -16px;
+                margin-right: -16px;
+            }
+            .locations-table th,
+            .locations-table td {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            .locations-table td[data-label="Akcje"] {
+                padding-top: 10px;
+                padding-bottom: 16px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="locations-shell">
+        <header class="locations-header">
+            <div>
+                <p class="locations-kicker">Moduł lokalizacji</p>
+                <h1 class="locations-title">Lokalizacje</h1>
+                <p class="locations-subtitle">Buduj strukturę lokalizacji i rozwijaj zależności między lokalizacjami nadrzędnymi oraz podrzędnymi.</p>
+            </div>
+        </header>
+
+        <div class="locations-actions">
+            <a class="ui-btn ui-btn--primary" href="{% url 'locations:create' %}">
+                <span class="ui-btn-icon">+</span>
+                <span>Dodaj lokalizację</span>
+            </a>
+        </div>
+
+        <div class="locations-tools">
+            <form class="locations-search" method="get">
+                <input
+                    type="search"
+                    name="q"
+                    value="{{ search_query }}"
+                    placeholder="Szukaj lokalizacji..."
+                    aria-label="Szukaj lokalizacji">
+            </form>
+        </div>
+
+        <section class="locations-card" aria-labelledby="locations-table-title">
+            <div class="locations-table-wrap">
+                <table class="locations-table">
+                    <thead>
+                        <tr>
+                            <th id="locations-table-title" scope="col">Nazwa</th>
+                            <th scope="col">Kod</th>
+                            <th scope="col">Lokalizacja nadrzędna</th>
+                            <th scope="col">Ścieżka</th>
+                            <th scope="col">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for location in locations %}
+                            <tr>
+                                <td class="locations-name-cell" data-label="Nazwa" style="--level-indent: {% widthratio location.depth 1 18 %}px;">
+                                    <span class="locations-name">
+                                        <span class="locations-level-marker" {% if location.depth == 0 %}hidden{% endif %}>&rsaquo;</span>
+                                        <span>{{ location.name }}</span>
+                                    </span>
+                                </td>
+                                <td data-label="Kod">
+                                    <span class="locations-code">{{ location.code }}</span>
+                                </td>
+                                <td data-label="Lokalizacja nadrzędna">
+                                    <span class="locations-parent">{{ location.parent_name }}</span>
+                                </td>
+                                <td data-label="Ścieżka">
+                                    <span class="locations-path">{{ location.path }}</span>
+                                </td>
+                                <td data-label="Akcje">
+                                    <div class="locations-row-actions">
+                                        <a class="ui-btn ui-btn--secondary" href="{% url 'locations:detail' location.id %}">
+                                            <span class="ui-btn-icon">›</span>
+                                            <span>Otwórz</span>
+                                        </a>
+                                        <a class="ui-btn ui-btn--secondary" href="{% url 'locations:create-child' location.id %}">
+                                            <span class="ui-btn-icon">+</span>
+                                            <span>Dodaj podrzędną</span>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5">
+                                    {% if search_query %}
+                                        Nie znaleziono lokalizacji.
+                                    {% else %}
+                                        Brak lokalizacji. Dodaj pierwszą lokalizację główną.
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .location-form-shell {
+            display: grid;
+            gap: 18px;
+        }
+        .location-form-back {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            min-height: 34px;
+            padding: 0 12px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            font-size: 0.9rem;
+        }
+        .location-form-back:hover,
+        .location-form-back:focus-visible {
+            border-color: rgba(15, 23, 42, 0.2);
+            background: rgba(15, 23, 42, 0.04);
+        }
+        .location-form-header {
+            display: grid;
+            gap: 10px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .location-form-kicker,
+        .location-form-label {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .location-form-title {
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 3rem);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+        }
+        .location-form-intro {
+            margin: 0;
+            max-width: 620px;
+            color: var(--app-muted);
+            line-height: 1.65;
+        }
+        .location-form-context {
+            display: grid;
+            gap: 8px;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(248, 250, 252, 0.76);
+        }
+        .location-form-context p {
+            margin: 0;
+            line-height: 1.6;
+        }
+        .location-form-card {
+            padding: 22px 24px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background:
+                linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+                rgba(255, 255, 255, 0.9);
+            background-size: 28px 28px, 28px 28px, auto;
+        }
+        .location-form-grid {
+            display: grid;
+            gap: 18px;
+            margin-top: 18px;
+        }
+        .location-form-field {
+            display: grid;
+            gap: 8px;
+        }
+        .location-form-help {
+            margin: 0;
+            color: var(--app-muted);
+            font-size: 0.92rem;
+            line-height: 1.55;
+        }
+        .location-form-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 22px;
+        }
+        @media (max-width: 700px) {
+            .location-form-card {
+                padding: 20px 16px;
+                border-left: 0;
+                border-right: 0;
+                margin-left: -16px;
+                margin-right: -16px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="location-form-shell">
+        <a class="location-form-back" href="{{ cancel_url }}">&larr; Powrót do lokalizacji</a>
+
+        <header class="location-form-header">
+            <p class="location-form-kicker">Formularz lokalizacji</p>
+            <h1 class="location-form-title">{{ form_title }}</h1>
+            <p class="location-form-intro">{{ form_intro }}</p>
+        </header>
+
+        {% if parent_location %}
+            <section class="location-form-context" aria-label="Kontekst lokalizacji nadrzędnej">
+                <p class="location-form-label">Kontekst</p>
+                <p>Lokalizacja nadrzędna: <strong>{{ parent_location.name }}</strong></p>
+            </section>
+        {% endif %}
+
+        <section class="location-form-card" aria-labelledby="location-form-section-title">
+            <p class="location-form-label">Sekcja</p>
+            <h2 id="location-form-section-title">Dane lokalizacji</h2>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="location-form-grid">
+                    <div class="location-form-field">
+                        <label for="{{ form.name.id_for_label }}">Nazwa</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            {{ form.name.errors }}
+                        {% endif %}
+                    </div>
+                    <p class="location-form-help">Kod zostanie nadany automatycznie.</p>
+                </div>
+
+                <div class="location-form-actions">
+                    <button class="ui-btn ui-btn--primary" type="submit">
+                        <span class="ui-btn-icon">+</span>
+                        <span>Zapisz</span>
+                    </button>
+                    <a class="ui-btn ui-btn--secondary" href="{{ cancel_url }}">
+                        <span class="ui-btn-icon">›</span>
+                        <span>Anuluj</span>
+                    </a>
+                </div>
+            </form>
+        </section>
+    </section>
+{% endblock %}

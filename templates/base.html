@@ -255,6 +255,59 @@
         .muted {
             color: var(--app-muted);
         }
+        .ui-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid transparent;
+            font: inherit;
+            font-size: 0.92rem;
+            line-height: 1;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .ui-btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
+            font-family: var(--mono-font);
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+        .ui-btn--primary {
+            border-color: rgba(15, 23, 42, 0.14);
+            background: rgba(248, 250, 252, 0.96);
+            color: #0f172a;
+        }
+        .ui-btn--primary:hover,
+        .ui-btn--primary:focus-visible {
+            border-color: rgba(15, 23, 42, 0.2);
+            background: rgba(241, 245, 249, 0.98);
+        }
+        .ui-btn--secondary {
+            border-color: rgba(15, 23, 42, 0.12);
+            background: rgba(255, 255, 255, 0.96);
+            color: #101828;
+        }
+        .ui-btn--secondary:hover,
+        .ui-btn--secondary:focus-visible {
+            border-color: rgba(15, 23, 42, 0.2);
+            background: rgba(15, 23, 42, 0.04);
+        }
+        .ui-btn--danger {
+            border-color: rgba(193, 18, 31, 0.16);
+            background: rgba(193, 18, 31, 0.06);
+            color: #9f1239;
+        }
+        .ui-btn--danger:hover,
+        .ui-btn--danger:focus-visible {
+            border-color: rgba(193, 18, 31, 0.24);
+            background: rgba(193, 18, 31, 0.1);
+        }
         @media (max-width: 980px) {
             .app-header-inner {
                 grid-template-columns: 1fr;
@@ -338,7 +391,8 @@
             </a>
             <nav class="app-nav" aria-label="Nawigacja główna">
                 {% block app_nav %}
-                    <a class="is-active" href="{% url 'assets:list' %}">Ewidencja</a>
+                    <a class="{% if request.path == '/' or request.path|slice:':8' == '/assets/' %}is-active{% endif %}" href="{% url 'assets:list' %}">Ewidencja</a>
+                    <a class="{% if request.path|slice:':13' == '/lokalizacje/' %}is-active{% endif %}" href="{% url 'locations:list' %}">Lokalizacje</a>
                     <a href="#">Raporty</a>
                     <a href="#">Ustawienia</a>
                 {% endblock %}
