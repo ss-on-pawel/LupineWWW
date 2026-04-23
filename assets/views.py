@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.core.paginator import EmptyPage, Paginator
 from django.db.models import Q
@@ -9,6 +11,7 @@ from django.views.generic import CreateView, TemplateView
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
 from .forms import AssetForm
 from .models import Asset
+from locations.models import Location
 
 
 class AssetListView(TemplateView):
@@ -187,6 +190,58 @@ def asset_list_api(request):
                 "location": location,
                 "ordering": ordering_field,
             },
+        }
+    )
+
+
+def asset_bulk_move_api(request):
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Method not allowed."}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"success": False, "error": "Invalid JSON body."}, status=400)
+
+    raw_asset_ids = payload.get("asset_ids")
+    if not isinstance(raw_asset_ids, list) or not raw_asset_ids:
+        return JsonResponse({"success": False, "error": "asset_ids must be a non-empty list."}, status=400)
+
+    asset_ids = []
+    for raw_asset_id in raw_asset_ids:
+        try:
+            asset_id = int(raw_asset_id)
+        except (TypeError, ValueError):
+            return JsonResponse({"success": False, "error": "asset_ids must contain valid asset IDs."}, status=400)
+        if asset_id <= 0:
+            return JsonResponse({"success": False, "error": "asset_ids must contain valid asset IDs."}, status=400)
+        asset_ids.append(asset_id)
+
+    if "target_location_id" not in payload:
+        return JsonResponse({"success": False, "error": "target_location_id is required."}, status=400)
+
+    raw_target_location_id = payload.get("target_location_id")
+    try:
+        target_location_id = int(raw_target_location_id)
+    except (TypeError, ValueError):
+        return JsonResponse({"success": False, "error": "target_location_id must be a positive integer."}, status=400)
+
+    if target_location_id <= 0:
+        return JsonResponse({"success": False, "error": "target_location_id must be a positive integer."}, status=400)
+
+    try:
+        target_location = Location.objects.get(pk=target_location_id, is_active=True)
+    except Location.DoesNotExist:
+        return JsonResponse({"success": False, "error": "target_location_id does not point to an active location."}, status=400)
+
+    updated_count = Asset.objects.filter(id__in=set(asset_ids)).update(location=target_location.path)
+
+    return JsonResponse(
+        {
+            "success": True,
+            "updated_count": updated_count,
+            "target_location_id": target_location.id,
+            "target_location_path": target_location.path,
         }
     )
 

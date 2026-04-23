@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.db.models import Q
+from django.http import JsonResponse
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -151,6 +152,23 @@ def location_delete(request, id):
     location.delete()
     messages.success(request, "Lokalizacja została usunięta.")
     return redirect("locations:list")
+
+
+def location_options_api(request):
+    if request.method != "GET":
+        return JsonResponse({"success": False, "error": "Method not allowed."}, status=405)
+
+    locations = list(Location.objects.select_related("parent").filter(is_active=True))
+    rows = [
+        {
+            "id": location.id,
+            "path": location.path,
+        }
+        for location in locations
+    ]
+    rows.sort(key=lambda item: (item["path"].lower(), item["id"]))
+
+    return JsonResponse({"locations": rows})
 
 
 def _get_location(id):

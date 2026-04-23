@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from users.models import User
+from locations.models import Location
 
 from .models import Asset
 
@@ -207,6 +208,96 @@ class AssetListApiTests(TestCase):
         self.assertEqual(row["external_id"], "ERP-001")
         self.assertEqual(row["cost_center"], "MPK-01")
         self.assertEqual(row["is_active_display"], "Tak")
+
+
+class AssetBulkMoveApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root_location = Location.objects.create(name="Warszawa")
+        cls.target_location = Location.objects.create(name="Budynek A", parent=cls.root_location)
+        cls.inactive_location = Location.objects.create(name="Archiwum", parent=cls.root_location, is_active=False)
+        cls.asset_one = Asset.objects.create(
+            name="Bulk Asset 1",
+            inventory_number="BULK-001",
+            status=Asset.Status.IN_STOCK,
+            location="HQ",
+            category="IT",
+        )
+        cls.asset_two = Asset.objects.create(
+            name="Bulk Asset 2",
+            inventory_number="BULK-002",
+            status=Asset.Status.IN_USE,
+            location="Branch",
+            category="IT",
+        )
+
+    def test_bulk_move_updates_assets(self):
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_one.id, self.asset_two.id],
+                "target_location_id": self.target_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "updated_count": 2,
+                "target_location_id": self.target_location.id,
+                "target_location_path": self.target_location.path,
+            },
+        )
+        self.asset_one.refresh_from_db()
+        self.asset_two.refresh_from_db()
+        self.assertEqual(self.asset_one.location, self.target_location.path)
+        self.assertEqual(self.asset_two.location, self.target_location.path)
+
+    def test_bulk_move_rejects_empty_asset_ids(self):
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={"asset_ids": [], "target_location_id": self.target_location.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["success"], False)
+
+    def test_bulk_move_rejects_invalid_target_location_id(self):
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={"asset_ids": [self.asset_one.id], "target_location_id": ""},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["success"], False)
+
+    def test_bulk_move_rejects_missing_or_inactive_target_location_id(self):
+        missing_response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={"asset_ids": [self.asset_one.id]},
+            content_type="application/json",
+        )
+        inactive_response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={"asset_ids": [self.asset_one.id], "target_location_id": self.inactive_location.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(missing_response.status_code, 400)
+        self.assertEqual(missing_response.json()["success"], False)
+        self.assertEqual(inactive_response.status_code, 400)
+        self.assertEqual(inactive_response.json()["success"], False)
+
+    def test_bulk_move_rejects_get(self):
+        response = self.client.get(reverse("assets:api-bulk-move"))
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.json()["success"], False)
 
 
 class AssetListViewTests(TestCase):

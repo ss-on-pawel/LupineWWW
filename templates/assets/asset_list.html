@@ -470,6 +470,22 @@
             gap: 8px;
             min-width: 0;
         }
+        .asset-move-target {
+            min-width: 0;
+            max-width: 280px;
+            overflow: hidden;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .asset-move-target:hover,
+        .asset-move-target:focus-visible {
+            color: #475467;
+            text-decoration: underline;
+        }
         .asset-list-table-tools-cluster {
             display: inline-flex;
             align-items: center;
@@ -544,6 +560,160 @@
             color: #0f172a;
             box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
             overflow: visible;
+        }
+        .asset-move-popup {
+            position: fixed;
+            inset: 0;
+            z-index: 1300;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 96px 20px 20px;
+            background: rgba(15, 23, 42, 0.18);
+            overflow: hidden;
+        }
+        .asset-move-popup[hidden] {
+            display: none;
+        }
+        .asset-move-popup-content {
+            display: grid;
+            grid-template-rows: auto auto minmax(0, 1fr) auto;
+            gap: 10px;
+            width: min(520px, 100%);
+            height: min(72vh, 560px);
+            min-height: min(72vh, 560px);
+            max-height: min(72vh, 560px);
+            padding: 16px;
+            border: 1px solid var(--line-strong);
+            background: #fff;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        .asset-move-popup-content input {
+            width: 100%;
+            min-height: 40px;
+            padding: 0 12px;
+        }
+        .asset-move-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-height: 28px;
+            min-width: 0;
+            padding: 4px 0 2px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            scrollbar-width: thin;
+        }
+        .asset-move-breadcrumb-segment,
+        .asset-move-breadcrumb-current,
+        .asset-move-breadcrumb-separator {
+            font-size: 0.8rem;
+            line-height: 1.15;
+        }
+        .asset-move-breadcrumb-segment {
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #475467;
+            cursor: pointer;
+        }
+        .asset-move-breadcrumb-segment:hover,
+        .asset-move-breadcrumb-segment:focus-visible {
+            color: #0f172a;
+            text-decoration: underline;
+        }
+        .asset-move-breadcrumb-current {
+            color: #0f172a;
+            font-weight: 600;
+        }
+        .asset-move-breadcrumb-separator {
+            color: #98a2b3;
+        }
+        .asset-move-list {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 3px;
+            min-height: 0;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 2px;
+            box-sizing: border-box;
+        }
+        .asset-move-option {
+            width: 100%;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 9px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(248, 250, 252, 0.72);
+            color: #0f172a;
+            font-size: 0.8rem;
+            line-height: 1.15;
+            text-align: left;
+        }
+        .asset-move-option:hover,
+        .asset-move-option:focus-visible {
+            border-color: rgba(15, 23, 42, 0.16);
+            background: rgba(241, 245, 249, 0.98);
+        }
+        .asset-move-option-label,
+        .asset-move-option-meta {
+            display: block;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .asset-move-option-label {
+            font-weight: 500;
+        }
+        .asset-move-option-meta {
+            color: var(--text-muted);
+            font-size: 0.74rem;
+        }
+        .asset-move-empty {
+            padding: 8px 10px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 1.25;
+        }
+        .asset-move-option-children {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .asset-move-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-width: 0;
+            padding-top: 2px;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .asset-move-footer-meta {
+            min-width: 0;
+            color: var(--text-muted);
+            font-size: 0.76rem;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .asset-move-footer-actions {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-shrink: 0;
         }
         .asset-list-columns-panel[hidden] {
             display: none;
@@ -1418,12 +1588,7 @@
             <div class="asset-layout-header"></div>
             <div class="asset-layout-toolbar">
                 <div class="asset-layout-toolbar-actions">
-                    <div id="asset-management-toolbar" class="asset-management-toolbar" hidden aria-label="Narzędzia zarządzania">
-                        <div class="asset-management-toolbar-group">
-                            <button id="asset-management-edit" type="button" class="ui-btn ui-btn--secondary" disabled>Edytuj</button>
-                            <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" disabled>Usuń</button>
-                        </div>
-                    </div>
+                    <div id="asset-management-toolbar" class="asset-management-toolbar" hidden aria-label="Narzędzia zarządzania"></div>
                     <div class="asset-inventory-actions" data-role="inventory-actions"></div>
                 </div>
             </div>
@@ -1480,6 +1645,9 @@
                 <div class="asset-list-table-tools">
                     <div class="asset-table-tools-left">
                         <button id="asset-management-add" type="button" class="ui-btn ui-btn--primary" hidden>Dodaj środek</button>
+                        <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Usuń</button>
+                        <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
+                        <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
                     </div>
                     <div class="asset-list-table-tools-cluster">
                         <div class="asset-list-meta">
@@ -1498,6 +1666,20 @@
                             <p>Możesz ukrywać kolumny i zmieniać ich kolejność. Ustawienia zapisują się lokalnie.</p>
                         </div>
                         <div id="asset-columns-options"></div>
+                    </div>
+                </div>
+                <div id="asset-move-popup" class="asset-move-popup" hidden>
+                    <div class="asset-move-popup-content">
+                        <input type="text" placeholder="Szukaj lokalizacji..." id="asset-move-search" />
+                        <div id="asset-move-breadcrumb" class="asset-move-breadcrumb"></div>
+                        <div id="asset-move-list" class="asset-move-list"></div>
+                        <div class="asset-move-footer">
+                            <div id="asset-move-footer-meta" class="asset-move-footer-meta"></div>
+                            <div class="asset-move-footer-actions">
+                                <button id="asset-move-back" type="button" class="ui-btn ui-btn--secondary" hidden>Wstecz</button>
+                                <button id="asset-move-select-current" type="button" class="ui-btn ui-btn--primary" disabled>Wybierz tę lokalizację</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1910,6 +2092,8 @@
             const storageKeyLayoutMode = "asset-list-mode-v1";
             const storageKeyWorkMode = "asset-list-work-mode-v1";
             const apiUrl = shell.dataset.apiUrl;
+            const locationOptionsApiUrl = "/api/locations/options/";
+            const bulkMoveApiUrl = "/api/assets/bulk-move/";
             const detailTemplate = shell.dataset.detailUrlTemplate;
             const defaultPageSize = 50;
             const searchDebounceMs = 300;
@@ -2004,6 +2188,15 @@
                 managementEditButton: document.getElementById("asset-management-edit"),
                 managementDeleteButton: document.getElementById("asset-management-delete"),
                 managementAddButton: document.getElementById("asset-management-add"),
+                moveTrigger: document.getElementById("asset-move-trigger"),
+                moveTarget: document.getElementById("asset-move-target"),
+                movePopup: document.getElementById("asset-move-popup"),
+                moveSearch: document.getElementById("asset-move-search"),
+                moveBreadcrumb: document.getElementById("asset-move-breadcrumb"),
+                moveList: document.getElementById("asset-move-list"),
+                moveBack: document.getElementById("asset-move-back"),
+                moveSelectCurrent: document.getElementById("asset-move-select-current"),
+                moveFooterMeta: document.getElementById("asset-move-footer-meta"),
                 columnsContainer: shell.querySelector(".asset-list-table-tools"),
                 columnsTrigger: shell.querySelector(".asset-list-columns"),
                 columnsToggle: document.getElementById("asset-columns-toggle"),
@@ -2029,6 +2222,20 @@
                 search: "",
                 status: "",
                 location: "",
+                moveTargetId: null,
+                moveTargetPath: "",
+                moveSearch: "",
+                moveCurrentPath: [],
+                moveCurrentParentId: null,
+                moveCurrentItems: [],
+                moveLocationOptions: [],
+                moveTreeRoots: [],
+                moveTreeById: {},
+                moveTreeByPath: {},
+                moveOptionsLoaded: false,
+                moveOptionsLoading: false,
+                moveOptionsError: "",
+                moveSubmitting: false,
                 filters: [],
                 ordering: "-updated_at",
                 columns: loadColumns(),
@@ -2137,16 +2344,81 @@ let searchDebounceId = null;
                 document.addEventListener("keydown", function (event) {
                     if (event.key === "Escape") {
                         closeColumnsPanel();
+                        closeMovePopup();
                     }
                 });
 
-                elements.extraRecordButton.addEventListener("click", function () {
-                    if (state.mode === "inventory") {
-                        console.info("Raport różnic");
+                elements.moveTrigger.addEventListener("click", function () {
+                    if (state.moveSubmitting) {
+                        return;
+                    }
+
+                    const selectedAssetIds = getSelectedAssetIds();
+                    if (!selectedAssetIds.length) {
+                        window.alert("Zaznacz co najmniej jeden środek do przeniesienia.");
+                        return;
+                    }
+
+                    if (!state.moveTargetId) {
+                        openMovePopup();
+                        return;
+                    }
+
+                    submitBulkMove(selectedAssetIds);
+                });
+                elements.moveTarget.addEventListener("click", function () {
+                    openMovePopup();
+                });
+                elements.moveSearch.addEventListener("input", function (event) {
+                    state.moveSearch = event.target.value || "";
+                    renderMovePicker();
+                });
+                elements.movePopup.addEventListener("click", function (event) {
+                    if (event.target === elements.movePopup) {
+                        closeMovePopup();
                     }
                 });
+                elements.moveList.addEventListener("click", function (event) {
+                    const option = event.target.closest("[data-move-location]");
+                    if (!option) {
+                        return;
+                    }
+                    const mode = option.dataset.moveMode || "";
+                    if (mode === "search") {
+                        selectMoveLocation(option.dataset.moveLocationId, option.dataset.moveLocationPath);
+                        return;
+                    }
+                    const node = state.moveTreeById[String(option.dataset.moveLocationId)];
+                    if (!node) {
+                        return;
+                    }
+                    if (!node.children.length) {
+                        selectMoveLocation(node.id, node.path);
+                        return;
+                    }
+                    openMoveLevel(node.id);
+                });
+                elements.moveBreadcrumb.addEventListener("click", function (event) {
+                    const crumb = event.target.closest("[data-move-breadcrumb-id]");
+                    if (!crumb) {
+                        return;
+                    }
+                    openMoveLevel(crumb.dataset.moveBreadcrumbId);
+                });
+                elements.moveBack.addEventListener("click", function () {
+                    navigateMoveUp();
+                });
+                elements.moveSelectCurrent.addEventListener("click", function () {
+                    selectCurrentMoveLocation();
+                });
 
-                elements.managementEditButton.addEventListener("click", handleEditRecordAction);
+                if (elements.extraRecordButton) {
+                    elements.extraRecordButton.addEventListener("click", function () {
+                        if (state.mode === "inventory") {
+                            console.info("Raport różnic");
+                        }
+                    });
+                }
 
                 elements.managementDeleteButton.addEventListener("click", handleDeleteRecordAction);
 
@@ -2629,7 +2901,7 @@ let searchDebounceId = null;
                         }
 
                         if (column.key === "select") {
-                            td.innerHTML = '<input type="checkbox" aria-label="Zaznacz środek">';
+                            td.innerHTML = '<input type="checkbox" aria-label="Zaznacz środek" data-role="asset-select" data-asset-id="' + row.id + '">';
                         } else if (column.key === "name") {
                             const link = document.createElement("a");
                             link.href = buildDetailUrl(row.id);
@@ -2815,41 +3087,441 @@ let searchDebounceId = null;
             }
 
             function ensureInventoryToolbarActions() {
-                const inventoryActions = shell.querySelector('[data-role="inventory-actions"]');
-                if (!inventoryActions) {
+                elements.extraRecordField = null;
+                elements.extraRecordButton = null;
+            }
+
+            function renderMoveTarget() {
+                const label = state.moveTargetPath || "brak lokalizacji";
+                elements.moveTarget.textContent = label;
+                elements.moveTarget.title = label;
+            }
+
+            function getMoveSearchQuery() {
+                return (state.moveSearch || "").trim().toLocaleLowerCase();
+            }
+
+            function getMoveNodeLabel(nodeOrPath) {
+                if (!nodeOrPath) {
+                    return "";
+                }
+                const path = typeof nodeOrPath === "string" ? nodeOrPath.trim() : String(nodeOrPath.path || "").trim();
+                if (!path) {
+                    return "";
+                }
+                const parts = path.split(" / ");
+                return parts[parts.length - 1] || "";
+            }
+
+            function getMoveCurrentNode() {
+                if (!state.moveCurrentParentId) {
+                    return null;
+                }
+                return state.moveTreeById[String(state.moveCurrentParentId)] || null;
+            }
+
+            function buildMoveTree(locations) {
+                const byPath = {};
+                const byId = {};
+
+                locations.forEach(function (location) {
+                    const path = location.path.trim();
+                    const segments = path.split(" / ");
+                    const label = segments[segments.length - 1] || path;
+                    const parentPath = segments.length > 1 ? segments.slice(0, -1).join(" / ") : "";
+                    const node = {
+                        id: location.id,
+                        path: path,
+                        label: label,
+                        parentPath: parentPath,
+                        parentId: null,
+                        children: []
+                    };
+                    byPath[path] = node;
+                    byId[String(node.id)] = node;
+                });
+
+                Object.keys(byPath).forEach(function (path) {
+                    const node = byPath[path];
+                    if (node.parentPath && byPath[node.parentPath]) {
+                        node.parentId = byPath[node.parentPath].id;
+                        byPath[node.parentPath].children.push(node);
+                    }
+                });
+
+                Object.keys(byPath).forEach(function (path) {
+                    byPath[path].children.sort(function (left, right) {
+                        return left.label.localeCompare(right.label, "pl", { sensitivity: "base" }) || (left.id - right.id);
+                    });
+                });
+
+                const roots = Object.keys(byPath).map(function (path) {
+                    return byPath[path];
+                }).filter(function (node) {
+                    return !node.parentId;
+                }).sort(function (left, right) {
+                    return left.label.localeCompare(right.label, "pl", { sensitivity: "base" }) || (left.id - right.id);
+                });
+
+                state.moveTreeByPath = byPath;
+                state.moveTreeById = byId;
+                state.moveTreeRoots = roots;
+            }
+
+            function updateMoveCurrentItems() {
+                const currentNode = getMoveCurrentNode();
+                state.moveCurrentItems = currentNode ? currentNode.children.slice() : state.moveTreeRoots.slice();
+            }
+
+            function getMovePathIds(node) {
+                const ids = [];
+                let current = node;
+                while (current) {
+                    ids.push(current.id);
+                    current = current.parentId ? state.moveTreeById[String(current.parentId)] : null;
+                }
+                return ids.reverse();
+            }
+
+            function openMoveLevel(nodeId) {
+                const node = nodeId ? state.moveTreeById[String(nodeId)] : null;
+                if (!node) {
+                    state.moveCurrentParentId = null;
+                    state.moveCurrentPath = [];
+                    updateMoveCurrentItems();
+                    renderMovePicker();
                     return;
                 }
 
-                let extraField = document.getElementById("asset-extra-record-field");
-                let extraButton = document.getElementById("asset-extra-record");
-                if (!extraField || !extraButton) {
-                    extraField = document.createElement("div");
-                    extraField.id = "asset-extra-record-field";
-                    extraField.className = "asset-list-field is-action";
-                    extraField.hidden = true;
+                state.moveCurrentParentId = node.id;
+                state.moveCurrentPath = getMovePathIds(node);
+                updateMoveCurrentItems();
+                renderMovePicker();
+            }
 
-                    const extraLabel = document.createElement("label");
-                    extraLabel.className = "asset-list-field-label-placeholder";
-                    extraLabel.htmlFor = "asset-extra-record";
-                    extraLabel.setAttribute("aria-hidden", "true");
-                    extraLabel.textContent = "Raport różnic";
+            function navigateMoveUp() {
+                const currentNode = getMoveCurrentNode();
+                if (!currentNode || !currentNode.parentId) {
+                    openMoveLevel(null);
+                    return;
+                }
+                openMoveLevel(currentNode.parentId);
+            }
 
-                    extraButton = document.createElement("button");
-                    extraButton.id = "asset-extra-record";
-                    extraButton.type = "button";
-                    extraButton.className = "ui-btn ui-btn--secondary asset-toolbar-action";
-                    extraButton.textContent = "Raport różnic";
+            function getMoveSearchMatches() {
+                const query = getMoveSearchQuery();
+                if (!query) {
+                    return state.moveLocationOptions.slice();
+                }
+                return state.moveLocationOptions.filter(function (location) {
+                    return location.path.toLocaleLowerCase().indexOf(query) !== -1;
+                });
+            }
 
-                    extraField.appendChild(extraLabel);
-                    extraField.appendChild(extraButton);
+            function renderMoveBreadcrumb() {
+                elements.moveBreadcrumb.innerHTML = "";
+
+                const searchQuery = getMoveSearchQuery();
+                if (searchQuery) {
+                    const current = document.createElement("span");
+                    current.className = "asset-move-breadcrumb-current";
+                    current.textContent = "Wyniki wyszukiwania";
+                    elements.moveBreadcrumb.appendChild(current);
+                    return;
                 }
 
-                if (extraField.parentElement !== inventoryActions) {
-                    inventoryActions.appendChild(extraField);
+                if (!state.moveCurrentPath.length) {
+                    const current = document.createElement("span");
+                    current.className = "asset-move-breadcrumb-current";
+                    current.textContent = "Lokalizacje";
+                    elements.moveBreadcrumb.appendChild(current);
+                    return;
                 }
 
-                elements.extraRecordField = extraField;
-                elements.extraRecordButton = extraButton;
+                state.moveCurrentPath.forEach(function (nodeId, index) {
+                    const node = state.moveTreeById[String(nodeId)];
+                    if (!node) {
+                        return;
+                    }
+
+                    if (index > 0) {
+                        const separator = document.createElement("span");
+                        separator.className = "asset-move-breadcrumb-separator";
+                        separator.textContent = "/";
+                        elements.moveBreadcrumb.appendChild(separator);
+                    }
+
+                    if (index === state.moveCurrentPath.length - 1) {
+                        const current = document.createElement("span");
+                        current.className = "asset-move-breadcrumb-current";
+                        current.textContent = node.label;
+                        elements.moveBreadcrumb.appendChild(current);
+                        return;
+                    }
+
+                    const crumb = document.createElement("button");
+                    crumb.type = "button";
+                    crumb.className = "asset-move-breadcrumb-segment";
+                    crumb.dataset.moveBreadcrumbId = String(node.id);
+                    crumb.textContent = node.label;
+                    elements.moveBreadcrumb.appendChild(crumb);
+                });
+            }
+
+            function renderMoveFooter() {
+                const searchQuery = getMoveSearchQuery();
+                const currentNode = getMoveCurrentNode();
+
+                elements.moveBack.hidden = !currentNode || !currentNode.parentId || Boolean(searchQuery);
+                elements.moveSelectCurrent.disabled = !currentNode || Boolean(searchQuery);
+                elements.moveFooterMeta.textContent = searchQuery
+                    ? "Kliknięcie wyniku wyszukiwania od razu wybiera lokalizację."
+                    : currentNode
+                        ? currentNode.path
+                        : "Wybierz gałąź, aby przejść niżej lub zaznaczyć ją jako cel.";
+            }
+
+            function buildMoveOption(node, mode) {
+                const option = document.createElement("button");
+                option.type = "button";
+                option.className = "asset-move-option";
+                option.dataset.moveLocation = "1";
+                option.dataset.moveMode = mode;
+                option.dataset.moveLocationId = String(node.id);
+                option.dataset.moveLocationPath = node.path;
+                option.title = mode === "search" ? node.path : node.label;
+
+                const label = document.createElement("span");
+                label.className = "asset-move-option-label";
+                label.textContent = mode === "search" ? node.path : node.label;
+                option.appendChild(label);
+
+                const meta = document.createElement("span");
+                meta.className = node.children.length ? "asset-move-option-children" : "asset-move-option-meta";
+                meta.textContent = node.children.length
+                    ? "Dalej"
+                    : mode === "search"
+                        ? "Wybierz"
+                        : "Poziom końcowy";
+                option.appendChild(meta);
+
+                return option;
+            }
+
+            function renderMoveLevelList() {
+                elements.moveList.innerHTML = "";
+
+                if (!state.moveCurrentItems.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "asset-move-empty";
+                    empty.textContent = state.moveCurrentParentId
+                        ? "Brak dalszych podlokalizacji."
+                        : "Brak lokalizacji.";
+                    elements.moveList.appendChild(empty);
+                    return;
+                }
+
+                state.moveCurrentItems.forEach(function (node) {
+                    elements.moveList.appendChild(buildMoveOption(node, "tree"));
+                });
+            }
+
+            function renderMoveSearchResults() {
+                const matches = getMoveSearchMatches();
+                elements.moveList.innerHTML = "";
+
+                if (!matches.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "asset-move-empty";
+                    empty.textContent = state.moveOptionsLoaded
+                        ? "Brak pasujących lokalizacji."
+                        : "Brak lokalizacji.";
+                    elements.moveList.appendChild(empty);
+                    return;
+                }
+
+                matches.forEach(function (location) {
+                    const node = state.moveTreeById[String(location.id)];
+                    if (!node) {
+                        return;
+                    }
+                    elements.moveList.appendChild(buildMoveOption(node, "search"));
+                });
+            }
+
+            function renderMovePicker() {
+                renderMoveBreadcrumb();
+                renderMoveFooter();
+
+                if (state.moveOptionsLoading) {
+                    elements.moveList.innerHTML = "";
+                    const loading = document.createElement("div");
+                    loading.className = "asset-move-empty";
+                    loading.textContent = "Ładowanie lokalizacji...";
+                    elements.moveList.appendChild(loading);
+                    return;
+                }
+
+                if (state.moveOptionsError) {
+                    elements.moveList.innerHTML = "";
+                    const error = document.createElement("div");
+                    error.className = "asset-move-empty";
+                    error.textContent = state.moveOptionsError;
+                    elements.moveList.appendChild(error);
+                    return;
+                }
+
+                if (getMoveSearchQuery()) {
+                    renderMoveSearchResults();
+                    return;
+                }
+
+                renderMoveLevelList();
+            }
+
+            function loadMoveLocationOptions() {
+                if (state.moveOptionsLoaded || state.moveOptionsLoading) {
+                    return Promise.resolve();
+                }
+
+                state.moveOptionsLoading = true;
+                state.moveOptionsError = "";
+                renderMovePicker();
+
+                return fetch(locationOptionsApiUrl, {
+                    headers: {
+                        "Accept": "application/json",
+                    },
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("Nie udało się pobrać lokalizacji.");
+                        }
+                        return response.json();
+                    })
+                    .then(function (payload) {
+                        const locations = Array.isArray(payload.locations) ? payload.locations : [];
+                        state.moveLocationOptions = locations.filter(function (location) {
+                            return location
+                                && Number.isInteger(location.id)
+                                && location.id > 0
+                                && typeof location.path === "string"
+                                && location.path.trim();
+                        }).map(function (location) {
+                            return {
+                                id: location.id,
+                                path: location.path.trim(),
+                            };
+                        }).sort(function (left, right) {
+                            return left.path.localeCompare(right.path, "pl", { sensitivity: "base" }) || (left.id - right.id);
+                        });
+                        buildMoveTree(state.moveLocationOptions);
+                        state.moveOptionsLoaded = true;
+                        openMoveLevel(state.moveTargetId);
+                    })
+                    .catch(function () {
+                        state.moveOptionsError = "Nie udało się pobrać lokalizacji.";
+                    })
+                    .finally(function () {
+                        state.moveOptionsLoading = false;
+                        renderMovePicker();
+                    });
+            }
+
+            function openMovePopup() {
+                state.moveSearch = "";
+                elements.moveSearch.value = "";
+                openMoveLevel(state.moveTargetId);
+                elements.movePopup.hidden = false;
+                loadMoveLocationOptions().finally(function () {
+                    elements.moveSearch.focus();
+                });
+            }
+
+            function closeMovePopup() {
+                elements.movePopup.hidden = true;
+            }
+
+            function selectCurrentMoveLocation() {
+                const currentNode = getMoveCurrentNode();
+                if (!currentNode) {
+                    return;
+                }
+                selectMoveLocation(currentNode.id, currentNode.path);
+            }
+
+            function selectMoveLocation(id, path) {
+                state.moveTargetId = id ? Number(id) : null;
+                state.moveTargetPath = path || "";
+                renderMoveTarget();
+                closeMovePopup();
+            }
+
+            function getSelectedAssetIds() {
+                return Array.from(elements.tableBody.querySelectorAll('[data-role="asset-select"]:checked'))
+                    .map(function (input) {
+                        const rawId = input.dataset.assetId || "";
+                        const assetId = Number.parseInt(rawId, 10);
+                        return Number.isInteger(assetId) && assetId > 0 ? assetId : null;
+                    })
+                    .filter(Boolean);
+            }
+
+            function clearSelectedAssets() {
+                Array.from(elements.tableBody.querySelectorAll('[data-role="asset-select"]')).forEach(function (input) {
+                    input.checked = false;
+                });
+            }
+
+            function getCsrfToken() {
+                const cookie = document.cookie
+                    .split(";")
+                    .map(function (part) {
+                        return part.trim();
+                    })
+                    .find(function (part) {
+                        return part.indexOf("csrftoken=") === 0;
+                    });
+                return cookie ? decodeURIComponent(cookie.slice("csrftoken=".length)) : "";
+            }
+
+            function submitBulkMove(assetIds) {
+                state.moveSubmitting = true;
+                syncToolbarControls();
+
+                fetch(bulkMoveApiUrl, {
+                    method: "POST",
+                    headers: {
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCsrfToken(),
+                    },
+                    body: JSON.stringify({
+                        asset_ids: assetIds,
+                        target_location_id: state.moveTargetId,
+                    }),
+                })
+                    .then(function (response) {
+                        return response.json().catch(function () {
+                            return {};
+                        }).then(function (payload) {
+                            return { ok: response.ok, payload: payload };
+                        });
+                    })
+                    .then(function (result) {
+                        if (!result.ok || !result.payload.success) {
+                            throw new Error(result.payload.error || "Nie udało się przenieść środków.");
+                        }
+                        clearSelectedAssets();
+                        fetchAndRender();
+                    })
+                    .catch(function (error) {
+                        window.alert(error.message || "Nie udało się przenieść środków.");
+                    })
+                    .finally(function () {
+                        state.moveSubmitting = false;
+                        syncToolbarControls();
+                    });
             }
 
             function arrangeSearchAndFiltersLayout() {
@@ -2993,6 +3665,12 @@ let searchDebounceId = null;
             function syncManagementToolbar() {
                 elements.managementToolbar.hidden = state.mode !== "management";
                 elements.managementAddButton.hidden = state.mode !== "management";
+                elements.managementDeleteButton.hidden = state.mode !== "management";
+                elements.moveTrigger.hidden = state.mode !== "management";
+                elements.moveTarget.hidden = state.mode !== "management";
+                if (state.mode !== "management") {
+                    closeMovePopup();
+                }
             }
 
             function syncToolbarControls() {
@@ -3005,10 +3683,6 @@ let searchDebounceId = null;
                 elements.columnsToggle.className = "ui-btn ui-btn--secondary";
                 elements.columnsToggle.disabled = state.mode === "inventory";
 
-                elements.managementEditButton.textContent = "Edytuj";
-                elements.managementEditButton.className = "ui-btn ui-btn--secondary";
-                elements.managementEditButton.disabled = true;
-
                 elements.managementDeleteButton.textContent = "Usuń";
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
                 elements.managementDeleteButton.disabled = true;
@@ -3016,6 +3690,9 @@ let searchDebounceId = null;
                 elements.managementAddButton.textContent = "Dodaj środek";
                 elements.managementAddButton.className = "ui-btn ui-btn--primary";
                 elements.managementAddButton.disabled = false;
+                elements.moveTrigger.className = "ui-btn ui-btn--secondary";
+                elements.moveTrigger.disabled = state.moveSubmitting;
+                renderMoveTarget();
 
                 if (elements.extraRecordField) {
                     elements.extraRecordField.hidden = true;
