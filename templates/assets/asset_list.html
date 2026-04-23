@@ -464,6 +464,12 @@
             border-top: 1px solid rgba(15, 23, 42, 0.08);
             min-width: 0;
         }
+        .asset-table-tools-left {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
         .asset-list-table-tools-cluster {
             display: inline-flex;
             align-items: center;
@@ -516,14 +522,6 @@
         .asset-list-columns.is-open > button {
             border-color: rgba(15, 23, 42, 0.24);
             background: rgba(248, 250, 252, 0.96);
-        }
-        .asset-list-columns > button {
-            width: auto;
-            justify-content: center;
-            min-height: 34px;
-            padding: 0 12px;
-            font-size: 0.88rem;
-            letter-spacing: 0.03em;
         }
         .asset-toolbar-action {
             min-width: 0;
@@ -721,12 +719,6 @@
             align-items: center;
             justify-content: flex-end;
         }
-        .asset-list-filters-actions button {
-            min-height: 32px;
-            padding-left: 10px;
-            padding-right: 10px;
-            white-space: nowrap;
-        }
         .asset-filter-grid-head {
             display: grid;
             grid-template-columns: 220px 180px minmax(220px, 1fr) 36px;
@@ -876,11 +868,6 @@
             min-height: 34px;
             padding: 7px 10px;
             font-size: 0.86rem;
-        }
-        .asset-list-shell[data-mode="dense"] .asset-list-filters-actions button,
-        .asset-list-shell[data-mode="dense"] .asset-filter-remove {
-            height: 32px;
-            min-height: 32px;
         }
         .asset-list-shell[data-mode="dense"] .asset-filter-remove {
             width: 32px;
@@ -1433,12 +1420,8 @@
                 <div class="asset-layout-toolbar-actions">
                     <div id="asset-management-toolbar" class="asset-management-toolbar" hidden aria-label="Narzędzia zarządzania">
                         <div class="asset-management-toolbar-group">
-                            <button id="asset-management-edit" type="button" class="button-secondary" disabled>Edytuj</button>
-                            <button id="asset-management-delete" type="button" class="button-secondary" disabled>Usuń</button>
-                        </div>
-                        <div class="asset-management-toolbar-separator" aria-hidden="true"></div>
-                        <div class="asset-management-toolbar-group">
-                            <button id="asset-management-add" type="button" class="button-secondary">Dodaj środek</button>
+                            <button id="asset-management-edit" type="button" class="ui-btn ui-btn--secondary" disabled>Edytuj</button>
+                            <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" disabled>Usuń</button>
                         </div>
                     </div>
                     <div class="asset-inventory-actions" data-role="inventory-actions"></div>
@@ -1481,8 +1464,8 @@
                             <span>Usuń</span>
                         </div>
                         <div class="asset-list-filters-actions">
-                            <button id="asset-add-filter" type="button" class="button-secondary">+ Dodaj filtr</button>
-                            <button id="asset-clear-filters" type="button" class="button-secondary">Wyczyść</button>
+                            <button id="asset-add-filter" type="button" class="ui-btn ui-btn--primary">Dodaj filtr</button>
+                            <button id="asset-clear-filters" type="button" class="ui-btn ui-btn--secondary">Wyczyść</button>
                         </div>
                     </div>
                     <div id="asset-filter-list" class="asset-filter-list"></div>
@@ -1495,13 +1478,16 @@
                 </div>
 
                 <div class="asset-list-table-tools">
+                    <div class="asset-table-tools-left">
+                        <button id="asset-management-add" type="button" class="ui-btn ui-btn--primary" hidden>Dodaj środek</button>
+                    </div>
                     <div class="asset-list-table-tools-cluster">
                         <div class="asset-list-meta">
                             <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
                             <div id="asset-results-summary">Ładowanie danych...</div>
                         </div>
                         <div class="asset-list-columns">
-                            <button id="asset-columns-toggle" type="button" class="button-secondary" aria-expanded="false" aria-controls="asset-columns-panel">
+                            <button id="asset-columns-toggle" type="button" class="ui-btn ui-btn--secondary" aria-expanded="false" aria-controls="asset-columns-panel">
                                 Kolumny
                             </button>
                         </div>
@@ -1536,8 +1522,8 @@
                 <div class="asset-list-pagination">
                     <div id="asset-page-summary">Strona 1 z 1</div>
                     <div class="asset-list-pagination-controls">
-                        <button id="asset-prev-page" type="button" class="button-secondary">Poprzednia</button>
-                        <button id="asset-next-page" type="button" class="button-secondary">Następna</button>
+                        <button id="asset-prev-page" type="button" class="ui-btn ui-btn--secondary">Poprzednia</button>
+                        <button id="asset-next-page" type="button" class="ui-btn ui-btn--secondary">Następna</button>
                     </div>
                 </div>
             </div>
@@ -2352,7 +2338,7 @@ let searchDebounceId = null;
                 actionLabel.textContent = "Usuń";
                 const removeButton = document.createElement("button");
                 removeButton.type = "button";
-                removeButton.className = "button-secondary asset-filter-remove";
+                removeButton.className = "ui-btn ui-btn--danger asset-filter-remove";
                 removeButton.dataset.role = "remove-filter";
                 removeButton.setAttribute("aria-label", "Usuń filtr");
                 removeButton.title = "Usuń filtr";
@@ -2851,7 +2837,7 @@ let searchDebounceId = null;
                     extraButton = document.createElement("button");
                     extraButton.id = "asset-extra-record";
                     extraButton.type = "button";
-                    extraButton.className = "button-secondary asset-toolbar-action";
+                    extraButton.className = "ui-btn ui-btn--secondary asset-toolbar-action";
                     extraButton.textContent = "Raport różnic";
 
                     extraField.appendChild(extraLabel);
@@ -3006,6 +2992,7 @@ let searchDebounceId = null;
 
             function syncManagementToolbar() {
                 elements.managementToolbar.hidden = state.mode !== "management";
+                elements.managementAddButton.hidden = state.mode !== "management";
             }
 
             function syncToolbarControls() {
@@ -3015,19 +3002,19 @@ let searchDebounceId = null;
                 elements.columnsTrigger.hidden = state.mode === "inventory";
                 elements.columnsPanel.hidden = state.mode === "inventory" || elements.columnsPanel.hidden;
                 elements.columnsToggle.textContent = "Kolumny";
-                elements.columnsToggle.className = "button-secondary";
+                elements.columnsToggle.className = "ui-btn ui-btn--secondary";
                 elements.columnsToggle.disabled = state.mode === "inventory";
 
                 elements.managementEditButton.textContent = "Edytuj";
-                elements.managementEditButton.className = "button-secondary";
+                elements.managementEditButton.className = "ui-btn ui-btn--secondary";
                 elements.managementEditButton.disabled = true;
 
-                elements.managementDeleteButton.textContent = "Usu?";
-                elements.managementDeleteButton.className = "button-secondary";
+                elements.managementDeleteButton.textContent = "Usuń";
+                elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
                 elements.managementDeleteButton.disabled = true;
 
-                elements.managementAddButton.textContent = "Dodaj ?rodek";
-                elements.managementAddButton.className = "button-secondary";
+                elements.managementAddButton.textContent = "Dodaj środek";
+                elements.managementAddButton.className = "ui-btn ui-btn--primary";
                 elements.managementAddButton.disabled = false;
 
                 if (elements.extraRecordField) {

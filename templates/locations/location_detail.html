@@ -208,20 +208,11 @@
             <p class="location-detail-kicker">Szczegóły lokalizacji</p>
             <h1 class="location-detail-title">{{ location.name }}</h1>
             <div class="location-detail-actions">
-                <a class="ui-btn ui-btn--primary" href="{% url 'locations:create-child' location.id %}">
-                    <span class="ui-btn-icon">+</span>
-                    <span>Dodaj podlokalizację</span>
-                </a>
-                <a class="ui-btn ui-btn--secondary" href="{% url 'locations:update' location.id %}">
-                    <span class="ui-btn-icon">E</span>
-                    <span>Edytuj</span>
-                </a>
+                <a class="ui-btn ui-btn--primary" href="{% url 'locations:create-child' location.id %}">Dodaj podlokalizację</a>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'locations:update' location.id %}">Edytuj</a>
                 <form class="location-detail-delete-form" method="post" action="{% url 'locations:delete' location.id %}">
                     {% csrf_token %}
-                    <button class="ui-btn ui-btn--danger" type="submit">
-                        <span class="ui-btn-icon">x</span>
-                        <span>Usuń</span>
-                    </button>
+                    <button class="ui-btn ui-btn--danger" type="submit">Usuń</button>
                 </form>
             </div>
         </header>
@@ -280,10 +271,7 @@
                                         <span class="location-assets-status">{{ asset.location|default:"—" }}</span>
                                     </td>
                                     <td data-label="Akcje">
-                                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' asset.id %}">
-                                            <span class="ui-btn-icon">›</span>
-                                            <span>Otwórz</span>
-                                        </a>
+                                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' asset.id %}">Otwórz</a>
                                     </td>
                                 </tr>
                             {% endfor %}

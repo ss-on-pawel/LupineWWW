@@ -214,24 +214,6 @@
             margin-top: 24px;
             flex-wrap: wrap;
         }
-        button,
-        .button-secondary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 40px;
-            padding: 0 14px;
-            border: 1px solid rgba(10, 10, 10, 0.12);
-            background: rgba(255, 255, 255, 0.96);
-            color: var(--app-text);
-            font: inherit;
-            cursor: pointer;
-        }
-        button {
-            background: #111827;
-            border-color: #111827;
-            color: #fff;
-        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -256,57 +238,82 @@
             color: var(--app-muted);
         }
         .ui-btn {
+            --ui-btn-accent: #c1121f;
+            position: relative;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            min-height: 38px;
+            min-height: 40px;
             padding: 0 14px;
-            border: 1px solid transparent;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            border-radius: 0;
+            box-sizing: border-box;
+            appearance: none;
             font: inherit;
             font-size: 0.92rem;
             line-height: 1;
+            font-weight: 600;
+            text-decoration: none;
             white-space: nowrap;
             cursor: pointer;
+            transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
         }
-        .ui-btn-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: inherit;
-            font-family: var(--mono-font);
-            font-size: 0.9rem;
-            line-height: 1;
+        .ui-btn::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 1px;
+            background: var(--ui-btn-accent);
+            pointer-events: none;
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.15s ease;
+        }
+        .ui-btn:focus-visible {
+            outline: 2px solid rgba(193, 18, 31, 0.45);
+            outline-offset: 1px;
         }
         .ui-btn--primary {
-            border-color: rgba(15, 23, 42, 0.14);
             background: rgba(248, 250, 252, 0.96);
             color: #0f172a;
         }
-        .ui-btn--primary:hover,
-        .ui-btn--primary:focus-visible {
-            border-color: rgba(15, 23, 42, 0.2);
-            background: rgba(241, 245, 249, 0.98);
-        }
         .ui-btn--secondary {
-            border-color: rgba(15, 23, 42, 0.12);
             background: rgba(255, 255, 255, 0.96);
             color: #101828;
         }
-        .ui-btn--secondary:hover,
-        .ui-btn--secondary:focus-visible {
-            border-color: rgba(15, 23, 42, 0.2);
-            background: rgba(15, 23, 42, 0.04);
-        }
         .ui-btn--danger {
-            border-color: rgba(193, 18, 31, 0.16);
+            border-color: rgba(193, 18, 31, 0.22);
             background: rgba(193, 18, 31, 0.06);
             color: #9f1239;
         }
-        .ui-btn--danger:hover,
-        .ui-btn--danger:focus-visible {
+        .ui-btn:hover:not(:disabled):not([aria-disabled="true"]) {
+            border-color: rgba(15, 23, 42, 0.22);
+            background: rgba(241, 245, 249, 0.98);
+        }
+        .ui-btn:hover:not(:disabled):not([aria-disabled="true"])::after,
+        .ui-btn:focus-visible:not(:disabled):not([aria-disabled="true"])::after,
+        .ui-btn:active:not(:disabled):not([aria-disabled="true"])::after {
+            transform: scaleX(1);
+        }
+        .ui-btn:active:not(:disabled):not([aria-disabled="true"]) {
+            border-color: rgba(15, 23, 42, 0.26);
+            background: rgba(226, 232, 240, 0.94);
+            color: #0f172a;
+        }
+        .ui-btn--danger:hover:not(:disabled):not([aria-disabled="true"]),
+        .ui-btn--danger:active:not(:disabled):not([aria-disabled="true"]) {
             border-color: rgba(193, 18, 31, 0.24);
             background: rgba(193, 18, 31, 0.1);
+            color: #881337;
+        }
+        .ui-btn:disabled,
+        .ui-btn[aria-disabled="true"] {
+            border-color: rgba(15, 23, 42, 0.1);
+            background: rgba(248, 250, 252, 0.72);
+            color: #98a2b3;
+            cursor: not-allowed;
         }
         @media (max-width: 980px) {
             .app-header-inner {

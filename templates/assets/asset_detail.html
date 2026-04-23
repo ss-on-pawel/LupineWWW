@@ -94,27 +94,6 @@
             flex-wrap: nowrap;
             align-items: center;
         }
-        .asset-action {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 40px;
-            padding: 0 14px;
-            border: var(--asset-line);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.9);
-            font-family: "Inter", "Segoe UI", Arial, sans-serif;
-            font-size: 0.94rem;
-            font-weight: 600;
-            color: #101828;
-            text-decoration: none;
-            white-space: nowrap;
-        }
-        .asset-action:hover {
-            color: #0f4c81;
-            border-color: #b9c7d5;
-            text-decoration: none;
-        }
         .asset-summary {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -270,7 +249,7 @@
                 border-top: var(--asset-line);
                 border-left: 0;
             }
-            .asset-action {
+            .asset-actions .ui-btn {
                 flex: 1 1 auto;
             }
             .section-grid {
@@ -300,8 +279,8 @@
                 </div>
             </div>
             <div class="asset-actions">
-                <a class="asset-action" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
-                <a class="asset-action" href="/admin/assets/asset/{{ asset.id }}/change/">Edytuj</a>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+                <a class="ui-btn ui-btn--secondary" href="/admin/assets/asset/{{ asset.id }}/change/">Edytuj</a>
             </div>
         </div>
 
