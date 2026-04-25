@@ -237,7 +237,10 @@ def asset_bulk_move_api(request):
     except Location.DoesNotExist:
         return JsonResponse({"success": False, "error": "target_location_id does not point to an active location."}, status=400)
 
-    updated_count = Asset.objects.filter(id__in=set(asset_ids)).update(location=target_location.path)
+    updated_count = Asset.objects.filter(id__in=set(asset_ids)).update(
+        location=target_location.path,
+        location_fk=target_location,
+    )
 
     return JsonResponse(
         {

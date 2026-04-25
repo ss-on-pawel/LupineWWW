@@ -255,6 +255,8 @@ class AssetBulkMoveApiTests(TestCase):
         self.asset_two.refresh_from_db()
         self.assertEqual(self.asset_one.location, self.target_location.path)
         self.assertEqual(self.asset_two.location, self.target_location.path)
+        self.assertEqual(self.asset_one.location_fk, self.target_location)
+        self.assertEqual(self.asset_two.location_fk, self.target_location)
 
     def test_bulk_move_rejects_empty_asset_ids(self):
         response = self.client.post(
