@@ -124,6 +124,14 @@ class Asset(models.Model):
         db_index=True,
         verbose_name="Lokalizacja",
     )
+    location_fk = models.ForeignKey(
+        "locations.Location",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assets",
+        verbose_name="Lokalizacja relacyjna",
+    )
     room = models.CharField(max_length=60, blank=True, verbose_name="Pomieszczenie")
     responsible_person = models.ForeignKey(
         settings.AUTH_USER_MODEL,
