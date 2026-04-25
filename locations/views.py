@@ -6,6 +6,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from accounts.utils import get_accessible_location_ids
 from assets.models import Asset
 
 from .forms import LocationForm
@@ -165,7 +166,12 @@ def location_options_api(request):
     if request.method != "GET":
         return JsonResponse({"success": False, "error": "Method not allowed."}, status=405)
 
-    locations = list(Location.objects.select_related("parent").filter(is_active=True))
+    queryset = Location.objects.select_related("parent").filter(is_active=True)
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None:
+        queryset = queryset.filter(id__in=location_ids)
+
+    locations = list(queryset)
     rows = [
         {
             "id": location.id,
