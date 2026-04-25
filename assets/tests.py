@@ -301,7 +301,13 @@ class AssetBulkMoveApiTests(TestCase):
 
 
 class AssetListViewTests(TestCase):
-    def test_list_view_exposes_filters(self):
+    def test_list_view_redirects_anonymous_user_to_login(self):
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_list_view_exposes_filters_for_authenticated_user(self):
         Asset.objects.create(
             name="Monitor",
             inventory_number="MON-001",
@@ -309,6 +315,8 @@ class AssetListViewTests(TestCase):
             location="Warehouse",
             category="IT",
         )
+        user = User.objects.create_user(username="viewer", password="test-pass-123")
+        self.client.force_login(user)
 
         response = self.client.get(reverse("assets:list"))
 

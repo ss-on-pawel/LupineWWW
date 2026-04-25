@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "accounts.apps.AccountsConfig",
     "users",
     "assets",
     "locations",
@@ -89,6 +90,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "users.User"
+LOGIN_URL = "accounts:login"
+LOGIN_REDIRECT_URL = "assets:list"
+LOGOUT_REDIRECT_URL = "accounts:login"
 
 STATICFILES_DIRS = [
     BASE_DIR / "static",

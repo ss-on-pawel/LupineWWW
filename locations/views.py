@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import JsonResponse
 from django.http import Http404
@@ -11,6 +12,7 @@ from .forms import LocationForm
 from .models import Location
 
 
+@login_required
 def location_list(request):
     query = request.GET.get("q", "").strip()
     queryset = Location.objects.select_related("parent").order_by("name", "id")
@@ -51,6 +53,7 @@ def location_list(request):
     )
 
 
+@login_required
 def location_detail(request, id):
     location = _get_location(id)
     assigned_assets = list(
@@ -70,6 +73,7 @@ def location_detail(request, id):
     )
 
 
+@login_required
 def location_create(request):
     form = LocationForm(request.POST or None)
 
@@ -92,6 +96,7 @@ def location_create(request):
     )
 
 
+@login_required
 def location_create_child(request, id):
     parent_location = _get_location(id)
     form = LocationForm(request.POST or None, parent=parent_location)
@@ -115,6 +120,7 @@ def location_create_child(request, id):
     )
 
 
+@login_required
 def location_update(request, id):
     location = _get_location(id)
     form = LocationForm(request.POST or None, instance=location, parent=location.parent)
@@ -138,6 +144,7 @@ def location_update(request, id):
     )
 
 
+@login_required
 def location_delete(request, id):
     location = _get_location(id)
 

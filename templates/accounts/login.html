@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Logowanie | Lupine{% endblock %}
+
+{% block app_nav %}{% endblock %}
+
+{% block app_header_actions %}
+    <a class="ui-btn ui-btn--secondary" href="{% url 'admin:login' %}">Django Admin</a>
+{% endblock %}
+
+{% block content %}
+    <section class="card" style="max-width: 460px; margin: 32px auto 0;">
+        <h1 class="section-title">Logowanie</h1>
+        <p class="intro">Zaloguj sie, aby przejsc do ewidencji Lupine.</p>
+        {% if form.errors %}
+            <ul class="messages">
+                <li>Nieprawidlowy login lub haslo.</li>
+            </ul>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-grid">
+                <div class="form-field field-wide">
+                    <label for="{{ form.username.id_for_label }}">Login</label>
+                    {{ form.username }}
+                </div>
+                <div class="form-field field-wide">
+                    <label for="{{ form.password.id_for_label }}">Haslo</label>
+                    {{ form.password }}
+                </div>
+            </div>
+            {% if next %}
+                <input type="hidden" name="next" value="{{ next }}">
+            {% endif %}
+            <div class="actions">
+                <button class="ui-btn ui-btn--primary" type="submit">Zaloguj</button>
+            </div>
+        </form>
+    </section>
+{% endblock %}

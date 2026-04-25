@@ -1,6 +1,8 @@
 import json
 
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, Paginator
 from django.db.models import Q
 from django.http import JsonResponse
@@ -14,7 +16,7 @@ from .models import Asset
 from locations.models import Location
 
 
-class AssetListView(TemplateView):
+class AssetListView(LoginRequiredMixin, TemplateView):
     template_name = "assets/asset_list.html"
 
     def get_context_data(self, **kwargs):
@@ -31,7 +33,7 @@ class AssetListView(TemplateView):
         return context
 
 
-class AssetCreateView(CreateView):
+class AssetCreateView(LoginRequiredMixin, CreateView):
     model = Asset
     form_class = AssetForm
     template_name = "assets/asset_form.html"
@@ -47,6 +49,7 @@ class AssetCreateView(CreateView):
         return super().form_valid(form)
 
 
+@login_required
 def asset_detail(request, id):
     asset = get_object_or_404(Asset, pk=id)
     return render(
