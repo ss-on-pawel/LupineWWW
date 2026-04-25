@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
+from accounts.models import UserProfile
 from users.models import User
 from locations.models import Location
 
@@ -15,6 +16,11 @@ from .models import Asset
 class AssetListApiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.admin_user = User.objects.create_superuser(
+            username="api-admin",
+            email="api-admin@example.com",
+            password="test-pass-123",
+        )
         for index in range(1, 61):
             Asset.objects.create(
                 name=f"Asset {index:03d}",
@@ -44,6 +50,9 @@ class AssetListApiTests(TestCase):
             purchase_value=Decimal("2500"),
             purchase_date=date(2023, 3, 10),
         )
+
+    def setUp(self):
+        self.client.force_login(self.admin_user)
 
     def test_api_uses_default_pagination(self):
         response = self.client.get(reverse("assets:api-list"))
@@ -300,6 +309,145 @@ class AssetBulkMoveApiTests(TestCase):
 
         self.assertEqual(response.status_code, 405)
         self.assertEqual(response.json()["success"], False)
+
+
+class AssetListApiLocationAccessTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root_location = Location.objects.create(name="Warszawa")
+        cls.child_location = Location.objects.create(name="Budynek A", parent=cls.root_location)
+        cls.grandchild_location = Location.objects.create(name="Pietro 1", parent=cls.child_location)
+        cls.other_root_location = Location.objects.create(name="Krakow")
+        cls.other_child_location = Location.objects.create(name="Magazyn", parent=cls.other_root_location)
+
+        cls.asset_root = Asset.objects.create(
+            name="Asset Root",
+            inventory_number="ACL-001",
+            status=Asset.Status.IN_STOCK,
+            location="nieuzywane-root",
+            location_fk=cls.root_location,
+            category="IT",
+        )
+        cls.asset_child = Asset.objects.create(
+            name="Asset Child",
+            inventory_number="ACL-002",
+            status=Asset.Status.IN_STOCK,
+            location="nieuzywane-child",
+            location_fk=cls.child_location,
+            category="IT",
+        )
+        cls.asset_grandchild = Asset.objects.create(
+            name="Asset Grandchild",
+            inventory_number="ACL-003",
+            status=Asset.Status.IN_STOCK,
+            location="nieuzywane-grandchild",
+            location_fk=cls.grandchild_location,
+            category="IT",
+        )
+        cls.asset_outside = Asset.objects.create(
+            name="Asset Outside",
+            inventory_number="ACL-004",
+            status=Asset.Status.IN_STOCK,
+            location="nieuzywane-outside",
+            location_fk=cls.other_child_location,
+            category="IT",
+        )
+        cls.asset_without_fk = Asset.objects.create(
+            name="Asset Without FK",
+            inventory_number="ACL-005",
+            status=Asset.Status.IN_STOCK,
+            location="nieuzywane-null",
+            location_fk=None,
+            category="IT",
+        )
+
+        cls.admin_user = User.objects.create_superuser(
+            username="scope-admin",
+            email="scope-admin@example.com",
+            password="test-pass-123",
+        )
+        cls.manager_user = User.objects.create_user(username="scope-manager", password="test-pass-123")
+        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.save(update_fields=["role"])
+        cls.manager_user.profile.allowed_locations.add(cls.root_location)
+
+        cls.no_access_user = User.objects.create_user(username="scope-empty", password="test-pass-123")
+        cls.no_access_user.profile.role = UserProfile.Role.USER
+        cls.no_access_user.profile.save(update_fields=["role"])
+
+    def test_admin_sees_all_assets(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("assets:api-list"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        returned_ids = {row["id"] for row in payload["results"]}
+        self.assertEqual(payload["pagination"]["total_items"], 5)
+        self.assertSetEqual(
+            returned_ids,
+            {
+                self.asset_root.id,
+                self.asset_child.id,
+                self.asset_grandchild.id,
+                self.asset_outside.id,
+                self.asset_without_fk.id,
+            },
+        )
+
+    def test_user_sees_asset_from_allowed_location(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.get(reverse("assets:api-list"), {"search": "ACL-001"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["id"], self.asset_root.id)
+
+    def test_user_sees_asset_from_descendant_location(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.get(reverse("assets:api-list"), {"search": "ACL-003"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["id"], self.asset_grandchild.id)
+
+    def test_user_does_not_see_assets_outside_scope(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.get(reverse("assets:api-list"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        returned_ids = {row["id"] for row in payload["results"]}
+        self.assertEqual(payload["pagination"]["total_items"], 3)
+        self.assertIn(self.asset_root.id, returned_ids)
+        self.assertIn(self.asset_child.id, returned_ids)
+        self.assertIn(self.asset_grandchild.id, returned_ids)
+        self.assertNotIn(self.asset_outside.id, returned_ids)
+
+    def test_user_without_allowed_locations_sees_no_assets(self):
+        self.client.force_login(self.no_access_user)
+
+        response = self.client.get(reverse("assets:api-list"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["pagination"]["total_items"], 0)
+        self.assertEqual(payload["results"], [])
+
+    def test_user_does_not_see_assets_with_null_location_fk(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.get(reverse("assets:api-list"), {"search": "ACL-005"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["pagination"]["total_items"], 0)
+        self.assertEqual(payload["results"], [])
 
 
 class AssetListViewTests(TestCase):

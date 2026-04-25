@@ -1,5 +1,6 @@
 import json
 
+from accounts.utils import get_accessible_location_ids
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -108,6 +109,10 @@ def asset_list_api(request):
             "current_user__last_name",
         )
     )
+
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None:
+        queryset = queryset.filter(location_fk_id__in=location_ids)
 
     if search:
         queryset = queryset.filter(
