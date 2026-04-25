@@ -352,3 +352,69 @@ class SeedAssetsCommandTests(TestCase):
         self.assertTrue(Asset.objects.filter(inventory_number="INV-EXIST-001").exists())
         self.assertFalse(Asset.objects.filter(external_id__startswith="seed_asset:").exists())
         self.assertIn("Usunieto 10", stdout.getvalue())
+
+
+class BackfillAssetLocationFkCommandTests(TestCase):
+    def test_dry_run_reports_matches_without_saving(self):
+        root = Location.objects.create(name="Warszawa")
+        target = Location.objects.create(name="Magazyn A", parent=root)
+        matching_asset = Asset.objects.create(
+            name="Laptop Match",
+            inventory_number="BF-001",
+            status=Asset.Status.IN_STOCK,
+            location=target.path,
+            category="IT",
+        )
+        Asset.objects.create(
+            name="Laptop Empty",
+            inventory_number="BF-002",
+            status=Asset.Status.IN_STOCK,
+            location="",
+            category="IT",
+        )
+        Asset.objects.create(
+            name="Laptop Miss",
+            inventory_number="BF-003",
+            status=Asset.Status.IN_STOCK,
+            location="Nieistniejaca / Sciezka",
+            category="IT",
+        )
+
+        stdout = StringIO()
+        call_command("backfill_asset_location_fk", "--dry-run", stdout=stdout)
+
+        matching_asset.refresh_from_db()
+        self.assertIsNone(matching_asset.location_fk)
+        self.assertIn("Pewne dopasowania: 1", stdout.getvalue())
+        self.assertIn("Puste location: 1", stdout.getvalue())
+        self.assertIn("Bez dopasowania: 1", stdout.getvalue())
+        self.assertIn("Pozostaje bez location_fk: 2", stdout.getvalue())
+
+    def test_command_backfills_only_exact_path_matches(self):
+        root = Location.objects.create(name="Krakow")
+        target = Location.objects.create(name="Biuro", parent=root)
+        matching_asset = Asset.objects.create(
+            name="Laptop Match 2",
+            inventory_number="BF-010",
+            status=Asset.Status.IN_STOCK,
+            location=target.path,
+            category="IT",
+        )
+        unmatched_asset = Asset.objects.create(
+            name="Laptop Miss 2",
+            inventory_number="BF-011",
+            status=Asset.Status.IN_STOCK,
+            location="Krakow / Nieistniejace",
+            category="IT",
+        )
+
+        stdout = StringIO()
+        call_command("backfill_asset_location_fk", stdout=stdout)
+
+        matching_asset.refresh_from_db()
+        unmatched_asset.refresh_from_db()
+        self.assertEqual(matching_asset.location_fk_id, target.id)
+        self.assertIsNone(unmatched_asset.location_fk)
+        self.assertIn("Pewne dopasowania: 1", stdout.getvalue())
+        self.assertIn("Bez dopasowania: 1", stdout.getvalue())
+        self.assertIn("Pozostaje bez location_fk: 1", stdout.getvalue())
