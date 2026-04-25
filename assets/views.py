@@ -242,7 +242,23 @@ def asset_bulk_move_api(request):
     except Location.DoesNotExist:
         return JsonResponse({"success": False, "error": "target_location_id does not point to an active location."}, status=400)
 
-    updated_count = Asset.objects.filter(id__in=set(asset_ids)).update(
+    unique_asset_ids = set(asset_ids)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+
+    if accessible_location_ids is not None:
+        if target_location.id not in accessible_location_ids:
+            return JsonResponse({"success": False, "error": "Target location is outside your allowed scope."}, status=403)
+
+        movable_assets = Asset.objects.filter(
+            id__in=unique_asset_ids,
+            location_fk_id__in=accessible_location_ids,
+        )
+        if movable_assets.count() != len(unique_asset_ids):
+            return JsonResponse({"success": False, "error": "One or more assets are outside your allowed scope."}, status=403)
+    else:
+        movable_assets = Asset.objects.filter(id__in=unique_asset_ids)
+
+    updated_count = movable_assets.update(
         location=target_location.path,
         location_fk=target_location,
     )

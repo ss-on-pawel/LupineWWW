@@ -222,6 +222,11 @@ class AssetListApiTests(TestCase):
 class AssetBulkMoveApiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.admin_user = User.objects.create_superuser(
+            username="bulk-admin",
+            email="bulk-admin@example.com",
+            password="test-pass-123",
+        )
         cls.root_location = Location.objects.create(name="Warszawa")
         cls.target_location = Location.objects.create(name="Budynek A", parent=cls.root_location)
         cls.inactive_location = Location.objects.create(name="Archiwum", parent=cls.root_location, is_active=False)
@@ -230,6 +235,7 @@ class AssetBulkMoveApiTests(TestCase):
             inventory_number="BULK-001",
             status=Asset.Status.IN_STOCK,
             location="HQ",
+            location_fk=cls.root_location,
             category="IT",
         )
         cls.asset_two = Asset.objects.create(
@@ -237,8 +243,12 @@ class AssetBulkMoveApiTests(TestCase):
             inventory_number="BULK-002",
             status=Asset.Status.IN_USE,
             location="Branch",
+            location_fk=cls.root_location,
             category="IT",
         )
+
+    def setUp(self):
+        self.client.force_login(self.admin_user)
 
     def test_bulk_move_updates_assets(self):
         response = self.client.post(
@@ -309,6 +319,166 @@ class AssetBulkMoveApiTests(TestCase):
 
         self.assertEqual(response.status_code, 405)
         self.assertEqual(response.json()["success"], False)
+
+
+class AssetBulkMoveApiAccessTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root_location = Location.objects.create(name="Warszawa")
+        cls.child_location = Location.objects.create(name="Budynek A", parent=cls.root_location)
+        cls.grandchild_location = Location.objects.create(name="Pietro 1", parent=cls.child_location)
+        cls.other_root_location = Location.objects.create(name="Krakow")
+        cls.other_child_location = Location.objects.create(name="Magazyn", parent=cls.other_root_location)
+
+        cls.admin_user = User.objects.create_superuser(
+            username="bulk-scope-admin",
+            email="bulk-scope-admin@example.com",
+            password="test-pass-123",
+        )
+        cls.manager_user = User.objects.create_user(username="bulk-scope-manager", password="test-pass-123")
+        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.save(update_fields=["role"])
+        cls.manager_user.profile.allowed_locations.add(cls.root_location)
+
+        cls.asset_in_scope = Asset.objects.create(
+            name="In Scope",
+            inventory_number="BULK-S-001",
+            status=Asset.Status.IN_STOCK,
+            location=cls.child_location.path,
+            location_fk=cls.child_location,
+            category="IT",
+        )
+        cls.asset_in_scope_two = Asset.objects.create(
+            name="In Scope Two",
+            inventory_number="BULK-S-002",
+            status=Asset.Status.IN_STOCK,
+            location=cls.grandchild_location.path,
+            location_fk=cls.grandchild_location,
+            category="IT",
+        )
+        cls.asset_out_of_scope = Asset.objects.create(
+            name="Out of Scope",
+            inventory_number="BULK-S-003",
+            status=Asset.Status.IN_STOCK,
+            location=cls.other_child_location.path,
+            location_fk=cls.other_child_location,
+            category="IT",
+        )
+        cls.asset_without_fk = Asset.objects.create(
+            name="Without FK",
+            inventory_number="BULK-S-004",
+            status=Asset.Status.IN_STOCK,
+            location="Legacy only",
+            location_fk=None,
+            category="IT",
+        )
+
+    def test_admin_can_bulk_move_any_asset_to_any_location(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_out_of_scope.id],
+                "target_location_id": self.child_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.asset_out_of_scope.refresh_from_db()
+        self.assertEqual(self.asset_out_of_scope.location, self.child_location.path)
+        self.assertEqual(self.asset_out_of_scope.location_fk, self.child_location)
+
+    def test_user_can_move_asset_within_allowed_scope(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_in_scope.id],
+                "target_location_id": self.grandchild_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.asset_in_scope.refresh_from_db()
+        self.assertEqual(self.asset_in_scope.location, self.grandchild_location.path)
+        self.assertEqual(self.asset_in_scope.location_fk, self.grandchild_location)
+
+    def test_user_cannot_move_asset_outside_scope(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_out_of_scope.id],
+                "target_location_id": self.child_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["success"], False)
+        self.asset_out_of_scope.refresh_from_db()
+        self.assertEqual(self.asset_out_of_scope.location_fk, self.other_child_location)
+
+    def test_user_cannot_move_asset_to_location_outside_scope(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_in_scope.id],
+                "target_location_id": self.other_child_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["success"], False)
+        self.asset_in_scope.refresh_from_db()
+        self.assertEqual(self.asset_in_scope.location_fk, self.child_location)
+
+    def test_user_cannot_move_asset_with_null_location_fk(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_without_fk.id],
+                "target_location_id": self.child_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["success"], False)
+        self.asset_without_fk.refresh_from_db()
+        self.assertIsNone(self.asset_without_fk.location_fk)
+        self.assertEqual(self.asset_without_fk.location, "Legacy only")
+
+    def test_unauthorized_request_does_not_partially_move_assets(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_in_scope.id, self.asset_out_of_scope.id],
+                "target_location_id": self.grandchild_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["success"], False)
+        self.asset_in_scope.refresh_from_db()
+        self.asset_out_of_scope.refresh_from_db()
+        self.assertEqual(self.asset_in_scope.location, self.child_location.path)
+        self.assertEqual(self.asset_in_scope.location_fk, self.child_location)
+        self.assertEqual(self.asset_out_of_scope.location, self.other_child_location.path)
+        self.assertEqual(self.asset_out_of_scope.location_fk, self.other_child_location)
 
 
 class AssetListApiLocationAccessTests(TestCase):
