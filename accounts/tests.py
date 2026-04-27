@@ -13,6 +13,7 @@ class UserProfileSignalTests(TestCase):
         self.assertTrue(UserProfile.objects.filter(user=user).exists())
         self.assertEqual(user.profile.role, UserProfile.Role.USER)
         self.assertFalse(user.profile.can_approve_asset_changes)
+        self.assertFalse(user.profile.asset_changes_require_approval)
 
 
 class LoginViewTests(TestCase):

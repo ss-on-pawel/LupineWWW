@@ -412,6 +412,11 @@
             <nav class="app-nav" aria-label="Nawigacja główna">
                 {% block app_nav %}
                     <a class="{% if request.path == '/' or request.path|slice:':8' == '/assets/' %}is-active{% endif %}" href="{% url 'assets:list' %}">Ewidencja</a>
+                    {% if request.user.is_authenticated %}
+                        {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_approve_asset_changes %}
+                            <a class="{% if request.path|slice:':16' == '/assets/changes/' %}is-active{% endif %}" href="{% url 'assets:change-list' %}">Kolejka zmian</a>
+                        {% endif %}
+                    {% endif %}
                     <a class="{% if request.path|slice:':13' == '/lokalizacje/' %}is-active{% endif %}" href="{% url 'locations:list' %}">Lokalizacje</a>
                     <a href="#">Raporty</a>
                     <a href="#">Ustawienia</a>

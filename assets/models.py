@@ -215,3 +215,47 @@ class Asset(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.inventory_number})"
+
+
+class AssetChangeRequest(models.Model):
+    class Operation(models.TextChoices):
+        CREATE = "create", "Create"
+        UPDATE = "update", "Update"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="requested_asset_change_requests",
+    )
+    operation = models.CharField(max_length=20, choices=Operation.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    asset = models.ForeignKey(
+        Asset,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="change_requests",
+    )
+    payload = models.JSONField()
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_asset_change_requests",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.operation} request by {self.requested_by} ({self.status})"

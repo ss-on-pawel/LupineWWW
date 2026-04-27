@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Asset
+from .models import Asset, AssetChangeRequest
 
 
 @admin.register(Asset)
@@ -128,3 +128,29 @@ class AssetAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+
+@admin.register(AssetChangeRequest)
+class AssetChangeRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "operation",
+        "status",
+        "requested_by",
+        "asset",
+        "created_at",
+        "reviewed_by",
+        "reviewed_at",
+    )
+    list_filter = ("operation", "status", "created_at", "reviewed_at")
+    search_fields = (
+        "requested_by__username",
+        "requested_by__first_name",
+        "requested_by__last_name",
+        "asset__name",
+        "asset__inventory_number",
+        "review_comment",
+    )
+    autocomplete_fields = ("requested_by", "asset", "reviewed_by")
+    list_select_related = ("requested_by", "asset", "reviewed_by")
+    readonly_fields = ("created_at", "updated_at", "reviewed_at")
+    ordering = ("-created_at",)

@@ -33,6 +33,10 @@ class UserProfile(models.Model):
         default=False,
         verbose_name="Moze zatwierdzac zmiany srodkow",
     )
+    asset_changes_require_approval = models.BooleanField(
+        default=False,
+        verbose_name="Zmiany srodkow wymagaja akceptacji",
+    )
 
     class Meta:
         verbose_name = "Profil uzytkownika"

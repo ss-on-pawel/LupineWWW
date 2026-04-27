@@ -4,17 +4,63 @@ from accounts.utils import get_accessible_location_ids
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.paginator import EmptyPage, Paginator
 from django.db.models import Q
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
-from django.urls import reverse_lazy
-from django.views.generic import CreateView, TemplateView
+from django.http import Http404, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse, reverse_lazy
+from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
 from .forms import AssetForm
-from .models import Asset
+from .models import Asset, AssetChangeRequest
+from .services import serialize_asset_form_payload, user_requires_asset_change_approval
 from locations.models import Location
+
+
+def _user_can_review_asset_changes(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        profile = user.profile
+    except ObjectDoesNotExist:
+        return False
+    return profile.role == "admin" or profile.can_approve_asset_changes
+
+
+def _scope_asset_change_request_queryset(queryset, user):
+    accessible_location_ids = get_accessible_location_ids(user)
+    if accessible_location_ids is None:
+        return queryset
+    return queryset.filter(
+        operation=AssetChangeRequest.Operation.UPDATE,
+        asset__location_fk_id__in=accessible_location_ids,
+    )
+
+
+def get_asset_change_diff(change_request):
+    payload = change_request.payload if isinstance(change_request.payload, dict) else {}
+    if change_request.operation != AssetChangeRequest.Operation.UPDATE:
+        return []
+
+    current = payload.get("current")
+    proposed = payload.get("proposed")
+    if not isinstance(current, dict) or not isinstance(proposed, dict):
+        return []
+
+    field_names = sorted(set(current) | set(proposed))
+    return [
+        {
+            "field": field_name,
+            "current": current.get(field_name),
+            "proposed": proposed.get(field_name),
+        }
+        for field_name in field_names
+        if current.get(field_name) != proposed.get(field_name)
+    ]
 
 
 class AssetListView(LoginRequiredMixin, TemplateView):
@@ -34,6 +80,80 @@ class AssetListView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class AssetChangeRequestListView(LoginRequiredMixin, ListView):
+    model = AssetChangeRequest
+    template_name = "assets/asset_change_list.html"
+    context_object_name = "change_requests"
+    paginate_by = 50
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not _user_can_review_asset_changes(request.user):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = (
+            AssetChangeRequest.objects
+            .select_related("requested_by", "reviewed_by", "asset")
+            .order_by("-created_at")
+        )
+        queryset = _scope_asset_change_request_queryset(queryset, self.request.user)
+
+        status = self.request.GET.get("status", AssetChangeRequest.Status.PENDING)
+        if status != "all":
+            if status not in AssetChangeRequest.Status.values:
+                status = AssetChangeRequest.Status.PENDING
+            queryset = queryset.filter(status=status)
+
+        operation = self.request.GET.get("operation", "all")
+        if operation != "all":
+            if operation in AssetChangeRequest.Operation.values:
+                queryset = queryset.filter(operation=operation)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        status = self.request.GET.get("status", AssetChangeRequest.Status.PENDING)
+        if status != "all" and status not in AssetChangeRequest.Status.values:
+            status = AssetChangeRequest.Status.PENDING
+        operation = self.request.GET.get("operation", "all")
+        if operation != "all" and operation not in AssetChangeRequest.Operation.values:
+            operation = "all"
+        context["page_title"] = "Kolejka zmian"
+        context["selected_status"] = status
+        context["selected_operation"] = operation
+        context["status_options"] = AssetChangeRequest.Status.choices
+        context["operation_options"] = AssetChangeRequest.Operation.choices
+        return context
+
+
+class AssetChangeRequestDetailView(LoginRequiredMixin, DetailView):
+    model = AssetChangeRequest
+    template_name = "assets/asset_change_detail.html"
+    context_object_name = "change_request"
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not _user_can_review_asset_changes(request.user):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = AssetChangeRequest.objects.select_related("requested_by", "reviewed_by", "asset")
+        return _scope_asset_change_request_queryset(queryset, self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Szczegóły zmiany"
+        context["change_diff"] = get_asset_change_diff(self.object)
+        context["payload_items"] = (
+            self.object.payload.items()
+            if isinstance(self.object.payload, dict)
+            else []
+        )
+        return context
+
+
 class AssetCreateView(LoginRequiredMixin, CreateView):
     model = Asset
     form_class = AssetForm
@@ -46,13 +166,73 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
         return context
 
     def form_valid(self, form):
+        if user_requires_asset_change_approval(self.request.user):
+            AssetChangeRequest.objects.create(
+                requested_by=self.request.user,
+                operation=AssetChangeRequest.Operation.CREATE,
+                status=AssetChangeRequest.Status.PENDING,
+                asset=None,
+                payload=serialize_asset_form_payload(form.cleaned_data),
+            )
+            messages.success(self.request, "Zmiana została przekazana do akceptacji.")
+            return redirect(self.success_url)
+
         messages.success(self.request, "Składnik majątku został zapisany.")
         return super().form_valid(form)
+
+
+class AssetUpdateView(LoginRequiredMixin, UpdateView):
+    model = Asset
+    form_class = AssetForm
+    template_name = "assets/asset_form.html"
+    context_object_name = "asset"
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        accessible_location_ids = get_accessible_location_ids(self.request.user)
+        if accessible_location_ids is None:
+            return queryset
+        return queryset.filter(location_fk_id__in=accessible_location_ids)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Edytuj składnik majątku"
+        return context
+
+    def form_valid(self, form):
+        if user_requires_asset_change_approval(self.request.user):
+            current_asset = self.get_queryset().get(pk=self.object.pk)
+            current_payload = {
+                field_name: getattr(current_asset, field_name)
+                for field_name in form.fields
+            }
+            AssetChangeRequest.objects.create(
+                requested_by=self.request.user,
+                operation=AssetChangeRequest.Operation.UPDATE,
+                status=AssetChangeRequest.Status.PENDING,
+                asset=current_asset,
+                payload={
+                    "current": serialize_asset_form_payload(current_payload),
+                    "proposed": serialize_asset_form_payload(form.cleaned_data),
+                },
+            )
+            messages.success(self.request, "Zmiana została przekazana do akceptacji.")
+            return redirect(self.get_success_url())
+
+        messages.success(self.request, "Składnik majątku został zaktualizowany.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("assets:detail", kwargs={"id": self.object.pk})
 
 
 @login_required
 def asset_detail(request, id):
     asset = get_object_or_404(Asset, pk=id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
     return render(
         request,
         "assets/asset_detail.html",

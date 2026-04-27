@@ -280,7 +280,7 @@
             </div>
             <div class="asset-actions">
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
-                <a class="ui-btn ui-btn--secondary" href="/admin/assets/asset/{{ asset.id }}/change/">Edytuj</a>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
             </div>
         </div>
 

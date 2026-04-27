@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Szczegóły zmiany{% endblock %}
+
+{% block content %}
+    <section class="card">
+        <h2>Szczegóły zmiany #{{ change_request.id }}</h2>
+
+        <dl>
+            <dt>Operacja</dt>
+            <dd>{{ change_request.get_operation_display }}</dd>
+            <dt>Status</dt>
+            <dd>{{ change_request.get_status_display }}</dd>
+            <dt>Zgłosił</dt>
+            <dd>{{ change_request.requested_by }}</dd>
+            <dt>Utworzono</dt>
+            <dd>{{ change_request.created_at|date:"Y-m-d H:i" }}</dd>
+            <dt>Sprawdził</dt>
+            <dd>{% if change_request.reviewed_by %}{{ change_request.reviewed_by }}{% else %}-{% endif %}</dd>
+            <dt>Sprawdzono</dt>
+            <dd>{% if change_request.reviewed_at %}{{ change_request.reviewed_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</dd>
+            <dt>Komentarz</dt>
+            <dd>{% if change_request.review_comment %}{{ change_request.review_comment }}{% else %}-{% endif %}</dd>
+            <dt>Asset</dt>
+            <dd>{% if change_request.asset %}{{ change_request.asset }}{% else %}-{% endif %}</dd>
+        </dl>
+
+        {% if change_request.operation == "create" %}
+            <h3>Proponowany asset</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Pole</th>
+                        <th>Wartość</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for field, value in payload_items %}
+                        <tr>
+                            <td>{{ field }}</td>
+                            <td>{{ value|default_if_none:"-" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="2">Brak danych w payloadzie.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% elif change_request.operation == "update" %}
+            <h3>Różnice</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Pole</th>
+                        <th>Było</th>
+                        <th>Jest</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in change_diff %}
+                        <tr>
+                            <td>{{ row.field }}</td>
+                            <td>{{ row.current|default_if_none:"-" }}</td>
+                            <td>{{ row.proposed|default_if_none:"-" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="3">Brak różnic w payloadzie.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+
+        <div class="actions">
+            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:change-list' %}">Wróć do kolejki</a>
+        </div>
+    </section>
+{% endblock %}
