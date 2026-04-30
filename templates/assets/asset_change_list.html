@@ -36,9 +36,8 @@
                     <th>Status</th>
                     <th>Zgłosił</th>
                     <th>Asset</th>
+                    <th>Zmiany</th>
                     <th>Utworzono</th>
-                    <th>Sprawdził</th>
-                    <th>Sprawdzono</th>
                     <th>Opis</th>
                 </tr>
             </thead>
@@ -50,9 +49,21 @@
                         <td>{{ request.get_status_display }}</td>
                         <td>{{ request.requested_by }}</td>
                         <td>{% if request.asset %}{{ request.asset }}{% else %}-{% endif %}</td>
+                        <td>
+                            {% if request.change_list_summary.create %}
+                                Nowy składnik
+                            {% elif request.change_list_summary.rows %}
+                                {% for row in request.change_list_summary.rows %}
+                                    <div>{{ row.label }}: {{ row.current }} → {{ row.proposed }}</div>
+                                {% endfor %}
+                                {% if request.change_list_summary.remaining_count %}
+                                    <div>+ {{ request.change_list_summary.remaining_count }} innych zmian</div>
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td>{{ request.created_at|date:"Y-m-d H:i" }}</td>
-                        <td>{% if request.reviewed_by %}{{ request.reviewed_by }}{% else %}-{% endif %}</td>
-                        <td>{% if request.reviewed_at %}{{ request.reviewed_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
                         <td>
                             {% if request.operation == "create" %}
                                 {{ request.payload.name|default:"-" }}{% if request.payload.inventory_number %} / {{ request.payload.inventory_number }}{% endif %}
@@ -65,7 +76,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="9">Brak zmian do wyświetlenia.</td>
+                        <td colspan="8">Brak zmian do wyświetlenia.</td>
                     </tr>
                 {% endfor %}
             </tbody>

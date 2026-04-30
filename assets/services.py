@@ -21,9 +21,6 @@ def user_requires_asset_change_approval(user) -> bool:
     if profile.pk is None:
         return True
 
-    if profile.role == "admin":
-        return False
-
     if profile.can_approve_asset_changes:
         return False
 
@@ -164,12 +161,7 @@ def _reviewer_has_global_asset_approval_access(reviewer):
     if getattr(reviewer, "is_superuser", False):
         return True
 
-    try:
-        profile = reviewer.profile
-    except ObjectDoesNotExist:
-        return False
-
-    return profile.pk is not None and profile.role == "admin"
+    return False
 
 
 def _reviewer_can_approve_asset_changes(reviewer):

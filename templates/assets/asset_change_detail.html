@@ -49,7 +49,7 @@
             </table>
         {% elif change_request.operation == "update" %}
             <h3>Różnice</h3>
-            <table>
+            <table class="asset-change-diff-table">
                 <thead>
                     <tr>
                         <th>Pole</th>
@@ -74,6 +74,21 @@
         {% endif %}
 
         <div class="actions">
+            {% if object.status == "pending" %}
+                <div class="asset-change-actions">
+                    <form class="asset-change-approve-form" method="post" action="{% url 'assets:change-approve' object.pk %}">
+                        {% csrf_token %}
+                        <button class="ui-btn" type="submit">Zatwierdź</button>
+                    </form>
+
+                    <form class="asset-change-reject-form" method="post" action="{% url 'assets:change-reject' object.pk %}">
+                        {% csrf_token %}
+                        <label for="asset-change-reject-comment">Komentarz do odrzucenia</label>
+                        <textarea id="asset-change-reject-comment" name="comment"></textarea>
+                        <button class="ui-btn ui-btn--secondary" type="submit">Odrzuć</button>
+                    </form>
+                </div>
+            {% endif %}
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:change-list' %}">Wróć do kolejki</a>
         </div>
     </section>

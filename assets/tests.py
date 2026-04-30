@@ -4,14 +4,16 @@ from io import StringIO
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
+from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from accounts.models import UserProfile
 from users.models import User
 from locations.models import Location
 
+from .forms import AssetForm
 from .models import Asset, AssetChangeRequest
 from .services import (
     approve_asset_change_request,
@@ -20,7 +22,7 @@ from .services import (
     serialize_asset_form_payload,
     user_requires_asset_change_approval,
 )
-from .views import AssetChangeRequestListView
+from .views import AssetChangeRequestListView, _user_can_review_asset_changes
 
 
 class UserRequiresAssetChangeApprovalTests(TestCase):
@@ -33,10 +35,18 @@ class UserRequiresAssetChangeApprovalTests(TestCase):
 
         self.assertFalse(user_requires_asset_change_approval(user))
 
-    def test_admin_role_does_not_require_approval(self):
+    def test_admin_role_with_approval_enabled_requires_approval(self):
         user = User.objects.create_user(username="approval-admin", password="test-pass-123")
         user.profile.role = UserProfile.Role.ADMIN
         user.profile.asset_changes_require_approval = True
+        user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+
+        self.assertTrue(user_requires_asset_change_approval(user))
+
+    def test_admin_role_with_approval_disabled_does_not_require_approval(self):
+        user = User.objects.create_user(username="approval-admin-disabled", password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.asset_changes_require_approval = False
         user.profile.save(update_fields=["role", "asset_changes_require_approval"])
 
         self.assertFalse(user_requires_asset_change_approval(user))
@@ -69,6 +79,31 @@ class UserRequiresAssetChangeApprovalTests(TestCase):
 
     def test_anonymous_user_requires_approval(self):
         self.assertTrue(user_requires_asset_change_approval(AnonymousUser()))
+
+
+class UserCanReviewAssetChangesTests(TestCase):
+    def test_superuser_can_review(self):
+        user = User.objects.create_superuser(
+            username="review-superuser",
+            email="review-superuser@example.com",
+            password="test-pass-123",
+        )
+
+        self.assertTrue(_user_can_review_asset_changes(user))
+
+    def test_approver_can_review(self):
+        user = User.objects.create_user(username="review-approver", password="test-pass-123")
+        user.profile.can_approve_asset_changes = True
+        user.profile.save(update_fields=["can_approve_asset_changes"])
+
+        self.assertTrue(_user_can_review_asset_changes(user))
+
+    def test_admin_role_without_approver_flag_cannot_review(self):
+        user = User.objects.create_user(username="review-admin", password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.save(update_fields=["role"])
+
+        self.assertFalse(_user_can_review_asset_changes(user))
 
 
 class SerializeAssetFormPayloadTests(TestCase):
@@ -305,7 +340,7 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         self.assertIsNotNone(change_request.reviewed_at)
         self.assertEqual(change_request.asset, asset)
 
-    def test_admin_role_can_approve_pending_create_and_create_asset(self):
+    def test_admin_role_without_approver_flag_cannot_approve_pending_create(self):
         requester = User.objects.create_user(username="approve-create-admin-requester", password="test-pass-123")
         reviewer = User.objects.create_user(username="approve-create-admin", password="test-pass-123")
         reviewer.profile.role = UserProfile.Role.ADMIN
@@ -315,12 +350,13 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
             payload=self._create_payload(inventory_number="APPROVE-CREATE-ADMIN-001"),
         )
 
-        asset = approve_asset_change_request(change_request, reviewer)
+        with self.assertRaises(PermissionDenied):
+            approve_asset_change_request(change_request, reviewer)
 
         change_request.refresh_from_db()
-        self.assertEqual(asset.inventory_number, "APPROVE-CREATE-ADMIN-001")
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
-        self.assertEqual(change_request.asset, asset)
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertIsNone(change_request.asset)
+        self.assertFalse(Asset.objects.filter(inventory_number="APPROVE-CREATE-ADMIN-001").exists())
 
     def test_approver_without_global_access_cannot_approve_create_without_location_fk(self):
         requester = User.objects.create_user(username="approve-create-scope-requester", password="test-pass-123")
@@ -596,7 +632,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         self.assertEqual(change_request.reviewed_by, reviewer)
         self.assertIsNotNone(change_request.reviewed_at)
 
-    def test_admin_role_can_approve_update(self):
+    def test_admin_role_without_approver_flag_cannot_approve_update(self):
         location, _ = self._create_location_tree()
         requester = User.objects.create_user(username="approve-update-admin-requester", password="test-pass-123")
         reviewer = User.objects.create_user(username="approve-update-admin", password="test-pass-123")
@@ -605,11 +641,13 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         asset = self._create_asset(inventory_number="APPROVE-UPDATE-ADMIN-001", location_obj=location)
         change_request = self._update_request(requester, asset)
 
-        updated_asset = approve_asset_change_request(change_request, reviewer)
+        with self.assertRaises(PermissionDenied):
+            approve_asset_change_request(change_request, reviewer)
 
-        self.assertEqual(updated_asset.name, "Approved Update")
+        asset.refresh_from_db()
         change_request.refresh_from_db()
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(asset.name, "Original Asset")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
 
     def test_scoped_approver_can_approve_update_in_scope(self):
         location, _ = self._create_location_tree()
@@ -841,19 +879,20 @@ class RejectAssetChangeRequestTests(TestCase):
         self.assertEqual(change_request.review_comment, "Not enough data")
         self.assertIsNone(change_request.asset)
 
-    def test_admin_role_can_reject_pending_create(self):
+    def test_admin_role_without_approver_flag_cannot_reject_pending_create(self):
         requester = User.objects.create_user(username="reject-admin-requester", password="test-pass-123")
         reviewer = User.objects.create_user(username="reject-admin", password="test-pass-123")
         reviewer.profile.role = UserProfile.Role.ADMIN
         reviewer.profile.save(update_fields=["role"])
         change_request = self._create_request(requester)
 
-        reject_asset_change_request(change_request, reviewer, comment="Rejected by admin")
+        with self.assertRaises(PermissionDenied):
+            reject_asset_change_request(change_request, reviewer, comment="Rejected by admin")
 
         change_request.refresh_from_db()
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
-        self.assertEqual(change_request.reviewed_by, reviewer)
-        self.assertEqual(change_request.review_comment, "Rejected by admin")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertIsNone(change_request.reviewed_by)
+        self.assertEqual(change_request.review_comment, "")
 
     def test_approver_can_reject_pending_create(self):
         requester = User.objects.create_user(username="reject-approver-requester", password="test-pass-123")
@@ -1066,13 +1105,43 @@ class AssetChangeRequestListViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("accounts:login")))
 
-    def test_regular_user_gets_403(self):
+    def test_regular_user_sees_only_own_requests(self):
         user = User.objects.create_user(username="queue-regular-user", password="test-pass-123")
+        other_user = User.objects.create_user(username="queue-other-user", password="test-pass-123")
+        self._create_change_request(user, AssetChangeRequest.Operation.CREATE, "QUEUE-OWN-REQUEST")
+        self._create_change_request(other_user, AssetChangeRequest.Operation.CREATE, "QUEUE-OTHER-REQUEST")
         self.client.force_login(user)
 
         response = self.client.get(reverse("assets:change-list"))
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "QUEUE-OWN-REQUEST")
+        self.assertNotContains(response, "QUEUE-OTHER-REQUEST")
+
+    def test_regular_user_status_filters_apply_to_own_requests(self):
+        user = User.objects.create_user(username="queue-regular-filter-user", password="test-pass-123")
+        other_user = User.objects.create_user(username="queue-regular-filter-other", password="test-pass-123")
+        self._create_change_request(user, AssetChangeRequest.Operation.CREATE, "QUEUE-OWN-PENDING")
+        self._create_change_request(
+            user,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-OWN-APPROVED",
+            status=AssetChangeRequest.Status.APPROVED,
+        )
+        self._create_change_request(
+            other_user,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-OTHER-APPROVED",
+            status=AssetChangeRequest.Status.APPROVED,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": AssetChangeRequest.Status.APPROVED})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "QUEUE-OWN-APPROVED")
+        self.assertNotContains(response, "QUEUE-OWN-PENDING")
+        self.assertNotContains(response, "QUEUE-OTHER-APPROVED")
 
     def test_superuser_sees_pending_create_and_update_requests(self):
         requester = User.objects.create_user(username="queue-super-requester", password="test-pass-123")
@@ -1099,7 +1168,7 @@ class AssetChangeRequestListViewTests(TestCase):
         self.assertContains(response, "QUEUE-SUPER-CREATE-001")
         self.assertContains(response, "QUEUE-SUPER-UPD-001")
 
-    def test_admin_role_sees_pending_create_and_update_requests(self):
+    def test_admin_role_without_approver_flag_sees_only_own_change_list(self):
         requester = User.objects.create_user(username="queue-admin-requester", password="test-pass-123")
         reviewer = User.objects.create_user(username="queue-admin", password="test-pass-123")
         reviewer.profile.role = UserProfile.Role.ADMIN
@@ -1114,13 +1183,15 @@ class AssetChangeRequestListViewTests(TestCase):
             asset=asset,
             payload={"current": {"name": asset.name}, "proposed": {"name": "QUEUE-ADMIN-UPDATE-001"}},
         )
+        self._create_change_request(reviewer, AssetChangeRequest.Operation.CREATE, "QUEUE-ADMIN-OWN-REQUEST")
         self.client.force_login(reviewer)
 
         response = self.client.get(reverse("assets:change-list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "QUEUE-ADMIN-CREATE-001")
-        self.assertContains(response, "QUEUE-ADMIN-UPD-001")
+        self.assertContains(response, "QUEUE-ADMIN-OWN-REQUEST")
+        self.assertNotContains(response, "QUEUE-ADMIN-CREATE-001")
+        self.assertNotContains(response, "QUEUE-ADMIN-UPD-001")
 
     def test_scoped_approver_sees_only_update_requests_in_scope(self):
         requester = User.objects.create_user(username="queue-scope-requester", password="test-pass-123")
@@ -1236,6 +1307,105 @@ class AssetChangeRequestListViewTests(TestCase):
         self.assertContains(update_response, "QUEUE-FILTER-UPD-ASSET")
         self.assertNotContains(update_response, "QUEUE-FILTER-CREATE")
 
+    def test_change_list_shows_changes_column_and_hides_review_columns(self):
+        requester = User.objects.create_user(username="queue-columns-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-columns-superuser",
+            email="queue-columns-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(requester, AssetChangeRequest.Operation.CREATE, "QUEUE-COLUMNS-CREATE")
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<th>Zmiany</th>", html=True)
+        self.assertNotContains(response, "<th>Sprawdził</th>", html=True)
+        self.assertNotContains(response, "<th>Sprawdzono</th>", html=True)
+
+    def test_change_list_shows_update_changed_fields(self):
+        requester = User.objects.create_user(username="queue-diff-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-diff-superuser",
+            email="queue-diff-superuser@example.com",
+            password="test-pass-123",
+        )
+        location, _ = self._create_location_tree()
+        asset = self._create_asset("QUEUE-DIFF-ASSET", location)
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.UPDATE,
+            "QUEUE-DIFF-UPDATE",
+            asset=asset,
+            payload={
+                "current": {"name": "Old name", "inventory_number": "OLD-001"},
+                "proposed": {"name": "New name", "inventory_number": "NEW-001"},
+            },
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        self.assertContains(response, "Nazwa: Old name → New name")
+        self.assertContains(response, "Nr inw.: OLD-001 → NEW-001")
+
+    def test_change_list_limits_update_changes_to_three_fields(self):
+        requester = User.objects.create_user(username="queue-diff-limit-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-diff-limit-superuser",
+            email="queue-diff-limit-superuser@example.com",
+            password="test-pass-123",
+        )
+        location, _ = self._create_location_tree()
+        asset = self._create_asset("QUEUE-DIFF-LIMIT-ASSET", location)
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.UPDATE,
+            "QUEUE-DIFF-LIMIT-UPDATE",
+            asset=asset,
+            payload={
+                "current": {
+                    "name": "Old name",
+                    "inventory_number": "OLD-001",
+                    "value": 1000,
+                    "location": "Old location",
+                    "status": "in_stock",
+                },
+                "proposed": {
+                    "name": "New name",
+                    "inventory_number": "NEW-001",
+                    "value": 1200,
+                    "location": "New location",
+                    "status": "in_use",
+                },
+            },
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        self.assertContains(response, "Nazwa: Old name → New name")
+        self.assertContains(response, "Nr inw.: OLD-001 → NEW-001")
+        self.assertContains(response, "Wartość: 1000 → 1200")
+        self.assertContains(response, "+ 2 innych zmian")
+        self.assertNotContains(response, "Lokalizacja: Old location → New location")
+        self.assertNotContains(response, "Status: in_stock → in_use")
+
+    def test_change_list_shows_create_summary(self):
+        requester = User.objects.create_user(username="queue-create-summary-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-create-summary-superuser",
+            email="queue-create-summary-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(requester, AssetChangeRequest.Operation.CREATE, "QUEUE-CREATE-SUMMARY")
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        self.assertContains(response, "Nowy składnik")
+
     def test_change_list_paginate_by_50(self):
         self.assertEqual(AssetChangeRequestListView.paginate_by, 50)
 
@@ -1320,10 +1490,11 @@ class AssetChangeRequestDetailViewTests(TestCase):
         response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "asset-change-diff-table")
         self.assertContains(response, "Detail Create Asset")
         self.assertContains(response, "DETAIL-CREATE-SUPER-001")
 
-    def test_admin_role_sees_create_request_detail(self):
+    def test_admin_role_without_approver_flag_gets_403_for_change_detail(self):
         requester = User.objects.create_user(username="change-detail-admin-requester", password="test-pass-123")
         reviewer = User.objects.create_user(username="change-detail-admin", password="test-pass-123")
         reviewer.profile.role = UserProfile.Role.ADMIN
@@ -1337,8 +1508,7 @@ class AssetChangeRequestDetailViewTests(TestCase):
 
         response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "DETAIL-CREATE-ADMIN-001")
+        self.assertEqual(response.status_code, 403)
 
     def test_scoped_approver_sees_update_request_in_scope(self):
         requester = User.objects.create_user(username="change-detail-scope-requester", password="test-pass-123")
@@ -1433,6 +1603,10 @@ class AssetChangeRequestDetailViewTests(TestCase):
 
         response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
 
+        self.assertContains(response, 'class="asset-change-diff-table"')
+        self.assertContains(response, "<th>Pole</th>", html=True)
+        self.assertContains(response, "<th>Było</th>", html=True)
+        self.assertContains(response, "<th>Jest</th>", html=True)
         self.assertContains(response, "Old Name")
         self.assertContains(response, "New Name")
         self.assertContains(response, Asset.Status.IN_STOCK)
@@ -1484,6 +1658,388 @@ class AssetChangeRequestDetailViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Brak różnic w payloadzie.")
+
+    def test_pending_detail_shows_approve_form_with_action_url(self):
+        requester = User.objects.create_user(username="change-detail-approve-form-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="change-detail-approve-form-superuser",
+            email="change-detail-approve-form-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "DETAIL-APPROVE-FORM-001",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+
+        approve_url = reverse("assets:change-approve", kwargs={"pk": change_request.pk})
+        self.assertContains(response, 'class="asset-change-approve-form"')
+        self.assertContains(response, f'action="{approve_url}"')
+        self.assertContains(response, "Zatwierdź")
+
+    def test_pending_detail_shows_reject_form_with_action_url_and_comment_field(self):
+        requester = User.objects.create_user(username="change-detail-reject-form-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="change-detail-reject-form-superuser",
+            email="change-detail-reject-form-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "DETAIL-REJECT-FORM-001",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+
+        reject_url = reverse("assets:change-reject", kwargs={"pk": change_request.pk})
+        self.assertContains(response, 'class="asset-change-reject-form"')
+        self.assertContains(response, f'action="{reject_url}"')
+        self.assertContains(response, 'name="comment"')
+        self.assertContains(response, "Komentarz do odrzucenia")
+        self.assertContains(response, "Odrzuć")
+
+    def test_approved_detail_does_not_show_approval_forms(self):
+        requester = User.objects.create_user(username="change-detail-approved-form-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="change-detail-approved-form-superuser",
+            email="change-detail-approved-form-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "DETAIL-APPROVED-NO-FORMS-001",
+            status=AssetChangeRequest.Status.APPROVED,
+            reviewed_by=reviewer,
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+
+        self.assertNotContains(response, "asset-change-approve-form")
+        self.assertNotContains(response, "asset-change-reject-form")
+        self.assertNotContains(response, reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+        self.assertNotContains(response, reverse("assets:change-reject", kwargs={"pk": change_request.pk}))
+        self.assertNotContains(response, 'name="comment"')
+
+    def test_rejected_detail_does_not_show_approval_forms(self):
+        requester = User.objects.create_user(username="change-detail-rejected-form-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="change-detail-rejected-form-superuser",
+            email="change-detail-rejected-form-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "DETAIL-REJECTED-NO-FORMS-001",
+            status=AssetChangeRequest.Status.REJECTED,
+            reviewed_by=reviewer,
+            review_comment="Already rejected",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+
+        self.assertNotContains(response, "asset-change-approve-form")
+        self.assertNotContains(response, "asset-change-reject-form")
+        self.assertNotContains(response, reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+        self.assertNotContains(response, reverse("assets:change-reject", kwargs={"pk": change_request.pk}))
+        self.assertNotContains(response, 'name="comment"')
+
+
+class AssetChangeRequestPostWorkflowViewTests(TestCase):
+    def _create_location_tree(self):
+        root_location = Location.objects.create(name="Post Workflow Warszawa")
+        allowed_location = Location.objects.create(name="Biuro", parent=root_location)
+        outside_root = Location.objects.create(name="Post Workflow Krakow")
+        outside_location = Location.objects.create(name="Magazyn", parent=outside_root)
+        return allowed_location, outside_location
+
+    def _admin_user(self, username):
+        user = User.objects.create_user(username=username, password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.save(update_fields=["role"])
+        return user
+
+    def _superuser(self, username):
+        return User.objects.create_superuser(
+            username=username,
+            email=f"{username}@example.com",
+            password="test-pass-123",
+        )
+
+    def _scoped_approver(self, username, location):
+        user = User.objects.create_user(username=username, password="test-pass-123")
+        user.profile.can_approve_asset_changes = True
+        user.profile.save(update_fields=["can_approve_asset_changes"])
+        user.profile.allowed_locations.add(location)
+        return user
+
+    def _create_asset(self, inventory_number, location):
+        return Asset.objects.create(
+            name=f"Post Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=Asset.AssetType.FIXED_ASSET,
+            category="IT",
+            location=location.path if location else "Legacy only",
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+            technical_condition=Asset.TechnicalCondition.GOOD,
+            is_active=True,
+        )
+
+    def _asset_payload(self, asset):
+        return serialize_asset_form_payload(
+            {
+                field_name: getattr(asset, field_name)
+                for field_name in AssetForm.Meta.fields
+            }
+        )
+
+    def _create_payload(self, inventory_number):
+        return {
+            "name": f"Post Create {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "category": "IT",
+            "status": Asset.Status.IN_STOCK,
+            "technical_condition": Asset.TechnicalCondition.GOOD,
+            "is_active": True,
+        }
+
+    def _create_request(self, requester, inventory_number="POST-CREATE-001", **overrides):
+        defaults = {
+            "requested_by": requester,
+            "operation": AssetChangeRequest.Operation.CREATE,
+            "status": AssetChangeRequest.Status.PENDING,
+            "payload": self._create_payload(inventory_number),
+        }
+        defaults.update(overrides)
+        return AssetChangeRequest.objects.create(**defaults)
+
+    def _update_request(self, requester, asset, proposed_name="Post Updated Asset", **overrides):
+        current = self._asset_payload(asset)
+        proposed = current.copy()
+        proposed["name"] = proposed_name
+        defaults = {
+            "requested_by": requester,
+            "operation": AssetChangeRequest.Operation.UPDATE,
+            "status": AssetChangeRequest.Status.PENDING,
+            "asset": asset,
+            "payload": {"current": current, "proposed": proposed},
+        }
+        defaults.update(overrides)
+        return AssetChangeRequest.objects.create(**defaults)
+
+    def test_superuser_can_approve_create(self):
+        requester = User.objects.create_user(username="post-approve-create-requester", password="test-pass-123")
+        reviewer = self._superuser("post-approve-create-superuser")
+        change_request = self._create_request(requester, inventory_number="POST-APPROVE-CREATE-001")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(change_request.reviewed_by, reviewer)
+        self.assertTrue(Asset.objects.filter(inventory_number="POST-APPROVE-CREATE-001").exists())
+
+    def test_superuser_can_approve_update(self):
+        requester = User.objects.create_user(username="post-approve-update-requester", password="test-pass-123")
+        reviewer = self._superuser("post-approve-update-superuser")
+        location, _ = self._create_location_tree()
+        asset = self._create_asset("POST-APPROVE-UPDATE-001", location)
+        change_request = self._update_request(requester, asset, proposed_name="Post Admin Approved")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        asset.refresh_from_db()
+        change_request.refresh_from_db()
+        self.assertEqual(asset.name, "Post Admin Approved")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+
+    def test_scoped_approver_can_approve_in_scope_update(self):
+        requester = User.objects.create_user(username="post-approve-scope-requester", password="test-pass-123")
+        allowed_location, _ = self._create_location_tree()
+        reviewer = self._scoped_approver("post-approve-scope-reviewer", allowed_location)
+        asset = self._create_asset("POST-APPROVE-SCOPE-001", allowed_location)
+        change_request = self._update_request(requester, asset, proposed_name="Post Scoped Approved")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        asset.refresh_from_db()
+        change_request.refresh_from_db()
+        self.assertEqual(asset.name, "Post Scoped Approved")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+
+    def test_scoped_approver_cannot_approve_out_of_scope_update(self):
+        requester = User.objects.create_user(username="post-approve-outside-requester", password="test-pass-123")
+        allowed_location, outside_location = self._create_location_tree()
+        reviewer = self._scoped_approver("post-approve-outside-reviewer", allowed_location)
+        asset = self._create_asset("POST-APPROVE-OUTSIDE-001", outside_location)
+        change_request = self._update_request(requester, asset, proposed_name="Post Outside Approved")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertEqual(response.status_code, 404)
+        asset.refresh_from_db()
+        change_request.refresh_from_db()
+        self.assertNotEqual(asset.name, "Post Outside Approved")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
+    def test_regular_user_gets_403_for_approve(self):
+        requester = User.objects.create_user(username="post-approve-regular-requester", password="test-pass-123")
+        reviewer = User.objects.create_user(username="post-approve-regular", password="test-pass-123")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
+    def test_admin_role_without_approver_flag_gets_403_for_approve(self):
+        requester = User.objects.create_user(username="post-approve-admin-requester", password="test-pass-123")
+        reviewer = self._admin_user("post-approve-admin")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
+    def test_approve_non_pending_does_not_change_status(self):
+        requester = User.objects.create_user(username="post-approve-nonpending-requester", password="test-pass-123")
+        reviewer = self._superuser("post-approve-nonpending-superuser")
+        change_request = self._create_request(
+            requester,
+            inventory_number="POST-APPROVE-NONPENDING-001",
+            status=AssetChangeRequest.Status.REJECTED,
+            review_comment="Already rejected",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertFalse(Asset.objects.filter(inventory_number="POST-APPROVE-NONPENDING-001").exists())
+
+    def test_superuser_can_reject_with_comment(self):
+        requester = User.objects.create_user(username="post-reject-admin-requester", password="test-pass-123")
+        reviewer = self._superuser("post-reject-superuser")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
+            {"comment": "Needs more data"},
+        )
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(change_request.reviewed_by, reviewer)
+        self.assertEqual(change_request.review_comment, "Needs more data")
+
+    def test_scoped_approver_can_reject_in_scope_update(self):
+        requester = User.objects.create_user(username="post-reject-scope-requester", password="test-pass-123")
+        allowed_location, _ = self._create_location_tree()
+        reviewer = self._scoped_approver("post-reject-scope-reviewer", allowed_location)
+        asset = self._create_asset("POST-REJECT-SCOPE-001", allowed_location)
+        change_request = self._update_request(requester, asset)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
+            {"comment": "Rejected in scope"},
+        )
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        asset.refresh_from_db()
+        change_request.refresh_from_db()
+        self.assertEqual(asset.name, "Post Asset POST-REJECT-SCOPE-001")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(change_request.review_comment, "Rejected in scope")
+
+    def test_scoped_approver_cannot_reject_out_of_scope_update(self):
+        requester = User.objects.create_user(username="post-reject-outside-requester", password="test-pass-123")
+        allowed_location, outside_location = self._create_location_tree()
+        reviewer = self._scoped_approver("post-reject-outside-reviewer", allowed_location)
+        asset = self._create_asset("POST-REJECT-OUTSIDE-001", outside_location)
+        change_request = self._update_request(requester, asset)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
+            {"comment": "Should not save"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(change_request.review_comment, "")
+
+    def test_regular_user_gets_403_for_reject(self):
+        requester = User.objects.create_user(username="post-reject-regular-requester", password="test-pass-123")
+        reviewer = User.objects.create_user(username="post-reject-regular", password="test-pass-123")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-reject", kwargs={"pk": change_request.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
+    def test_admin_role_without_approver_flag_gets_403_for_reject(self):
+        requester = User.objects.create_user(username="post-reject-admin-requester", password="test-pass-123")
+        reviewer = self._admin_user("post-reject-admin")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-reject", kwargs={"pk": change_request.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
+    def test_reject_non_pending_does_not_change_status(self):
+        requester = User.objects.create_user(username="post-reject-nonpending-requester", password="test-pass-123")
+        reviewer = self._superuser("post-reject-nonpending-superuser")
+        change_request = self._create_request(
+            requester,
+            status=AssetChangeRequest.Status.APPROVED,
+            reviewed_by=reviewer,
+            review_comment="Already approved",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
+            {"comment": "Do not overwrite"},
+        )
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(change_request.review_comment, "Already approved")
 
 
 class AssetListApiTests(TestCase):
@@ -2258,6 +2814,9 @@ class AssetDetailViewTests(TestCase):
 
 
 class AssetUpdateViewTests(TestCase):
+    def _messages(self, response):
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
     def _create_location_tree(self):
         root_location = Location.objects.create(name="Warszawa")
         allowed_location = Location.objects.create(name="Biuro", parent=root_location)
@@ -2494,6 +3053,95 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(change_request.payload["proposed"]["location"], "Queued legacy location")
         self.assertNotIn("malicious_field", change_request.payload["current"])
         self.assertNotIn("malicious_field", change_request.payload["proposed"])
+        self.assertEqual(self._messages(response), ["Zmiana została przekazana do akceptacji."])
+
+    def test_user_requiring_approval_updates_existing_pending_update_request(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location, name="Original Name", location=allowed_location.path)
+        first_user = self._manager_with_location("update-pending-first", allowed_location)
+        first_user.profile.asset_changes_require_approval = True
+        first_user.profile.save(update_fields=["asset_changes_require_approval"])
+        second_user = self._manager_with_location("update-pending-second", allowed_location)
+        second_user.profile.asset_changes_require_approval = True
+        second_user.profile.save(update_fields=["asset_changes_require_approval"])
+
+        self.client.force_login(first_user)
+        first_response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="First Queued Update", room="101"),
+        )
+        self.assertEqual(self._messages(first_response), ["Zmiana została przekazana do akceptacji."])
+        first_request = AssetChangeRequest.objects.get()
+
+        second_client = Client()
+        second_client.force_login(second_user)
+        second_response = second_client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="Second Queued Update", room="202"),
+        )
+
+        asset.refresh_from_db()
+        first_request.refresh_from_db()
+        self.assertEqual(first_response.status_code, 302)
+        self.assertEqual(second_response.status_code, 302)
+        self.assertEqual(AssetChangeRequest.objects.count(), 1)
+        self.assertEqual(first_request.operation, AssetChangeRequest.Operation.UPDATE)
+        self.assertEqual(first_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(first_request.asset, asset)
+        self.assertEqual(first_request.requested_by, first_user)
+        self.assertEqual(first_request.payload["current"]["name"], "Original Name")
+        self.assertEqual(first_request.payload["proposed"]["name"], "Second Queued Update")
+        self.assertEqual(first_request.payload["proposed"]["room"], "202")
+        self.assertEqual(asset.name, "Original Name")
+        self.assertEqual(asset.room, "")
+        self.assertEqual(self._messages(second_response), ["Oczekująca zmiana została zaktualizowana."])
+
+    def test_user_requiring_approval_creates_separate_pending_update_for_other_asset(self):
+        allowed_location, _ = self._create_location_tree()
+        first_asset = self._create_asset(
+            inventory_number="UPDATE-PENDING-OTHER-001",
+            location_obj=allowed_location,
+            name="First Original",
+        )
+        second_asset = self._create_asset(
+            inventory_number="UPDATE-PENDING-OTHER-002",
+            location_obj=allowed_location,
+            name="Second Original",
+        )
+        user = self._manager_with_location("update-pending-other-asset", allowed_location)
+        user.profile.asset_changes_require_approval = True
+        user.profile.save(update_fields=["asset_changes_require_approval"])
+        self.client.force_login(user)
+
+        self.client.post(
+            reverse("assets:update", kwargs={"pk": first_asset.pk}),
+            data=self._valid_update_payload(first_asset, name="First Queued"),
+        )
+        response = self.client.post(
+            reverse("assets:update", kwargs={"pk": second_asset.pk}),
+            data=self._valid_update_payload(second_asset, name="Second Queued"),
+        )
+
+        first_asset.refresh_from_db()
+        second_asset.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(AssetChangeRequest.objects.count(), 2)
+        self.assertTrue(
+            AssetChangeRequest.objects.filter(
+                asset=first_asset,
+                operation=AssetChangeRequest.Operation.UPDATE,
+                status=AssetChangeRequest.Status.PENDING,
+            ).exists()
+        )
+        self.assertTrue(
+            AssetChangeRequest.objects.filter(
+                asset=second_asset,
+                operation=AssetChangeRequest.Operation.UPDATE,
+                status=AssetChangeRequest.Status.PENDING,
+            ).exists()
+        )
+        self.assertEqual(first_asset.name, "First Original")
+        self.assertEqual(second_asset.name, "Second Original")
 
     def test_invalid_update_post_does_not_save_changes(self):
         allowed_location, _ = self._create_location_tree()
@@ -2545,7 +3193,7 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(asset.location, "LOKALIZACJA SPOZA ZAKRESU")
         self.assertEqual(asset.location_fk, allowed_location)
 
-    def test_superuser_admin_and_approver_update_asset_without_queue(self):
+    def test_superuser_and_approver_update_asset_without_queue(self):
         allowed_location, _ = self._create_location_tree()
         users = []
 
@@ -2557,12 +3205,6 @@ class AssetUpdateViewTests(TestCase):
         superuser.profile.asset_changes_require_approval = True
         superuser.profile.save(update_fields=["asset_changes_require_approval"])
         users.append(("superuser", superuser))
-
-        admin_user = User.objects.create_user(username="update-bypass-admin", password="test-pass-123")
-        admin_user.profile.role = UserProfile.Role.ADMIN
-        admin_user.profile.asset_changes_require_approval = True
-        admin_user.profile.save(update_fields=["role", "asset_changes_require_approval"])
-        users.append(("admin", admin_user))
 
         approver = User.objects.create_user(username="update-bypass-approver", password="test-pass-123")
         approver.profile.can_approve_asset_changes = True
@@ -2589,6 +3231,48 @@ class AssetUpdateViewTests(TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertEqual(asset.name, f"Bypass Saved {index}")
 
+        self.assertFalse(AssetChangeRequest.objects.exists())
+
+    def test_admin_role_with_approval_required_queues_update_without_saving_asset(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location, name="Admin Original")
+        user = User.objects.create_user(username="update-admin-approval-required", password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.asset_changes_require_approval = True
+        user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="Admin Queued Update"),
+        )
+
+        asset.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(asset.name, "Admin Original")
+        self.assertEqual(AssetChangeRequest.objects.count(), 1)
+        change_request = AssetChangeRequest.objects.get()
+        self.assertEqual(change_request.operation, AssetChangeRequest.Operation.UPDATE)
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(change_request.requested_by, user)
+
+    def test_admin_role_without_approval_required_updates_asset_directly(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location, name="Admin Direct Original")
+        user = User.objects.create_user(username="update-admin-direct", password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.asset_changes_require_approval = False
+        user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="Admin Direct Saved"),
+        )
+
+        asset.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(asset.name, "Admin Direct Saved")
         self.assertFalse(AssetChangeRequest.objects.exists())
 
 
@@ -2689,7 +3373,7 @@ class AssetCreateViewTests(TestCase):
         change_request = AssetChangeRequest.objects.get()
         self.assertNotIn("malicious_field", change_request.payload)
 
-    def test_superuser_admin_and_approver_create_asset_without_queue(self):
+    def test_superuser_and_approver_create_asset_without_queue(self):
         users = []
 
         superuser = User.objects.create_superuser(
@@ -2700,12 +3384,6 @@ class AssetCreateViewTests(TestCase):
         superuser.profile.asset_changes_require_approval = True
         superuser.profile.save(update_fields=["asset_changes_require_approval"])
         users.append(("superuser", superuser))
-
-        admin_user = User.objects.create_user(username="asset-create-admin", password="test-pass-123")
-        admin_user.profile.role = UserProfile.Role.ADMIN
-        admin_user.profile.asset_changes_require_approval = True
-        admin_user.profile.save(update_fields=["role", "asset_changes_require_approval"])
-        users.append(("admin", admin_user))
 
         approver = User.objects.create_user(username="asset-create-approver", password="test-pass-123")
         approver.profile.can_approve_asset_changes = True
@@ -2725,6 +3403,49 @@ class AssetCreateViewTests(TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertTrue(Asset.objects.filter(inventory_number=f"CREATE-BYPASS-{index:03d}").exists())
 
+        self.assertFalse(AssetChangeRequest.objects.exists())
+
+    def test_admin_role_with_approval_required_queues_create_without_saving_asset(self):
+        user = User.objects.create_user(username="asset-create-admin-approval-required", password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.asset_changes_require_approval = True
+        user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:create"),
+            data=self._valid_asset_payload(
+                inventory_number="CREATE-ADMIN-APPROVAL-001",
+                name="Admin Queued Asset",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Asset.objects.filter(inventory_number="CREATE-ADMIN-APPROVAL-001").exists())
+        self.assertEqual(AssetChangeRequest.objects.count(), 1)
+        change_request = AssetChangeRequest.objects.get()
+        self.assertEqual(change_request.operation, AssetChangeRequest.Operation.CREATE)
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(change_request.requested_by, user)
+        self.assertEqual(change_request.payload["name"], "Admin Queued Asset")
+
+    def test_admin_role_without_approval_required_creates_asset_directly(self):
+        user = User.objects.create_user(username="asset-create-admin-direct", password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.asset_changes_require_approval = False
+        user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:create"),
+            data=self._valid_asset_payload(
+                inventory_number="CREATE-ADMIN-DIRECT-001",
+                name="Admin Direct Asset",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Asset.objects.filter(inventory_number="CREATE-ADMIN-DIRECT-001").exists())
         self.assertFalse(AssetChangeRequest.objects.exists())
 
     def test_create_ignores_posted_location_fk(self):
