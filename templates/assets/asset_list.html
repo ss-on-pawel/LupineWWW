@@ -1409,6 +1409,34 @@
         .asset-name-link:hover {
             color: #c1121f;
         }
+        .asset-rejected-update-comment {
+            position: relative;
+            max-width: 100%;
+            margin-top: 3px;
+            padding-right: 18px;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            line-height: 1.25;
+            white-space: normal;
+            word-break: break-word;
+        }
+        .asset-rejected-update-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .asset-rejected-update-close {
+            position: absolute;
+            top: 0;
+            right: 0;
+            cursor: pointer;
+            margin-left: 6px;
+            opacity: 0.6;
+        }
+        .asset-rejected-update-close:hover {
+            opacity: 1;
+        }
         .sort-indicator {
             display: inline-block;
             min-width: 1.1em;
@@ -1612,7 +1640,10 @@
                     <li>
                         <div>Zatwierdzono {{ asset_change_decision_summary.approved_count }} zmian. Odrzucono {{ asset_change_decision_summary.rejected_count }} zmian.</div>
                         {% if asset_change_decision_summary.rejected_count > 0 %}
-                            <div>Sprawdź oznaczone środki.</div>
+                            <div>
+                                Odrzucono {{ asset_change_decision_summary.rejected_count }} zmian.
+                                Powody znajdziesz przy oznaczonych środkach.
+                            </div>
                         {% endif %}
                     </li>
                 </ul>
@@ -2148,6 +2179,7 @@
             const storageKeyColumns = "asset-list-columns-v2";
             const storageKeyLayoutMode = "asset-list-mode-v1";
             const storageKeyWorkMode = "asset-list-work-mode-v1";
+            const storageKeyRejectedDismissed = "asset-rejected-dismissed-v1";
             const apiUrl = shell.dataset.apiUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
@@ -2487,6 +2519,18 @@ let searchDebounceId = null;
                         return;
                     }
                     updateInventoryManualValue(input.dataset.assetId, input.value);
+                });
+
+                elements.tableBody.addEventListener("click", function (event) {
+                    const dismiss = event.target.closest('[data-role="dismiss-rejected"]');
+                    if (!dismiss) {
+                        return;
+                    }
+                    dismissRejectedUpdateComment(dismiss.dataset.assetId);
+                    const comment = dismiss.closest(".asset-rejected-update-comment");
+                    if (comment) {
+                        comment.remove();
+                    }
                 });
 
                 elements.tableWrap.addEventListener("scroll", function () {
@@ -2973,6 +3017,22 @@ let searchDebounceId = null;
                                 const rejected = document.createElement("span");
                                 rejected.textContent = " • Odrzucono";
                                 td.appendChild(rejected);
+                                if (row.rejected_update_comment && !isRejectedUpdateCommentDismissed(row.id)) {
+                                    const comment = document.createElement("div");
+                                    comment.className = "asset-rejected-update-comment";
+                                    comment.title = row.rejected_update_comment;
+                                    const commentText = document.createElement("div");
+                                    commentText.className = "asset-rejected-update-text";
+                                    commentText.textContent = "Powód: " + row.rejected_update_comment;
+                                    comment.appendChild(commentText);
+                                    const dismiss = document.createElement("span");
+                                    dismiss.className = "asset-rejected-update-close";
+                                    dismiss.dataset.role = "dismiss-rejected";
+                                    dismiss.dataset.assetId = row.id;
+                                    dismiss.textContent = "×";
+                                    comment.appendChild(dismiss);
+                                    td.appendChild(comment);
+                                }
                             }
                         } else if (column.key === "status") {
                             const pill = document.createElement("span");
@@ -2988,6 +3048,28 @@ let searchDebounceId = null;
 
                     elements.tableBody.appendChild(tr);
                 });
+            }
+
+            function loadRejectedDismissedMap() {
+                try {
+                    return JSON.parse(window.localStorage.getItem(storageKeyRejectedDismissed) || "{}") || {};
+                } catch (error) {
+                    return {};
+                }
+            }
+
+            function isRejectedUpdateCommentDismissed(assetId) {
+                const dismissed = loadRejectedDismissedMap();
+                return Boolean(dismissed[String(assetId)]);
+            }
+
+            function dismissRejectedUpdateComment(assetId) {
+                if (!assetId) {
+                    return;
+                }
+                const dismissed = loadRejectedDismissedMap();
+                dismissed[String(assetId)] = true;
+                window.localStorage.setItem(storageKeyRejectedDismissed, JSON.stringify(dismissed));
             }
 
             function renderPagination(pagination) {

@@ -6,7 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.paginator import EmptyPage, Paginator
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef, Q, Subquery
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -317,6 +317,51 @@ def asset_change_bulk_approve(request):
 
 @login_required
 @require_POST
+def asset_change_bulk_reject(request):
+    if not _user_can_review_asset_changes(request.user):
+        raise PermissionDenied
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or any(not isinstance(item, int) or isinstance(item, bool) for item in ids):
+        return JsonResponse({"error": "ids must be a list of integers"}, status=400)
+
+    comment = payload.get("comment")
+    if not isinstance(comment, str):
+        return JsonResponse({"error": "comment must be a string"}, status=400)
+
+    comment = comment.strip()
+    if not comment:
+        return JsonResponse({"error": "comment is required"}, status=400)
+
+    queryset = _scope_asset_change_request_queryset(
+        AssetChangeRequest.objects.select_related("requested_by", "reviewed_by", "asset"),
+        request.user,
+    ).filter(
+        pk__in=ids,
+        status=AssetChangeRequest.Status.PENDING,
+    )
+
+    rejected_count = 0
+    for change_request in queryset:
+        try:
+            reject_asset_change_request(change_request, request.user, comment)
+        except ValidationError:
+            continue
+        rejected_count += 1
+
+    return JsonResponse({
+        "rejected": rejected_count,
+        "skipped": len(ids) - rejected_count,
+    })
+
+
+@login_required
+@require_POST
 def asset_change_reject(request, pk):
     if not _user_can_review_asset_changes(request.user):
         raise PermissionDenied
@@ -513,9 +558,19 @@ def asset_list_api(request):
         status=AssetChangeRequest.Status.REJECTED,
         asset=OuterRef("pk"),
     )
+    rejected_update_comment_requests = rejected_update_requests
+    if not _user_can_review_asset_changes(request.user):
+        rejected_update_comment_requests = rejected_update_comment_requests.filter(requested_by=request.user)
+
     queryset = queryset.annotate(
         has_pending_update=Exists(pending_update_requests),
         has_rejected_update=Exists(rejected_update_requests),
+        rejected_update_comment=Subquery(
+            rejected_update_comment_requests
+            .exclude(review_comment="")
+            .order_by("-reviewed_at", "-updated_at", "-pk")
+            .values("review_comment")[:1]
+        ),
     )
 
     ordering_field = _resolve_asset_ordering(ordering)
@@ -535,6 +590,7 @@ def asset_list_api(request):
             "name": asset.name,
             "has_pending_update": asset.has_pending_update,
             "has_rejected_update": asset.has_rejected_update,
+            "rejected_update_comment": asset.rejected_update_comment or "",
             "asset_type": asset.asset_type,
             "asset_type_display": asset.get_asset_type_display(),
             "category": asset.category,

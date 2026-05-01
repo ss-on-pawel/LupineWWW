@@ -33,7 +33,7 @@
         }
         .asset-change-toolbar {
             display: flex;
-            justify-content: flex-end;
+            justify-content: flex-start;
             margin-bottom: 10px;
         }
         .asset-change-toolbar-actions {
@@ -91,17 +91,13 @@
         .asset-change-table th:nth-child(5),
         .asset-change-table td:nth-child(5),
         .asset-change-table th:nth-child(8),
-        .asset-change-table td:nth-child(8),
-        .asset-change-table th:nth-child(10),
-        .asset-change-table td:nth-child(10) {
+        .asset-change-table td:nth-child(8) {
             white-space: nowrap;
         }
         .asset-change-table th:nth-child(6),
         .asset-change-table td:nth-child(6),
         .asset-change-table th:nth-child(7),
-        .asset-change-table td:nth-child(7),
-        .asset-change-table th:nth-child(9),
-        .asset-change-table td:nth-child(9) {
+        .asset-change-table td:nth-child(7) {
             white-space: normal;
             word-break: break-word;
         }
@@ -129,6 +125,12 @@
         .asset-change-diff-old,
         .asset-change-diff-new {
             word-break: break-word;
+        }
+        .asset-change-review-comment {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
         .asset-change-modal {
             position: fixed;
@@ -201,8 +203,8 @@
 
         <div class="asset-change-toolbar" aria-label="Akcje zbiorcze">
             <div class="asset-change-toolbar-actions">
-                <button class="ui-btn ui-btn--primary" type="button" data-role="bulk-approve" data-url="{% url 'assets:bulk-approve' %}" disabled>Zatwierdź zaznaczone</button>
-                <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject" disabled>Odrzuć zaznaczone</button>
+                <button class="ui-btn ui-btn--primary" type="button" data-role="bulk-approve" data-url="{% url 'assets:bulk-approve' %}" disabled>Zatwierdź</button>
+                <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject" disabled>Odrzuć</button>
             </div>
         </div>
 
@@ -210,15 +212,13 @@
             <table class="asset-change-table">
                 <colgroup>
                     <col style="width: 44px;">
-                    <col style="width: 48px;">
+                    <col style="width: 52px;">
+                    <col style="width: 110px;">
                     <col style="width: 105px;">
-                    <col style="width: 105px;">
-                    <col style="width: 100px;">
-                    <col style="width: 190px;">
-                    <col style="width: 285px;">
-                    <col style="width: 130px;">
                     <col style="width: 120px;">
-                    <col style="width: 240px;">
+                    <col style="width: 245px;">
+                    <col style="width: 495px;">
+                    <col style="width: 145px;">
                 </colgroup>
             <thead>
                 <tr>
@@ -232,8 +232,6 @@
                     <th>Środek</th>
                     <th>Zmiany</th>
                     <th>Utworzono</th>
-                    <th>Opis</th>
-                    <th>Akcje</th>
                 </tr>
             </thead>
             <tbody>
@@ -261,9 +259,6 @@
                                 <div>Zatwierdzone</div>
                             {% elif request.status == "rejected" %}
                                 <div>Odrzucone</div>
-                                {% if request.review_comment %}
-                                    <div>Powód: {{ request.review_comment }}</div>
-                                {% endif %}
                             {% else %}
                                 <div>{{ request.get_status_display }}</div>
                             {% endif %}
@@ -272,7 +267,10 @@
                         <td>{% if request.asset %}{{ request.asset }}{% else %}-{% endif %}</td>
                         <td>
                             {% if request.change_list_summary.create %}
-                                Nowy składnik
+                                <div>Nowy składnik</div>
+                                {% if request.payload.name or request.payload.inventory_number %}
+                                    <div>{{ request.payload.name|default:"-" }}{% if request.payload.inventory_number %} / {{ request.payload.inventory_number }}{% endif %}</div>
+                                {% endif %}
                             {% elif request.change_list_summary.rows %}
                                 <div class="asset-change-diff">
                                     {% for row in request.change_list_summary.rows %}
@@ -292,49 +290,17 @@
                             {% else %}
                                 -
                             {% endif %}
-                        </td>
-                        <td>{{ request.created_at|date:"Y-m-d H:i" }}</td>
-                        <td>
-                            {% if request.operation == "create" %}
-                                {{ request.payload.name|default:"-" }}{% if request.payload.inventory_number %} / {{ request.payload.inventory_number }}{% endif %}
-                            {% elif request.asset %}
-                                {{ request.asset.name }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if request.status == "pending" %}
-                                <div class="asset-change-actions">
-                                    <form method="post" action="{% url 'assets:change-approve' request.id %}">
-                                    {% csrf_token %}
-                                        <button class="ui-btn ui-btn--primary asset-change-action-btn" type="submit">✔ Zatwierdź</button>
-                                    </form>
-                                <button
-                                    class="ui-btn ui-btn--danger asset-change-action-btn"
-                                    type="button"
-                                    data-role="toggle-reject-form"
-                                    data-target="reject-form-{{ request.id }}"
-                                >
-                                    &#10006; Odrzu&#263;
-                                </button>
-                                <form
-                                    id="reject-form-{{ request.id }}"
-                                    method="post"
-                                    action="{% url 'assets:change-reject' request.id %}"
-                                    hidden
-                                >
-                                    {% csrf_token %}
-                                    <textarea name="comment"></textarea>
-                                    <button class="ui-btn ui-btn--danger asset-change-action-btn" type="submit">Potwierd&#378; odrzucenie</button>
-                                </form>
+                            {% if request.status == "rejected" and request.review_comment %}
+                                <div class="asset-change-review-comment" title="{{ request.review_comment }}">
+                                    Powód: {{ request.review_comment }}
                                 </div>
                             {% endif %}
                         </td>
+                        <td>{{ request.created_at|date:"Y-m-d H:i" }}</td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="10">Brak zmian do wyświetlenia.</td>
+                        <td colspan="8">Brak zmian do wyświetlenia.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -362,14 +328,18 @@
             <textarea
                 data-role="bulk-reject-comment"
                 placeholder="Podaj powód odrzucenia..."
+                required
             ></textarea>
+            <p class="asset-change-modal-error" data-role="bulk-reject-error" hidden>
+                Komentarz jest wymagany.
+            </p>
 
             <div class="asset-change-modal-actions">
                 <button class="ui-btn" type="button" data-role="modal-close">
                     Anuluj
                 </button>
 
-                <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject-confirm">
+                <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject-confirm" data-url="{% url 'assets:bulk-reject' %}">
                     Odrzuć
                 </button>
             </div>
@@ -377,16 +347,6 @@
     </div>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            document.querySelectorAll('[data-role="toggle-reject-form"]').forEach(function (button) {
-                button.addEventListener("click", function () {
-                    var targetId = button.getAttribute("data-target");
-                    var form = document.getElementById(targetId);
-                    if (form) {
-                        form.hidden = !form.hidden;
-                    }
-                });
-            });
-
             var selectAll = document.querySelector('[data-role="change-select-all"]');
             var rowCheckboxes = Array.prototype.slice.call(document.querySelectorAll('[data-role="change-select"]'));
             var toolbarButtons = Array.prototype.slice.call(document.querySelectorAll(".asset-change-toolbar-actions button"));
@@ -394,6 +354,8 @@
             var bulkRejectBtn = document.querySelector('[data-role="bulk-reject"]');
             var bulkRejectModal = document.querySelector('[data-role="bulk-reject-modal"]');
             var bulkRejectConfirm = document.querySelector('[data-role="bulk-reject-confirm"]');
+            var bulkRejectComment = document.querySelector('[data-role="bulk-reject-comment"]');
+            var bulkRejectError = document.querySelector('[data-role="bulk-reject-error"]');
 
             if (!bulkApproveBtn) {
                 console.error("bulk approve button not found");
@@ -489,10 +451,16 @@
                 if (bulkRejectModal) {
                     bulkRejectModal.hidden = true;
                 }
+                if (bulkRejectError) {
+                    bulkRejectError.hidden = true;
+                }
             }
 
             if (bulkRejectBtn && bulkRejectModal) {
                 bulkRejectBtn.addEventListener("click", function () {
+                    if (bulkRejectError) {
+                        bulkRejectError.hidden = true;
+                    }
                     bulkRejectModal.hidden = false;
                 });
 
@@ -509,7 +477,48 @@
 
             if (bulkRejectConfirm) {
                 bulkRejectConfirm.addEventListener("click", function () {
-                    console.log("bulk reject confirm clicked");
+                    var ids = getSelectedIds();
+                    if (!ids.length) {
+                        console.warn("no ids selected");
+                        return;
+                    }
+
+                    var comment = bulkRejectComment ? bulkRejectComment.value.trim() : "";
+                    if (!comment) {
+                        if (bulkRejectError) {
+                            bulkRejectError.hidden = false;
+                        }
+                        if (bulkRejectComment) {
+                            bulkRejectComment.focus();
+                        }
+                        return;
+                    }
+
+                    if (bulkRejectError) {
+                        bulkRejectError.hidden = true;
+                    }
+                    bulkRejectConfirm.disabled = true;
+                    fetch(bulkRejectConfirm.dataset.url || "/assets/changes/bulk-reject/", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": getCookie("csrftoken") || ""
+                        },
+                        body: JSON.stringify({
+                            ids: ids,
+                            comment: comment
+                        })
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("Request failed");
+                        }
+                        return response.json();
+                    }).then(function () {
+                        window.location.reload();
+                    }).catch(function (error) {
+                        console.error(error);
+                        bulkRejectConfirm.disabled = false;
+                    });
                 });
             }
         });

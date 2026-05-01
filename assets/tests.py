@@ -1352,7 +1352,9 @@ class AssetChangeRequestListViewTests(TestCase):
 
         response = self.client.get(reverse("assets:change-list"), {"status": AssetChangeRequest.Status.REJECTED})
 
-        self.assertContains(response, "<div>Powód: Błędna wartość</div>", html=True)
+        self.assertContains(response, 'class="asset-change-review-comment"')
+        self.assertContains(response, 'title="Błędna wartość"')
+        self.assertContains(response, "Powód: Błędna wartość")
 
     def test_change_list_does_not_show_rejected_reason_without_comment(self):
         requester = User.objects.create_user(username="queue-rejected-empty-requester", password="test-pass-123")
@@ -1511,7 +1513,7 @@ class AssetChangeRequestListViewTests(TestCase):
 
         self.assertContains(response, "Nowy składnik")
 
-    def test_change_list_shows_approve_button_for_pending_request(self):
+    def test_change_list_shows_bulk_approve_button_for_pending_request(self):
         requester = User.objects.create_user(username="queue-approve-button-requester", password="test-pass-123")
         reviewer = User.objects.create_superuser(
             username="queue-approve-button-superuser",
@@ -1528,12 +1530,13 @@ class AssetChangeRequestListViewTests(TestCase):
         response = self.client.get(reverse("assets:change-list"))
 
         approve_url = reverse("assets:change-approve", kwargs={"pk": change_request.pk})
-        self.assertContains(response, "<th>Akcje</th>", html=True)
-        self.assertContains(response, f'action="{approve_url}"')
-        self.assertContains(response, 'method="post"')
+        self.assertNotContains(response, "<th>Akcje</th>", html=True)
+        self.assertNotContains(response, f'action="{approve_url}"')
+        self.assertContains(response, 'data-role="bulk-approve"')
+        self.assertContains(response, reverse("assets:bulk-approve"))
         self.assertContains(response, "Zatwierdź")
 
-    def test_change_list_shows_reject_action_for_pending_request(self):
+    def test_change_list_shows_bulk_reject_action_for_pending_request(self):
         requester = User.objects.create_user(username="queue-reject-button-requester", password="test-pass-123")
         reviewer = User.objects.create_superuser(
             username="queue-reject-button-superuser",
@@ -1550,14 +1553,14 @@ class AssetChangeRequestListViewTests(TestCase):
         response = self.client.get(reverse("assets:change-list"))
 
         reject_url = reverse("assets:change-reject", kwargs={"pk": change_request.pk})
+        self.assertNotContains(response, f'action="{reject_url}"')
+        self.assertNotContains(response, 'data-role="toggle-reject-form"')
+        self.assertNotContains(response, f'data-target="reject-form-{change_request.pk}"')
+        self.assertNotContains(response, f'id="reject-form-{change_request.pk}"')
+        self.assertContains(response, 'data-role="bulk-reject"')
+        self.assertContains(response, 'data-role="bulk-reject-confirm"')
+        self.assertContains(response, reverse("assets:bulk-reject"))
         self.assertContains(response, "Odrzu")
-        self.assertContains(response, f'action="{reject_url}"')
-        self.assertContains(response, 'method="post"')
-        self.assertContains(response, 'name="comment"')
-        self.assertContains(response, 'data-role="toggle-reject-form"')
-        self.assertContains(response, f'data-target="reject-form-{change_request.pk}"')
-        self.assertContains(response, f'id="reject-form-{change_request.pk}"')
-        self.assertContains(response, "Potwierd")
 
     def test_change_list_hides_approve_button_for_non_pending_requests(self):
         requester = User.objects.create_user(username="queue-no-approve-button-requester", password="test-pass-123")
@@ -2287,6 +2290,122 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         change_request.refresh_from_db()
         self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
 
+    def test_bulk_reject_rejects_multiple_pending_changes_with_comment(self):
+        requester = User.objects.create_user(username="bulk-reject-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-reject-superuser")
+        first_request = self._create_request(requester, inventory_number="BULK-REJECT-001")
+        second_request = self._create_request(requester, inventory_number="BULK-REJECT-002")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-reject"),
+            data=json.dumps({"ids": [first_request.pk, second_request.pk], "comment": "Brakuje danych"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"rejected": 2, "skipped": 0})
+        first_request.refresh_from_db()
+        second_request.refresh_from_db()
+        self.assertEqual(first_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(second_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(first_request.review_comment, "Brakuje danych")
+        self.assertEqual(second_request.review_comment, "Brakuje danych")
+        self.assertEqual(first_request.reviewed_by, reviewer)
+        self.assertEqual(second_request.reviewed_by, reviewer)
+        self.assertIsNotNone(first_request.reviewed_at)
+        self.assertIsNotNone(second_request.reviewed_at)
+
+    def test_bulk_reject_empty_comment_returns_400_without_rejecting(self):
+        requester = User.objects.create_user(username="bulk-reject-empty-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-reject-empty-superuser")
+        change_request = self._create_request(requester, inventory_number="BULK-REJECT-EMPTY")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-reject"),
+            data=json.dumps({"ids": [change_request.pk], "comment": "   "}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "comment is required"})
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(change_request.review_comment, "")
+        self.assertIsNone(change_request.reviewed_by)
+        self.assertIsNone(change_request.reviewed_at)
+
+    def test_bulk_reject_skips_out_of_scope_changes(self):
+        requester = User.objects.create_user(username="bulk-reject-scope-requester", password="test-pass-123")
+        allowed_location, outside_location = self._create_location_tree()
+        reviewer = self._scoped_approver("bulk-reject-scope-reviewer", allowed_location)
+        in_scope_asset = self._create_asset("BULK-REJECT-IN-SCOPE", allowed_location)
+        out_of_scope_asset = self._create_asset("BULK-REJECT-OUT-SCOPE", outside_location)
+        in_scope_request = self._update_request(requester, in_scope_asset, proposed_name="Bulk In Scope Rejected")
+        out_of_scope_request = self._update_request(requester, out_of_scope_asset, proposed_name="Bulk Out Scope Skipped")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-reject"),
+            data=json.dumps({"ids": [in_scope_request.pk, out_of_scope_request.pk], "comment": "Poza zakresem pomijane"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"rejected": 1, "skipped": 1})
+        in_scope_request.refresh_from_db()
+        out_of_scope_request.refresh_from_db()
+        self.assertEqual(in_scope_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(in_scope_request.review_comment, "Poza zakresem pomijane")
+        self.assertEqual(out_of_scope_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(out_of_scope_request.review_comment, "")
+
+    def test_bulk_reject_skips_non_pending_changes(self):
+        requester = User.objects.create_user(username="bulk-reject-nonpending-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-reject-nonpending-superuser")
+        pending_request = self._create_request(requester, inventory_number="BULK-REJECT-PENDING")
+        approved_request = self._create_request(
+            requester,
+            inventory_number="BULK-REJECT-APPROVED",
+            status=AssetChangeRequest.Status.APPROVED,
+            reviewed_by=reviewer,
+            review_comment="Already approved",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-reject"),
+            data=json.dumps({"ids": [pending_request.pk, approved_request.pk], "comment": "Odrzucenie pending"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"rejected": 1, "skipped": 1})
+        pending_request.refresh_from_db()
+        approved_request.refresh_from_db()
+        self.assertEqual(pending_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(pending_request.review_comment, "Odrzucenie pending")
+        self.assertEqual(approved_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(approved_request.review_comment, "Already approved")
+
+    def test_bulk_reject_regular_user_gets_403(self):
+        requester = User.objects.create_user(username="bulk-reject-regular-requester", password="test-pass-123")
+        reviewer = User.objects.create_user(username="bulk-reject-regular", password="test-pass-123")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-reject"),
+            data=json.dumps({"ids": [change_request.pk], "comment": "Should not save"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+        self.assertEqual(change_request.review_comment, "")
+
     def test_superuser_can_reject_with_comment(self):
         requester = User.objects.create_user(username="post-reject-admin-requester", password="test-pass-123")
         reviewer = self._superuser("post-reject-superuser")
@@ -2638,6 +2757,66 @@ class AssetListApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         row = response.json()["results"][0]
         self.assertTrue(row["has_rejected_update"])
+        self.assertEqual(row["rejected_update_comment"], "")
+
+    def test_api_exposes_rejected_update_comment_for_requesting_user(self):
+        requester = User.objects.create_user(username="rejected-comment-requester", password="test-pass-123")
+        location = Location.objects.create(name="Rejected Comment Location")
+        requester.profile.allowed_locations.add(location)
+        self.client.force_login(requester)
+        asset = Asset.objects.create(
+            name="Rejected Comment Asset",
+            inventory_number="REJECTED-COMMENT-001",
+            status=Asset.Status.IN_STOCK,
+            location=location.path,
+            location_fk=location,
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.REJECTED,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Rejected Comment Edited"}},
+            review_comment="Brakuje numeru seryjnego",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_rejected_update"])
+        self.assertEqual(row["rejected_update_comment"], "Brakuje numeru seryjnego")
+
+    def test_api_does_not_expose_other_users_rejected_update_comment_to_regular_user(self):
+        requester = User.objects.create_user(username="rejected-comment-owner", password="test-pass-123")
+        viewer = User.objects.create_user(username="rejected-comment-viewer", password="test-pass-123")
+        location = Location.objects.create(name="Other Rejected Comment Location")
+        viewer.profile.allowed_locations.add(location)
+        self.client.force_login(viewer)
+        asset = Asset.objects.create(
+            name="Other Rejected Comment Asset",
+            inventory_number="REJECTED-COMMENT-OTHER",
+            status=Asset.Status.IN_STOCK,
+            location=location.path,
+            location_fk=location,
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.REJECTED,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Other Rejected Comment Edited"}},
+            review_comment="Komentarz innego użytkownika",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_rejected_update"])
+        self.assertEqual(row["rejected_update_comment"], "")
 
     def test_api_does_not_mark_asset_without_pending_update(self):
         requester = User.objects.create_user(username="approved-update-requester", password="test-pass-123")
@@ -2676,6 +2855,7 @@ class AssetListApiTests(TestCase):
         row = response.json()["results"][0]
         self.assertFalse(row["has_pending_update"])
         self.assertFalse(row["has_rejected_update"])
+        self.assertEqual(row["rejected_update_comment"], "")
 
     def test_api_approved_update_does_not_mark_asset_as_rejected(self):
         requester = User.objects.create_user(username="approved-rejected-update-requester", password="test-pass-123")
@@ -3229,7 +3409,9 @@ class AssetListViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Zatwierdzono 0 zmian")
         self.assertContains(response, "Odrzucono 2 zmian")
-        self.assertContains(response, "Sprawdź oznaczone środki")
+        self.assertNotContains(response, "Sprawdź oznaczone środki")
+        self.assertNotContains(response, f'href="{reverse("assets:change-list")}?status=rejected"')
+        self.assertContains(response, "Powody znajdziesz przy oznaczonych środkach")
 
     def test_list_view_hides_change_summary_without_decided_requests(self):
         user = User.objects.create_user(username="viewer-no-summary", password="test-pass-123")
