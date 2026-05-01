@@ -19,6 +19,24 @@
             font-family: var(--ui-font);
             background: transparent;
         }
+        .asset-change-summary {
+            position: relative;
+        }
+        .asset-list-shell .asset-change-summary-close {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            opacity: 0.6;
+            z-index: 1;
+        }
+        .asset-list-shell .asset-change-summary-close:hover {
+            opacity: 1;
+        }
         .asset-list-shell[data-work-mode="management"] {
             width: calc(100vw - 32px);
             max-width: none;
@@ -1585,6 +1603,21 @@
         data-detail-url-template="{% url 'assets:detail' 0 %}"
         data-mode="standard"
     >
+        {% if asset_change_decision_summary %}
+            <div id="asset-change-summary" class="asset-change-summary">
+                <button type="button" data-role="dismiss-summary" class="asset-change-summary-close">
+                    ×
+                </button>
+                <ul class="messages">
+                    <li>
+                        <div>Zatwierdzono {{ asset_change_decision_summary.approved_count }} zmian. Odrzucono {{ asset_change_decision_summary.rejected_count }} zmian.</div>
+                        {% if asset_change_decision_summary.rejected_count > 0 %}
+                            <div>Sprawdź oznaczone środki.</div>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+        {% endif %}
         <div class="asset-layout-shell">
             <div class="asset-layout-header"></div>
             <div class="asset-layout-toolbar">
@@ -1717,6 +1750,29 @@
 {% block extra_scripts %}
     {{ filter_schema|json_script:"asset-filter-schema" }}
     <script src="{% static 'assets/asset_list_filters.js' %}"></script>
+    <script>
+        (function () {
+            const el = document.getElementById("asset-change-summary");
+            if (!el) return;
+
+            const key = "asset-change-summary-dismissed";
+            const summary = el.querySelector(".messages");
+            const value = summary ? summary.textContent.trim() : "1";
+
+            if (localStorage.getItem(key) === value) {
+                el.style.display = "none";
+                return;
+            }
+
+            const btn = el.querySelector('[data-role="dismiss-summary"]');
+            if (!btn) return;
+
+            btn.addEventListener("click", function () {
+                el.style.display = "none";
+                localStorage.setItem(key, value);
+            });
+        })();
+    </script>
     <script>
         (function () {
             const shell = document.querySelector(".asset-list-shell");

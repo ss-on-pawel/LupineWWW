@@ -3,39 +3,233 @@
 {% block title %}Kolejka zmian{% endblock %}
 
 {% block content %}
+    <style>
+        .asset-change-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: nowrap;
+        }
+        .asset-change-actions form {
+            margin: 0;
+        }
+        .asset-change-action-btn {
+            width: auto;
+        }
+        .asset-change-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 16px;
+        }
+        .asset-change-filter-field {
+            display: grid;
+            gap: 6px;
+        }
+        .asset-change-filter-field select {
+            min-width: 180px;
+            width: auto;
+        }
+        .asset-change-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+        }
+        .asset-change-toolbar-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .asset-change-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+        }
+        .asset-change-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.9rem;
+            table-layout: fixed;
+            width: 1367px;
+            min-width: 1367px;
+        }
+        .asset-change-table th,
+        .asset-change-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.09);
+            vertical-align: top;
+            line-height: 1.3;
+        }
+        .asset-change-table thead th {
+            background: #fafbfc;
+            color: #475467;
+            font-family: var(--mono-font);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .asset-change-table tbody tr:nth-child(even) td {
+            background: #fcfcfd;
+        }
+        .asset-change-table tbody tr:hover td {
+            background: rgba(248, 250, 252, 0.96);
+        }
+        .asset-change-table th:nth-child(1),
+        .asset-change-table td:nth-child(1) {
+            text-align: center;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .asset-change-table th:nth-child(2),
+        .asset-change-table td:nth-child(2),
+        .asset-change-table th:nth-child(3),
+        .asset-change-table td:nth-child(3),
+        .asset-change-table th:nth-child(4),
+        .asset-change-table td:nth-child(4),
+        .asset-change-table th:nth-child(5),
+        .asset-change-table td:nth-child(5),
+        .asset-change-table th:nth-child(8),
+        .asset-change-table td:nth-child(8),
+        .asset-change-table th:nth-child(10),
+        .asset-change-table td:nth-child(10) {
+            white-space: nowrap;
+        }
+        .asset-change-table th:nth-child(6),
+        .asset-change-table td:nth-child(6),
+        .asset-change-table th:nth-child(7),
+        .asset-change-table td:nth-child(7),
+        .asset-change-table th:nth-child(9),
+        .asset-change-table td:nth-child(9) {
+            white-space: normal;
+            word-break: break-word;
+        }
+        .asset-change-diff {
+            display: grid;
+            gap: 6px;
+        }
+        .asset-change-diff-item {
+            display: grid;
+            gap: 2px;
+        }
+        .asset-change-diff-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--app-muted);
+        }
+        .asset-change-diff-values {
+            display: flex;
+            gap: 6px;
+            align-items: baseline;
+            flex-wrap: wrap;
+        }
+        .asset-change-diff-old,
+        .asset-change-diff-new {
+            word-break: break-word;
+        }
+        .asset-change-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+        .asset-change-modal[hidden] {
+            display: none;
+        }
+        .asset-change-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.42);
+        }
+        .asset-change-modal-content {
+            position: relative;
+            z-index: 1;
+            width: min(100%, 520px);
+            padding: 20px;
+            border: 1px solid var(--app-border);
+            background: var(--app-surface-solid);
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+        }
+        .asset-change-modal-content h3 {
+            margin: 0 0 14px;
+            font-size: 1rem;
+        }
+        .asset-change-modal-content textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        .asset-change-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 14px;
+        }
+    </style>
     <section class="card">
         <h2>Kolejka zmian</h2>
 
-        <form method="get" class="filters-form">
-            <label>
+        <form method="get" class="filters-form asset-change-filters">
+            <label class="asset-change-filter-field">
                 Status
                 <select name="status">
                     <option value="all"{% if selected_status == "all" %} selected{% endif %}>Wszystkie</option>
                     {% for value, label in status_options %}
-                        <option value="{{ value }}"{% if selected_status == value %} selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}"{% if selected_status == value %} selected{% endif %}>
+                            {% if value == "pending" %}Oczekujące{% elif value == "approved" %}Zatwierdzone{% elif value == "rejected" %}Odrzucone{% else %}{{ label }}{% endif %}
+                        </option>
                     {% endfor %}
                 </select>
             </label>
-            <label>
+            <label class="asset-change-filter-field">
                 Operacja
                 <select name="operation">
                     <option value="all"{% if selected_operation == "all" %} selected{% endif %}>Wszystkie</option>
                     {% for value, label in operation_options %}
-                        <option value="{{ value }}"{% if selected_operation == value %} selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}"{% if selected_operation == value %} selected{% endif %}>
+                            {% if value == "create" %}Utworzenie{% elif value == "update" %}Aktualizacja{% elif value == "delete" %}Usunięcie{% else %}{{ label }}{% endif %}
+                        </option>
                     {% endfor %}
                 </select>
             </label>
-            <button class="ui-btn ui-btn--secondary" type="submit">Filtruj</button>
+            <button class="ui-btn ui-btn--primary" type="submit">Filtruj</button>
         </form>
 
-        <table>
+        <div class="asset-change-toolbar" aria-label="Akcje zbiorcze">
+            <div class="asset-change-toolbar-actions">
+                <button class="ui-btn ui-btn--primary" type="button" data-role="bulk-approve" data-url="{% url 'assets:bulk-approve' %}" disabled>Zatwierdź zaznaczone</button>
+                <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject" disabled>Odrzuć zaznaczone</button>
+            </div>
+        </div>
+
+        <div class="asset-change-table-wrap">
+            <table class="asset-change-table">
+                <colgroup>
+                    <col style="width: 44px;">
+                    <col style="width: 48px;">
+                    <col style="width: 105px;">
+                    <col style="width: 105px;">
+                    <col style="width: 100px;">
+                    <col style="width: 190px;">
+                    <col style="width: 285px;">
+                    <col style="width: 130px;">
+                    <col style="width: 120px;">
+                    <col style="width: 240px;">
+                </colgroup>
             <thead>
                 <tr>
+                    <th>
+                        <input type="checkbox" data-role="change-select-all" aria-label="Zaznacz wszystkie zgłoszenia">
+                    </th>
                     <th>ID</th>
                     <th>Operacja</th>
                     <th>Status</th>
                     <th>Zgłosił</th>
-                    <th>Asset</th>
+                    <th>Środek</th>
                     <th>Zmiany</th>
                     <th>Utworzono</th>
                     <th>Opis</th>
@@ -45,8 +239,21 @@
             <tbody>
                 {% for request in change_requests %}
                     <tr>
+                        <td>
+                            <input type="checkbox" data-role="change-select" value="{{ request.id }}" aria-label="Zaznacz zgłoszenie {{ request.id }}">
+                        </td>
                         <td><a href="{% url 'assets:change-detail' request.id %}">{{ request.id }}</a></td>
-                        <td>{{ request.get_operation_display }}</td>
+                        <td>
+                            {% if request.operation == "create" %}
+                                Utworzenie
+                            {% elif request.operation == "update" %}
+                                Aktualizacja
+                            {% elif request.operation == "delete" %}
+                                Usunięcie
+                            {% else %}
+                                {{ request.get_operation_display }}
+                            {% endif %}
+                        </td>
                         <td>
                             {% if request.status == "pending" %}
                                 <div>Oczekuje</div>
@@ -67,9 +274,18 @@
                             {% if request.change_list_summary.create %}
                                 Nowy składnik
                             {% elif request.change_list_summary.rows %}
-                                {% for row in request.change_list_summary.rows %}
-                                    <div>{{ row.label }}: {{ row.current }} → {{ row.proposed }}</div>
-                                {% endfor %}
+                                <div class="asset-change-diff">
+                                    {% for row in request.change_list_summary.rows %}
+                                        <div class="asset-change-diff-item">
+                                            <div class="asset-change-diff-label">{{ row.label }}</div>
+                                            <div class="asset-change-diff-values">
+                                                <span class="asset-change-diff-old">{{ row.current }}</span>
+                                                <span class="asset-change-diff-arrow">→</span>
+                                                <span class="asset-change-diff-new">{{ row.proposed }}</span>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
                                 {% if request.change_list_summary.remaining_count %}
                                     <div>+ {{ request.change_list_summary.remaining_count }} innych zmian</div>
                                 {% endif %}
@@ -89,11 +305,13 @@
                         </td>
                         <td>
                             {% if request.status == "pending" %}
-                                <form method="post" action="{% url 'assets:change-approve' request.id %}">
+                                <div class="asset-change-actions">
+                                    <form method="post" action="{% url 'assets:change-approve' request.id %}">
                                     {% csrf_token %}
-                                    <button type="submit">✔ Zatwierdź</button>
-                                </form>
+                                        <button class="ui-btn ui-btn--primary asset-change-action-btn" type="submit">✔ Zatwierdź</button>
+                                    </form>
                                 <button
+                                    class="ui-btn ui-btn--danger asset-change-action-btn"
                                     type="button"
                                     data-role="toggle-reject-form"
                                     data-target="reject-form-{{ request.id }}"
@@ -108,18 +326,20 @@
                                 >
                                     {% csrf_token %}
                                     <textarea name="comment"></textarea>
-                                    <button type="submit">Potwierd&#378; odrzucenie</button>
+                                    <button class="ui-btn ui-btn--danger asset-change-action-btn" type="submit">Potwierd&#378; odrzucenie</button>
                                 </form>
+                                </div>
                             {% endif %}
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="9">Brak zmian do wyświetlenia.</td>
+                        <td colspan="10">Brak zmian do wyświetlenia.</td>
                     </tr>
                 {% endfor %}
             </tbody>
-        </table>
+            </table>
+        </div>
 
         {% if is_paginated %}
             <nav class="pagination" aria-label="Paginacja">
@@ -133,15 +353,165 @@
             </nav>
         {% endif %}
     </section>
+    <div class="asset-change-modal" data-role="bulk-reject-modal" hidden>
+        <div class="asset-change-modal-backdrop" data-role="modal-close"></div>
+
+        <div class="asset-change-modal-content">
+            <h3>Odrzuć zaznaczone zmiany</h3>
+
+            <textarea
+                data-role="bulk-reject-comment"
+                placeholder="Podaj powód odrzucenia..."
+            ></textarea>
+
+            <div class="asset-change-modal-actions">
+                <button class="ui-btn" type="button" data-role="modal-close">
+                    Anuluj
+                </button>
+
+                <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject-confirm">
+                    Odrzuć
+                </button>
+            </div>
+        </div>
+    </div>
     <script>
-        document.querySelectorAll('[data-role="toggle-reject-form"]').forEach(function (button) {
-            button.addEventListener("click", function () {
-                var targetId = button.getAttribute("data-target");
-                var form = document.getElementById(targetId);
-                if (form) {
-                    form.hidden = !form.hidden;
-                }
+        document.addEventListener("DOMContentLoaded", function () {
+            document.querySelectorAll('[data-role="toggle-reject-form"]').forEach(function (button) {
+                button.addEventListener("click", function () {
+                    var targetId = button.getAttribute("data-target");
+                    var form = document.getElementById(targetId);
+                    if (form) {
+                        form.hidden = !form.hidden;
+                    }
+                });
             });
+
+            var selectAll = document.querySelector('[data-role="change-select-all"]');
+            var rowCheckboxes = Array.prototype.slice.call(document.querySelectorAll('[data-role="change-select"]'));
+            var toolbarButtons = Array.prototype.slice.call(document.querySelectorAll(".asset-change-toolbar-actions button"));
+            var bulkApproveBtn = document.querySelector('[data-role="bulk-approve"]');
+            var bulkRejectBtn = document.querySelector('[data-role="bulk-reject"]');
+            var bulkRejectModal = document.querySelector('[data-role="bulk-reject-modal"]');
+            var bulkRejectConfirm = document.querySelector('[data-role="bulk-reject-confirm"]');
+
+            if (!bulkApproveBtn) {
+                console.error("bulk approve button not found");
+                return;
+            }
+
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie !== "") {
+                    document.cookie.split(";").forEach(function (cookie) {
+                        var trimmed = cookie.trim();
+                        if (trimmed.substring(0, name.length + 1) === name + "=") {
+                            cookieValue = decodeURIComponent(trimmed.substring(name.length + 1));
+                        }
+                    });
+                }
+                return cookieValue;
+            }
+
+            function getSelectedIds() {
+                return Array.prototype.slice.call(document.querySelectorAll('[data-role="change-select"]:checked')).map(function (checkbox) {
+                    return Number.parseInt(checkbox.value, 10);
+                }).filter(function (id) {
+                    return Number.isInteger(id);
+                });
+            }
+
+            function updateToolbarState() {
+                var selectedCount = rowCheckboxes.filter(function (checkbox) {
+                    return checkbox.checked;
+                }).length;
+                toolbarButtons.forEach(function (button) {
+                    button.disabled = selectedCount === 0;
+                });
+            }
+
+            if (selectAll && rowCheckboxes.length) {
+                selectAll.addEventListener("change", function () {
+                    rowCheckboxes.forEach(function (checkbox) {
+                        checkbox.checked = selectAll.checked;
+                    });
+                    updateToolbarState();
+                });
+
+                rowCheckboxes.forEach(function (checkbox) {
+                    checkbox.addEventListener("change", function () {
+                        selectAll.checked = rowCheckboxes.every(function (item) {
+                            return item.checked;
+                        });
+                        updateToolbarState();
+                    });
+                });
+            }
+
+            bulkApproveBtn.addEventListener("click", function () {
+                console.log("bulk approve clicked");
+
+                var ids = getSelectedIds();
+                if (!ids.length) {
+                    console.warn("no ids selected");
+                    return;
+                }
+
+                bulkApproveBtn.disabled = true;
+                fetch(bulkApproveBtn.dataset.url || "/assets/changes/bulk-approve/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie("csrftoken") || ""
+                    },
+                    body: JSON.stringify({ ids: ids })
+                }).then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Request failed");
+                    }
+                    return response.json();
+                }).then(function () {
+                    window.location.reload();
+                }).catch(function (error) {
+                    console.error(error);
+                    updateToolbarState();
+                });
+            });
+
+            if (selectAll && rowCheckboxes.length) {
+                selectAll.checked = rowCheckboxes.every(function (checkbox) {
+                    return checkbox.checked;
+                });
+            }
+            updateToolbarState();
+
+            function closeBulkRejectModal() {
+                if (bulkRejectModal) {
+                    bulkRejectModal.hidden = true;
+                }
+            }
+
+            if (bulkRejectBtn && bulkRejectModal) {
+                bulkRejectBtn.addEventListener("click", function () {
+                    bulkRejectModal.hidden = false;
+                });
+
+                bulkRejectModal.querySelectorAll('[data-role="modal-close"]').forEach(function (button) {
+                    button.addEventListener("click", closeBulkRejectModal);
+                });
+
+                document.addEventListener("keydown", function (event) {
+                    if (event.key === "Escape" && !bulkRejectModal.hidden) {
+                        closeBulkRejectModal();
+                    }
+                });
+            }
+
+            if (bulkRejectConfirm) {
+                bulkRejectConfirm.addEventListener("click", function () {
+                    console.log("bulk reject confirm clicked");
+                });
+            }
         });
     </script>
 {% endblock %}

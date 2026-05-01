@@ -1,3 +1,5 @@
+import json
+
 from datetime import date, datetime
 from decimal import Decimal
 from io import StringIO
@@ -1440,8 +1442,13 @@ class AssetChangeRequestListViewTests(TestCase):
 
         response = self.client.get(reverse("assets:change-list"))
 
-        self.assertContains(response, "Nazwa: Old name → New name")
-        self.assertContains(response, "Nr inw.: OLD-001 → NEW-001")
+        self.assertContains(response, 'class="asset-change-diff"')
+        self.assertContains(response, 'class="asset-change-diff-label">Nazwa</div>')
+        self.assertContains(response, 'class="asset-change-diff-old">Old name</span>')
+        self.assertContains(response, 'class="asset-change-diff-new">New name</span>')
+        self.assertContains(response, 'class="asset-change-diff-label">Nr inw.</div>')
+        self.assertContains(response, 'class="asset-change-diff-old">OLD-001</span>')
+        self.assertContains(response, 'class="asset-change-diff-new">NEW-001</span>')
 
     def test_change_list_limits_update_changes_to_three_fields(self):
         requester = User.objects.create_user(username="queue-diff-limit-requester", password="test-pass-123")
@@ -1478,9 +1485,14 @@ class AssetChangeRequestListViewTests(TestCase):
 
         response = self.client.get(reverse("assets:change-list"))
 
-        self.assertContains(response, "Nazwa: Old name → New name")
-        self.assertContains(response, "Nr inw.: OLD-001 → NEW-001")
-        self.assertContains(response, "Wartość: 1000 → 1200")
+        self.assertContains(response, 'class="asset-change-diff-label">Nazwa</div>')
+        self.assertContains(response, 'class="asset-change-diff-old">Old name</span>')
+        self.assertContains(response, 'class="asset-change-diff-new">New name</span>')
+        self.assertContains(response, 'class="asset-change-diff-label">Nr inw.</div>')
+        self.assertContains(response, 'class="asset-change-diff-old">OLD-001</span>')
+        self.assertContains(response, 'class="asset-change-diff-new">NEW-001</span>')
+        self.assertContains(response, 'class="asset-change-diff-old">1000</span>')
+        self.assertContains(response, 'class="asset-change-diff-new">1200</span>')
         self.assertContains(response, "+ 2 innych zmian")
         self.assertNotContains(response, "Lokalizacja: Old location → New location")
         self.assertNotContains(response, "Status: in_stock → in_use")
@@ -1572,7 +1584,6 @@ class AssetChangeRequestListViewTests(TestCase):
 
         self.assertContains(response, "QUEUE-NO-APPROVE-APPROVED")
         self.assertContains(response, "QUEUE-NO-APPROVE-REJECTED")
-        self.assertNotContains(response, "Zatwierdź")
         self.assertNotContains(response, "change-approve")
 
     def test_change_list_hides_reject_action_for_non_pending_requests(self):
@@ -2191,6 +2202,90 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         change_request.refresh_from_db()
         self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
         self.assertFalse(Asset.objects.filter(inventory_number="POST-APPROVE-NONPENDING-001").exists())
+
+    def test_bulk_approve_approves_multiple_pending_changes(self):
+        requester = User.objects.create_user(username="bulk-approve-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-approve-superuser")
+        first_request = self._create_request(requester, inventory_number="BULK-APPROVE-001")
+        second_request = self._create_request(requester, inventory_number="BULK-APPROVE-002")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-approve"),
+            data=json.dumps({"ids": [first_request.pk, second_request.pk]}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"approved_count": 2, "skipped_count": 0})
+        first_request.refresh_from_db()
+        second_request.refresh_from_db()
+        self.assertEqual(first_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(second_request.status, AssetChangeRequest.Status.APPROVED)
+
+    def test_bulk_approve_skips_out_of_scope_changes(self):
+        requester = User.objects.create_user(username="bulk-approve-scope-requester", password="test-pass-123")
+        allowed_location, outside_location = self._create_location_tree()
+        reviewer = self._scoped_approver("bulk-approve-scope-reviewer", allowed_location)
+        in_scope_asset = self._create_asset("BULK-APPROVE-IN-SCOPE", allowed_location)
+        out_of_scope_asset = self._create_asset("BULK-APPROVE-OUT-SCOPE", outside_location)
+        in_scope_request = self._update_request(requester, in_scope_asset, proposed_name="Bulk In Scope Approved")
+        out_of_scope_request = self._update_request(requester, out_of_scope_asset, proposed_name="Bulk Out Scope Skipped")
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-approve"),
+            data=json.dumps({"ids": [in_scope_request.pk, out_of_scope_request.pk]}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"approved_count": 1, "skipped_count": 1})
+        in_scope_request.refresh_from_db()
+        out_of_scope_request.refresh_from_db()
+        self.assertEqual(in_scope_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(out_of_scope_request.status, AssetChangeRequest.Status.PENDING)
+
+    def test_bulk_approve_skips_non_pending_changes(self):
+        requester = User.objects.create_user(username="bulk-approve-nonpending-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-approve-nonpending-superuser")
+        pending_request = self._create_request(requester, inventory_number="BULK-APPROVE-PENDING")
+        approved_request = self._create_request(
+            requester,
+            inventory_number="BULK-APPROVE-APPROVED",
+            status=AssetChangeRequest.Status.APPROVED,
+            reviewed_by=reviewer,
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-approve"),
+            data=json.dumps({"ids": [pending_request.pk, approved_request.pk]}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"approved_count": 1, "skipped_count": 1})
+        pending_request.refresh_from_db()
+        approved_request.refresh_from_db()
+        self.assertEqual(pending_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertEqual(approved_request.status, AssetChangeRequest.Status.APPROVED)
+
+    def test_bulk_approve_regular_user_gets_403(self):
+        requester = User.objects.create_user(username="bulk-approve-regular-requester", password="test-pass-123")
+        reviewer = User.objects.create_user(username="bulk-approve-regular", password="test-pass-123")
+        change_request = self._create_request(requester)
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:bulk-approve"),
+            data=json.dumps({"ids": [change_request.pk]}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
 
     def test_superuser_can_reject_with_comment(self):
         requester = User.objects.create_user(username="post-reject-admin-requester", password="test-pass-123")
@@ -3076,6 +3171,14 @@ class AssetListApiLocationAccessTests(TestCase):
 
 
 class AssetListViewTests(TestCase):
+    def _create_change_request(self, user, status, marker="SUMMARY-REQUEST"):
+        return AssetChangeRequest.objects.create(
+            requested_by=user,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=status,
+            payload={"current": {"name": marker}, "proposed": {"name": f"{marker} updated"}},
+        )
+
     def test_list_view_redirects_anonymous_user_to_login(self):
         response = self.client.get(reverse("assets:list"))
 
@@ -3098,6 +3201,84 @@ class AssetListViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-api-url="/api/assets/"')
         self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
+
+    def test_list_view_shows_approved_change_summary_for_regular_user(self):
+        user = User.objects.create_user(username="viewer-approved-summary", password="test-pass-123")
+        self._create_change_request(user, AssetChangeRequest.Status.APPROVED, "SUMMARY-APPROVED-1")
+        self._create_change_request(user, AssetChangeRequest.Status.APPROVED, "SUMMARY-APPROVED-2")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="asset-change-summary" class="asset-change-summary"')
+        self.assertContains(response, 'data-role="dismiss-summary"')
+        self.assertContains(response, "×")
+        self.assertContains(response, "Zatwierdzono 2 zmian")
+        self.assertContains(response, "Odrzucono 0 zmian")
+        self.assertNotContains(response, "Sprawdź oznaczone środki")
+
+    def test_list_view_shows_rejected_change_summary_for_regular_user(self):
+        user = User.objects.create_user(username="viewer-rejected-summary", password="test-pass-123")
+        self._create_change_request(user, AssetChangeRequest.Status.REJECTED, "SUMMARY-REJECTED-1")
+        self._create_change_request(user, AssetChangeRequest.Status.REJECTED, "SUMMARY-REJECTED-2")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Zatwierdzono 0 zmian")
+        self.assertContains(response, "Odrzucono 2 zmian")
+        self.assertContains(response, "Sprawdź oznaczone środki")
+
+    def test_list_view_hides_change_summary_without_decided_requests(self):
+        user = User.objects.create_user(username="viewer-no-summary", password="test-pass-123")
+        self._create_change_request(user, AssetChangeRequest.Status.PENDING, "SUMMARY-PENDING")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Zatwierdzono 0 zmian")
+        self.assertNotContains(response, "Odrzucono 0 zmian")
+        self.assertNotContains(response, "Sprawdź oznaczone środki")
+
+    def test_list_view_hides_change_summary_for_manager_and_reviewer(self):
+        manager = User.objects.create_user(username="viewer-manager-summary", password="test-pass-123")
+        manager.profile.role = UserProfile.Role.MANAGER
+        manager.profile.save(update_fields=["role"])
+        reviewer = User.objects.create_user(username="viewer-reviewer-summary", password="test-pass-123")
+        reviewer.profile.can_approve_asset_changes = True
+        reviewer.profile.save(update_fields=["can_approve_asset_changes"])
+        self._create_change_request(manager, AssetChangeRequest.Status.APPROVED, "SUMMARY-MANAGER")
+        self._create_change_request(reviewer, AssetChangeRequest.Status.REJECTED, "SUMMARY-REVIEWER")
+
+        self.client.force_login(manager)
+        manager_response = self.client.get(reverse("assets:list"))
+        self.client.force_login(reviewer)
+        reviewer_response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(manager_response.status_code, 200)
+        self.assertEqual(reviewer_response.status_code, 200)
+        self.assertNotContains(manager_response, "Zatwierdzono 1 zmian")
+        self.assertNotContains(manager_response, "Odrzucono 0 zmian")
+        self.assertNotContains(reviewer_response, "Zatwierdzono 0 zmian")
+        self.assertNotContains(reviewer_response, "Odrzucono 1 zmian")
+
+    def test_list_view_counts_only_current_users_decided_requests(self):
+        user = User.objects.create_user(username="viewer-own-summary", password="test-pass-123")
+        other_user = User.objects.create_user(username="viewer-other-summary", password="test-pass-123")
+        self._create_change_request(user, AssetChangeRequest.Status.APPROVED, "SUMMARY-OWN-APPROVED")
+        self._create_change_request(user, AssetChangeRequest.Status.REJECTED, "SUMMARY-OWN-REJECTED")
+        self._create_change_request(other_user, AssetChangeRequest.Status.APPROVED, "SUMMARY-OTHER-APPROVED")
+        self._create_change_request(other_user, AssetChangeRequest.Status.REJECTED, "SUMMARY-OTHER-REJECTED")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Zatwierdzono 1 zmian")
+        self.assertContains(response, "Odrzucono 1 zmian")
 
     def test_list_view_contains_pending_update_marker_renderer(self):
         user = User.objects.create_user(username="viewer-pending-marker", password="test-pass-123")

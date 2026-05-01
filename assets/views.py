@@ -138,6 +138,37 @@ def get_asset_change_list_summary(change_request):
 class AssetListView(LoginRequiredMixin, TemplateView):
     template_name = "assets/asset_list.html"
 
+    def _get_asset_change_decision_summary(self):
+        user = self.request.user
+        if _user_can_review_asset_changes(user):
+            return None
+
+        try:
+            profile = user.profile
+        except ObjectDoesNotExist:
+            return None
+
+        if profile.role != profile.Role.USER:
+            return None
+
+        decided_requests = AssetChangeRequest.objects.filter(
+            requested_by=user,
+            status__in=[
+                AssetChangeRequest.Status.APPROVED,
+                AssetChangeRequest.Status.REJECTED,
+            ],
+        )
+        approved_count = decided_requests.filter(status=AssetChangeRequest.Status.APPROVED).count()
+        rejected_count = decided_requests.filter(status=AssetChangeRequest.Status.REJECTED).count()
+
+        if not approved_count and not rejected_count:
+            return None
+
+        return {
+            "approved_count": approved_count,
+            "rejected_count": rejected_count,
+        }
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Ewidencja majątku"
@@ -149,6 +180,7 @@ class AssetListView(LoginRequiredMixin, TemplateView):
             .distinct()
         )
         context["filter_schema"] = get_asset_filter_ui_schema()
+        context["asset_change_decision_summary"] = self._get_asset_change_decision_summary()
         return context
 
 
@@ -244,6 +276,43 @@ def asset_change_approve(request, pk):
         pass
 
     return redirect("assets:change-detail", pk=change_request.pk)
+
+
+@login_required
+@require_POST
+def asset_change_bulk_approve(request):
+    if not _user_can_review_asset_changes(request.user):
+        raise PermissionDenied
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or any(not isinstance(item, int) or isinstance(item, bool) for item in ids):
+        return JsonResponse({"error": "ids must be a list of integers"}, status=400)
+
+    queryset = _scope_asset_change_request_queryset(
+        AssetChangeRequest.objects.select_related("requested_by", "reviewed_by", "asset"),
+        request.user,
+    ).filter(
+        pk__in=ids,
+        status=AssetChangeRequest.Status.PENDING,
+    )
+
+    approved_count = 0
+    for change_request in queryset:
+        try:
+            approve_asset_change_request(change_request, request.user)
+        except ValidationError:
+            continue
+        approved_count += 1
+
+    return JsonResponse({
+        "approved_count": approved_count,
+        "skipped_count": len(ids) - approved_count,
+    })
 
 
 @login_required
