@@ -2909,6 +2909,15 @@ let searchDebounceId = null;
                             link.className = "asset-name-link";
                             link.textContent = row.name || "-";
                             td.appendChild(link);
+                            if (row.has_pending_update) {
+                                const pending = document.createElement("span");
+                                pending.textContent = " • Oczekuje";
+                                td.appendChild(pending);
+                            } else if (row.has_rejected_update) {
+                                const rejected = document.createElement("span");
+                                rejected.textContent = " • Odrzucono";
+                                td.appendChild(rejected);
+                            }
                         } else if (column.key === "status") {
                             const pill = document.createElement("span");
                             pill.className = "asset-status-pill";

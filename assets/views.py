@@ -6,7 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.paginator import EmptyPage, Paginator
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -434,6 +434,21 @@ def asset_list_api(request):
     parsed_filters = parse_asset_filters(request.GET)
     queryset = apply_asset_filters(queryset, parsed_filters)
 
+    pending_update_requests = AssetChangeRequest.objects.filter(
+        operation=AssetChangeRequest.Operation.UPDATE,
+        status=AssetChangeRequest.Status.PENDING,
+        asset=OuterRef("pk"),
+    )
+    rejected_update_requests = AssetChangeRequest.objects.filter(
+        operation=AssetChangeRequest.Operation.UPDATE,
+        status=AssetChangeRequest.Status.REJECTED,
+        asset=OuterRef("pk"),
+    )
+    queryset = queryset.annotate(
+        has_pending_update=Exists(pending_update_requests),
+        has_rejected_update=Exists(rejected_update_requests),
+    )
+
     ordering_field = _resolve_asset_ordering(ordering)
     queryset = queryset.order_by(ordering_field, "id")
 
@@ -449,6 +464,8 @@ def asset_list_api(request):
             "id": asset.id,
             "inventory_number": asset.inventory_number,
             "name": asset.name,
+            "has_pending_update": asset.has_pending_update,
+            "has_rejected_update": asset.has_rejected_update,
             "asset_type": asset.asset_type,
             "asset_type_display": asset.get_asset_type_display(),
             "category": asset.category,

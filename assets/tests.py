@@ -1280,6 +1280,99 @@ class AssetChangeRequestListViewTests(TestCase):
         self.assertContains(all_response, "QUEUE-FILTER-APPROVED")
         self.assertContains(all_response, "QUEUE-FILTER-PENDING")
 
+    def test_change_list_translates_pending_status(self):
+        requester = User.objects.create_user(username="queue-pending-status-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-pending-status-superuser",
+            email="queue-pending-status-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(requester, AssetChangeRequest.Operation.CREATE, "QUEUE-PENDING-STATUS")
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        self.assertContains(response, "<div>Oczekuje</div>", html=True)
+
+    def test_change_list_translates_approved_status(self):
+        requester = User.objects.create_user(username="queue-approved-status-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-approved-status-superuser",
+            email="queue-approved-status-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-APPROVED-STATUS",
+            status=AssetChangeRequest.Status.APPROVED,
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": AssetChangeRequest.Status.APPROVED})
+
+        self.assertContains(response, "<div>Zatwierdzone</div>", html=True)
+
+    def test_change_list_translates_rejected_status(self):
+        requester = User.objects.create_user(username="queue-rejected-status-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-rejected-status-superuser",
+            email="queue-rejected-status-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-REJECTED-STATUS",
+            status=AssetChangeRequest.Status.REJECTED,
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": AssetChangeRequest.Status.REJECTED})
+
+        self.assertContains(response, "<div>Odrzucone</div>", html=True)
+
+    def test_change_list_shows_rejected_comment(self):
+        requester = User.objects.create_user(username="queue-rejected-comment-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-rejected-comment-superuser",
+            email="queue-rejected-comment-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-REJECTED-COMMENT",
+            status=AssetChangeRequest.Status.REJECTED,
+            review_comment="Błędna wartość",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": AssetChangeRequest.Status.REJECTED})
+
+        self.assertContains(response, "<div>Powód: Błędna wartość</div>", html=True)
+
+    def test_change_list_does_not_show_rejected_reason_without_comment(self):
+        requester = User.objects.create_user(username="queue-rejected-empty-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-rejected-empty-superuser",
+            email="queue-rejected-empty-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-REJECTED-EMPTY",
+            status=AssetChangeRequest.Status.REJECTED,
+            review_comment="",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": AssetChangeRequest.Status.REJECTED})
+
+        self.assertContains(response, "<div>Odrzucone</div>", html=True)
+        self.assertNotContains(response, "Powód")
+
     def test_operation_filters(self):
         requester = User.objects.create_user(username="queue-filter-operation-requester", password="test-pass-123")
         reviewer = User.objects.create_superuser(
@@ -1405,6 +1498,164 @@ class AssetChangeRequestListViewTests(TestCase):
         response = self.client.get(reverse("assets:change-list"))
 
         self.assertContains(response, "Nowy składnik")
+
+    def test_change_list_shows_approve_button_for_pending_request(self):
+        requester = User.objects.create_user(username="queue-approve-button-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-approve-button-superuser",
+            email="queue-approve-button-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-APPROVE-BUTTON",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        approve_url = reverse("assets:change-approve", kwargs={"pk": change_request.pk})
+        self.assertContains(response, "<th>Akcje</th>", html=True)
+        self.assertContains(response, f'action="{approve_url}"')
+        self.assertContains(response, 'method="post"')
+        self.assertContains(response, "Zatwierdź")
+
+    def test_change_list_shows_reject_action_for_pending_request(self):
+        requester = User.objects.create_user(username="queue-reject-button-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-reject-button-superuser",
+            email="queue-reject-button-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-REJECT-BUTTON",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"))
+
+        reject_url = reverse("assets:change-reject", kwargs={"pk": change_request.pk})
+        self.assertContains(response, "Odrzu")
+        self.assertContains(response, f'action="{reject_url}"')
+        self.assertContains(response, 'method="post"')
+        self.assertContains(response, 'name="comment"')
+        self.assertContains(response, 'data-role="toggle-reject-form"')
+        self.assertContains(response, f'data-target="reject-form-{change_request.pk}"')
+        self.assertContains(response, f'id="reject-form-{change_request.pk}"')
+        self.assertContains(response, "Potwierd")
+
+    def test_change_list_hides_approve_button_for_non_pending_requests(self):
+        requester = User.objects.create_user(username="queue-no-approve-button-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-no-approve-button-superuser",
+            email="queue-no-approve-button-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-NO-APPROVE-APPROVED",
+            status=AssetChangeRequest.Status.APPROVED,
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-NO-APPROVE-REJECTED",
+            status=AssetChangeRequest.Status.REJECTED,
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": "all"})
+
+        self.assertContains(response, "QUEUE-NO-APPROVE-APPROVED")
+        self.assertContains(response, "QUEUE-NO-APPROVE-REJECTED")
+        self.assertNotContains(response, "Zatwierdź")
+        self.assertNotContains(response, "change-approve")
+
+    def test_change_list_hides_reject_action_for_non_pending_requests(self):
+        requester = User.objects.create_user(username="queue-no-reject-button-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-no-reject-button-superuser",
+            email="queue-no-reject-button-superuser@example.com",
+            password="test-pass-123",
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-NO-REJECT-APPROVED",
+            status=AssetChangeRequest.Status.APPROVED,
+        )
+        self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-NO-REJECT-REJECTED",
+            status=AssetChangeRequest.Status.REJECTED,
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.get(reverse("assets:change-list"), {"status": "all"})
+
+        self.assertContains(response, "QUEUE-NO-REJECT-APPROVED")
+        self.assertContains(response, "QUEUE-NO-REJECT-REJECTED")
+        self.assertNotContains(response, "change-reject")
+        self.assertNotContains(response, 'name="comment"')
+
+    def test_change_list_approve_post_approves_request(self):
+        requester = User.objects.create_user(username="queue-approve-post-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-approve-post-superuser",
+            email="queue-approve-post-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-APPROVE-POST-001",
+            payload={
+                "name": "Queue Approve Post",
+                "inventory_number": "QUEUE-APPROVE-POST-001",
+                "asset_type": Asset.AssetType.IT_EQUIPMENT,
+                "category": "IT",
+                "status": Asset.Status.IN_STOCK,
+                "technical_condition": Asset.TechnicalCondition.GOOD,
+                "is_active": True,
+            },
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        change_request.refresh_from_db()
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+        self.assertTrue(Asset.objects.filter(inventory_number="QUEUE-APPROVE-POST-001").exists())
+
+    def test_change_list_reject_post_rejects_request_with_comment(self):
+        requester = User.objects.create_user(username="queue-reject-post-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="queue-reject-post-superuser",
+            email="queue-reject-post-superuser@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_change_request(
+            requester,
+            AssetChangeRequest.Operation.CREATE,
+            "QUEUE-REJECT-POST-001",
+        )
+        self.client.force_login(reviewer)
+
+        response = self.client.post(
+            reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
+            {"comment": "Rejected from list"},
+        )
+
+        change_request.refresh_from_db()
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
+        self.assertEqual(change_request.review_comment, "Rejected from list")
 
     def test_change_list_paginate_by_50(self):
         self.assertEqual(AssetChangeRequestListView.paginate_by, 50)
@@ -2247,6 +2498,181 @@ class AssetListApiTests(TestCase):
         self.assertEqual(row["cost_center"], "MPK-01")
         self.assertEqual(row["is_active_display"], "Tak")
 
+    def test_api_marks_asset_with_pending_update(self):
+        requester = User.objects.create_user(username="pending-update-requester", password="test-pass-123")
+        asset = Asset.objects.create(
+            name="Pending Update Asset",
+            inventory_number="PENDING-UPD-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.PENDING,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Pending Update Asset Edited"}},
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_pending_update"])
+
+    def test_api_marks_asset_with_rejected_update(self):
+        requester = User.objects.create_user(username="rejected-update-requester", password="test-pass-123")
+        asset = Asset.objects.create(
+            name="Rejected Update Asset",
+            inventory_number="REJECTED-UPD-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.REJECTED,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Rejected Update Asset Edited"}},
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_rejected_update"])
+
+    def test_api_does_not_mark_asset_without_pending_update(self):
+        requester = User.objects.create_user(username="approved-update-requester", password="test-pass-123")
+        pending_asset = Asset.objects.create(
+            name="Other Pending Update Asset",
+            inventory_number="PENDING-UPD-OTHER",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        asset = Asset.objects.create(
+            name="No Pending Update Asset",
+            inventory_number="NO-PENDING-UPD-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.PENDING,
+            asset=pending_asset,
+            payload={"current": {"name": pending_asset.name}, "proposed": {"name": "Other Edited"}},
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.APPROVED,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Approved Edited"}},
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertFalse(row["has_pending_update"])
+        self.assertFalse(row["has_rejected_update"])
+
+    def test_api_approved_update_does_not_mark_asset_as_rejected(self):
+        requester = User.objects.create_user(username="approved-rejected-update-requester", password="test-pass-123")
+        asset = Asset.objects.create(
+            name="Approved Update Asset",
+            inventory_number="APPROVED-UPD-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.APPROVED,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Approved Update Asset Edited"}},
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertFalse(row["has_rejected_update"])
+
+    def test_api_marks_pending_and_rejected_update_flags_independently(self):
+        requester = User.objects.create_user(username="pending-rejected-update-requester", password="test-pass-123")
+        asset = Asset.objects.create(
+            name="Pending And Rejected Update Asset",
+            inventory_number="PENDING-REJECTED-UPD-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.REJECTED,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Rejected Name"}},
+        )
+        AssetChangeRequest.objects.create(
+            requested_by=requester,
+            operation=AssetChangeRequest.Operation.UPDATE,
+            status=AssetChangeRequest.Status.PENDING,
+            asset=asset,
+            payload={"current": {"name": asset.name}, "proposed": {"name": "Pending Name"}},
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_pending_update"])
+        self.assertTrue(row["has_rejected_update"])
+
+    def test_api_pending_update_marker_does_not_add_per_row_queries(self):
+        requester = User.objects.create_user(username="pending-query-requester", password="test-pass-123")
+        assets = [
+            Asset.objects.create(
+                name=f"Pending Query Asset {index}",
+                inventory_number=f"PENDING-QUERY-{index:03d}",
+                status=Asset.Status.IN_STOCK,
+                location="Pending Query",
+                category="IT",
+            )
+            for index in range(3)
+        ]
+        for asset in assets:
+            AssetChangeRequest.objects.create(
+                requested_by=requester,
+                operation=AssetChangeRequest.Operation.UPDATE,
+                status=AssetChangeRequest.Status.PENDING,
+                asset=asset,
+                payload={"current": {"name": asset.name}, "proposed": {"name": f"{asset.name} Edited"}},
+            )
+            AssetChangeRequest.objects.create(
+                requested_by=requester,
+                operation=AssetChangeRequest.Operation.UPDATE,
+                status=AssetChangeRequest.Status.REJECTED,
+                asset=asset,
+                payload={"current": {"name": asset.name}, "proposed": {"name": f"{asset.name} Rejected"}},
+            )
+
+        with self.assertNumQueries(4):
+            response = self.client.get(
+                reverse("assets:api-list"),
+                {"search": "PENDING-QUERY", "page_size": 3},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 3)
+
 
 class AssetBulkMoveApiTests(TestCase):
     @classmethod
@@ -2672,6 +3098,27 @@ class AssetListViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-api-url="/api/assets/"')
         self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
+
+    def test_list_view_contains_pending_update_marker_renderer(self):
+        user = User.objects.create_user(username="viewer-pending-marker", password="test-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'pending.textContent = " • Oczekuje";')
+
+    def test_list_view_contains_rejected_update_marker_renderer_with_pending_priority(self):
+        user = User.objects.create_user(username="viewer-rejected-marker", password="test-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'if (row.has_pending_update) {')
+        self.assertContains(response, 'pending.textContent = " • Oczekuje";')
+        self.assertContains(response, '} else if (row.has_rejected_update) {')
+        self.assertContains(response, 'rejected.textContent = " • Odrzucono";')
 
 
 class AssetDetailViewTests(TestCase):

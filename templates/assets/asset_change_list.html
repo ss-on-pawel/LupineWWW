@@ -39,6 +39,7 @@
                     <th>Zmiany</th>
                     <th>Utworzono</th>
                     <th>Opis</th>
+                    <th>Akcje</th>
                 </tr>
             </thead>
             <tbody>
@@ -46,7 +47,20 @@
                     <tr>
                         <td><a href="{% url 'assets:change-detail' request.id %}">{{ request.id }}</a></td>
                         <td>{{ request.get_operation_display }}</td>
-                        <td>{{ request.get_status_display }}</td>
+                        <td>
+                            {% if request.status == "pending" %}
+                                <div>Oczekuje</div>
+                            {% elif request.status == "approved" %}
+                                <div>Zatwierdzone</div>
+                            {% elif request.status == "rejected" %}
+                                <div>Odrzucone</div>
+                                {% if request.review_comment %}
+                                    <div>Powód: {{ request.review_comment }}</div>
+                                {% endif %}
+                            {% else %}
+                                <div>{{ request.get_status_display }}</div>
+                            {% endif %}
+                        </td>
                         <td>{{ request.requested_by }}</td>
                         <td>{% if request.asset %}{{ request.asset }}{% else %}-{% endif %}</td>
                         <td>
@@ -73,10 +87,35 @@
                                 -
                             {% endif %}
                         </td>
+                        <td>
+                            {% if request.status == "pending" %}
+                                <form method="post" action="{% url 'assets:change-approve' request.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit">✔ Zatwierdź</button>
+                                </form>
+                                <button
+                                    type="button"
+                                    data-role="toggle-reject-form"
+                                    data-target="reject-form-{{ request.id }}"
+                                >
+                                    &#10006; Odrzu&#263;
+                                </button>
+                                <form
+                                    id="reject-form-{{ request.id }}"
+                                    method="post"
+                                    action="{% url 'assets:change-reject' request.id %}"
+                                    hidden
+                                >
+                                    {% csrf_token %}
+                                    <textarea name="comment"></textarea>
+                                    <button type="submit">Potwierd&#378; odrzucenie</button>
+                                </form>
+                            {% endif %}
+                        </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="8">Brak zmian do wyświetlenia.</td>
+                        <td colspan="9">Brak zmian do wyświetlenia.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -94,4 +133,15 @@
             </nav>
         {% endif %}
     </section>
+    <script>
+        document.querySelectorAll('[data-role="toggle-reject-form"]').forEach(function (button) {
+            button.addEventListener("click", function () {
+                var targetId = button.getAttribute("data-target");
+                var form = document.getElementById(targetId);
+                if (form) {
+                    form.hidden = !form.hidden;
+                }
+            });
+        });
+    </script>
 {% endblock %}
