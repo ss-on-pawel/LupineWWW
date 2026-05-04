@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "users",
     "assets",
     "locations",
+    "inventory.apps.InventoryConfig",
 ]
 
 MIDDLEWARE = [

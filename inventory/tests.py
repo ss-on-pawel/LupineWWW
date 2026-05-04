@@ -1,0 +1,849 @@
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from accounts.models import UserProfile
+from assets.models import Asset
+from locations.models import Location
+from users.models import User
+
+from .models import InventoryObservedItem, InventoryScanBatch, InventorySession
+from .services import import_inventory_scan_text, start_inventory_session
+
+
+class StartInventorySessionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="inventory-user", password="test-pass-123")
+        cls.root = Location.objects.create(name="Root")
+        cls.child = Location.objects.create(name="Child", parent=cls.root)
+        cls.leaf = Location.objects.create(name="Leaf", parent=cls.child)
+        cls.other_root = Location.objects.create(name="Other")
+
+    def _create_asset(self, inventory_number, location, asset_type=Asset.AssetType.FIXED, **overrides):
+        defaults = {
+            "name": f"Asset {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": asset_type,
+            "barcode": f"BC-{inventory_number}",
+            "location_fk": location,
+            "location": location.path if location else "Legacy only",
+            "status": Asset.Status.IN_STOCK,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def test_session_gets_first_number_and_active_status(self):
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        self.assertEqual(session.number, "INV-000001")
+        self.assertEqual(session.status, InventorySession.Status.ACTIVE)
+        self.assertEqual(list(session.scope_root_locations.all()), [self.root])
+        self.assertEqual(session.asset_type_scope, [Asset.AssetType.FIXED])
+
+    def test_second_session_gets_next_number(self):
+        start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        second_session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        self.assertEqual(second_session.number, "INV-000002")
+
+    def test_snapshot_includes_assets_from_whole_location_subtree(self):
+        root_asset = self._create_asset("ROOT-001", self.root)
+        child_asset = self._create_asset("CHILD-001", self.child)
+        leaf_asset = self._create_asset("LEAF-001", self.leaf)
+
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        self.assertCountEqual(
+            session.snapshot_items.values_list("asset_id_snapshot", flat=True),
+            [root_asset.id, child_asset.id, leaf_asset.id],
+        )
+
+    def test_snapshot_filters_by_asset_type(self):
+        fixed_asset = self._create_asset("FIXED-001", self.root, Asset.AssetType.FIXED)
+        self._create_asset("LOW-001", self.root, Asset.AssetType.LOW_VALUE)
+
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        self.assertEqual(session.snapshot_items.count(), 1)
+        self.assertEqual(session.snapshot_items.get().asset_id_snapshot, fixed_asset.id)
+
+    def test_snapshot_does_not_change_after_asset_update(self):
+        asset = self._create_asset("SNAP-001", self.root, name="Original name", barcode="BC-ORIGINAL")
+
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+        snapshot = session.snapshot_items.get()
+
+        asset.name = "Changed name"
+        asset.barcode = "BC-CHANGED"
+        asset.status = Asset.Status.IN_USE
+        asset.save(update_fields=["name", "barcode", "status", "updated_at"])
+        snapshot.refresh_from_db()
+
+        self.assertEqual(snapshot.name, "Original name")
+        self.assertEqual(snapshot.barcode, "BC-ORIGINAL")
+        self.assertEqual(snapshot.status_snapshot, Asset.Status.IN_STOCK)
+
+    def test_asset_without_location_fk_is_not_snapshotted(self):
+        self._create_asset("NOLOC-001", None)
+
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        self.assertEqual(session.snapshot_items.count(), 0)
+
+    def test_asset_outside_subtree_is_not_snapshotted(self):
+        in_scope_asset = self._create_asset("IN-001", self.child)
+        self._create_asset("OUT-001", self.other_root)
+
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        self.assertEqual(session.snapshot_items.count(), 1)
+        self.assertEqual(session.snapshot_items.get().asset_id_snapshot, in_scope_asset.id)
+
+
+class InventorySessionListViewTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="List Root")
+        self.child = Location.objects.create(name="List Child", parent=self.root)
+        self.other_root = Location.objects.create(name="List Other")
+        self.admin_user = User.objects.create_superuser(
+            username="inventory-list-admin",
+            email="inventory-list-admin@example.com",
+            password="test-pass-123",
+        )
+        self.profile_admin_user = User.objects.create_user(username="inventory-profile-admin", password="test-pass-123")
+        self.profile_admin_user.profile.role = UserProfile.Role.ADMIN
+        self.profile_admin_user.profile.save(update_fields=["role"])
+        self.scoped_user = User.objects.create_user(username="inventory-list-user", password="test-pass-123")
+        self.scoped_user.profile.allowed_locations.add(self.root)
+        self.child_scoped_user = User.objects.create_user(username="inventory-list-child", password="test-pass-123")
+        self.child_scoped_user.profile.allowed_locations.add(self.child)
+        self.no_access_user = User.objects.create_user(username="inventory-list-empty", password="test-pass-123")
+        self.asset = self._create_asset("LIST-IN-001", self.child)
+        self.other_asset = self._create_asset("LIST-OUT-001", self.other_root)
+
+    def _create_asset(self, inventory_number, location, asset_type=Asset.AssetType.FIXED):
+        return Asset.objects.create(
+            name=f"Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=asset_type,
+            barcode=f"BC-{inventory_number}",
+            location=location.path,
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+        )
+
+    def _start_session(self, root_location):
+        return start_inventory_session(
+            created_by=self.admin_user,
+            root_locations=[root_location],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_superuser_sees_all_sessions(self):
+        in_scope_session = self._start_session(self.root)
+        out_of_scope_session = self._start_session(self.other_root)
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, in_scope_session.number)
+        self.assertContains(response, out_of_scope_session.number)
+
+    def test_profile_admin_sees_all_sessions(self):
+        in_scope_session = self._start_session(self.root)
+        out_of_scope_session = self._start_session(self.other_root)
+        self.client.force_login(self.profile_admin_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, in_scope_session.number)
+        self.assertContains(response, out_of_scope_session.number)
+
+    def test_user_sees_session_overlapping_allowed_scope(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, session.number)
+
+    def test_user_sees_session_when_allowed_child_overlaps_session_subtree(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.child_scoped_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, session.number)
+
+    def test_user_does_not_see_session_outside_allowed_scope(self):
+        session = self._start_session(self.other_root)
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, session.number)
+
+    def test_user_without_allowed_locations_sees_empty_list(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.no_access_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, session.number)
+        self.assertContains(response, "Brak sesji inwentaryzacji")
+
+    def test_page_shows_session_number_and_snapshot_item_count(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, session.number)
+        self.assertContains(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        self.assertContains(response, "<td>1</td>", html=True)
+
+
+class InventorySessionDetailViewTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="Detail Root")
+        self.child = Location.objects.create(name="Detail Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Detail Other")
+        self.admin_user = User.objects.create_superuser(
+            username="inventory-detail-admin",
+            email="inventory-detail-admin@example.com",
+            password="test-pass-123",
+        )
+        self.scoped_user = User.objects.create_user(username="inventory-detail-user", password="test-pass-123")
+        self.scoped_user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_user = User.objects.create_user(username="inventory-detail-out", password="test-pass-123")
+        self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
+
+    def _create_asset(self, inventory_number, location, **overrides):
+        defaults = {
+            "name": f"Asset {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": Asset.AssetType.FIXED,
+            "barcode": f"BC-{inventory_number}",
+            "location": location.path,
+            "location_fk": location,
+            "status": Asset.Status.IN_STOCK,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _start_session(self, root_location):
+        return start_inventory_session(
+            created_by=self.admin_user,
+            root_locations=[root_location],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        session = self._start_session(self.root)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_superuser_sees_any_session_detail(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, session.number)
+
+    def test_user_sees_session_detail_in_allowed_scope(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, session.number)
+
+    def test_user_does_not_see_session_detail_outside_allowed_scope(self):
+        session = self._start_session(self.root)
+        self.client.force_login(self.out_of_scope_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_detail_shows_snapshot_items(self):
+        asset = self._create_asset("DETAIL-001", self.child, name="Detail Asset", barcode="BC-DETAIL")
+        session = self._start_session(self.root)
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, session.number)
+        self.assertContains(response, asset.inventory_number)
+        self.assertContains(response, "Detail Asset")
+        self.assertContains(response, "Środek trwały")
+        self.assertContains(response, "Detail Root / Detail Child")
+        self.assertContains(response, "BC-DETAIL")
+
+    def test_detail_uses_snapshot_data_after_asset_update(self):
+        asset = self._create_asset("DETAIL-SNAP-001", self.child, name="Snapshot Name", barcode="BC-SNAPSHOT")
+        session = self._start_session(self.root)
+
+        asset.name = "Current Name"
+        asset.location_fk = self.other_root
+        asset.location = self.other_root.path
+        asset.barcode = "BC-CURRENT"
+        asset.save(update_fields=["name", "location_fk", "location", "barcode", "updated_at"])
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Snapshot Name")
+        self.assertContains(response, "Detail Root / Detail Child")
+        self.assertContains(response, "BC-SNAPSHOT")
+        self.assertNotContains(response, "Current Name")
+        self.assertNotContains(response, "Detail Other")
+        self.assertNotContains(response, "BC-CURRENT")
+
+
+class InventorySessionStartViewTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="Start Root")
+        self.child = Location.objects.create(name="Start Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Start Other")
+        self.admin_user = User.objects.create_superuser(
+            username="inventory-start-admin",
+            email="inventory-start-admin@example.com",
+            password="test-pass-123",
+        )
+        self.manager_user = User.objects.create_user(username="inventory-start-manager", password="test-pass-123")
+        self.manager_user.profile.role = UserProfile.Role.MANAGER
+        self.manager_user.profile.save(update_fields=["role"])
+        self.manager_user.profile.allowed_locations.add(self.root)
+        self.user = User.objects.create_user(username="inventory-start-user", password="test-pass-123")
+        self.user.profile.allowed_locations.add(self.root)
+        self.no_access_user = User.objects.create_user(username="inventory-start-empty", password="test-pass-123")
+        self._create_asset("START-FIXED-001", self.child, Asset.AssetType.FIXED)
+        self._create_asset("START-LOW-001", self.child, Asset.AssetType.LOW_VALUE)
+        self._create_asset("START-OTHER-001", self.other_root, Asset.AssetType.FIXED)
+
+    def _create_asset(self, inventory_number, location, asset_type):
+        return Asset.objects.create(
+            name=f"Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=asset_type,
+            barcode=f"BC-{inventory_number}",
+            location=location.path,
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+        )
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        response = self.client.get(reverse("inventory:session-start"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_regular_user_get_sees_simple_confirmation(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-start"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rozpoczniesz nową inwentaryzację w swoim dostępnym zakresie")
+        self.assertContains(response, "Start Root")
+        self.assertNotContains(response, "name=\"root_locations\"")
+        self.assertNotContains(response, "name=\"asset_types\"")
+
+    def test_regular_user_post_creates_session_in_allowed_locations(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("inventory:session-start"))
+
+        session = InventorySession.objects.get()
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        self.assertEqual(session.number, "INV-000001")
+        self.assertEqual(session.asset_type_scope, [Asset.AssetType.FIXED, Asset.AssetType.LOW_VALUE])
+        self.assertEqual(list(session.scope_root_locations.all()), [self.root])
+        self.assertEqual(session.snapshot_items.count(), 2)
+
+    def test_regular_user_without_allowed_locations_does_not_create_session(self):
+        self.client.force_login(self.no_access_user)
+
+        response = self.client.post(reverse("inventory:session-start"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(InventorySession.objects.count(), 0)
+        self.assertContains(response, "Nie masz przypisanych lokalizacji")
+
+    def test_regular_user_cannot_force_location_outside_scope(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("inventory:session-start"),
+            {
+                "root_locations": [str(self.other_root.id)],
+                "asset_types": [Asset.AssetType.FIXED],
+            },
+        )
+
+        session = InventorySession.objects.get()
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        self.assertEqual(list(session.scope_root_locations.all()), [self.root])
+        self.assertNotIn(self.other_root.id, session.scope_root_locations.values_list("id", flat=True))
+
+    def test_manager_get_sees_location_and_asset_type_checkboxes(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.get(reverse("inventory:session-start"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "name=\"root_locations\"")
+        self.assertContains(response, "name=\"asset_types\"")
+        self.assertContains(response, "Start Root")
+        self.assertContains(response, "Środek trwały")
+        self.assertContains(response, "Niskocenny")
+        self.assertNotContains(response, "Start Other")
+
+    def test_manager_post_creates_session_for_selected_locations(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("inventory:session-start"),
+            {
+                "root_locations": [str(self.root.id)],
+                "asset_types": [Asset.AssetType.FIXED],
+            },
+        )
+
+        session = InventorySession.objects.get()
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        self.assertEqual(list(session.scope_root_locations.all()), [self.root])
+        self.assertEqual(session.asset_type_scope, [Asset.AssetType.FIXED])
+        self.assertEqual(session.snapshot_items.count(), 1)
+
+    def test_manager_cannot_create_session_outside_scope(self):
+        self.client.force_login(self.manager_user)
+
+        response = self.client.post(
+            reverse("inventory:session-start"),
+            {
+                "root_locations": [str(self.other_root.id)],
+                "asset_types": [Asset.AssetType.FIXED],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(InventorySession.objects.count(), 0)
+        self.assertContains(response, "Wybierz poprawną wartość")
+
+    def test_superuser_can_create_session_for_root_location(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("inventory:session-start"),
+            {
+                "root_locations": [str(self.other_root.id)],
+                "asset_types": [Asset.AssetType.FIXED],
+            },
+        )
+
+        session = InventorySession.objects.get()
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        self.assertEqual(list(session.scope_root_locations.all()), [self.other_root])
+        self.assertEqual(session.snapshot_items.count(), 1)
+
+
+class InventorySessionCloseViewTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="Close Root")
+        self.child = Location.objects.create(name="Close Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Close Other")
+        self.admin_user = User.objects.create_superuser(
+            username="inventory-close-admin",
+            email="inventory-close-admin@example.com",
+            password="test-pass-123",
+        )
+        self.scoped_user = User.objects.create_user(username="inventory-close-user", password="test-pass-123")
+        self.scoped_user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_user = User.objects.create_user(username="inventory-close-out", password="test-pass-123")
+        self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
+        self._create_asset("CLOSE-001", self.child)
+
+    def _create_asset(self, inventory_number, location):
+        return Asset.objects.create(
+            name=f"Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=Asset.AssetType.FIXED,
+            barcode=f"BC-{inventory_number}",
+            location=location.path,
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+        )
+
+    def _start_session(self):
+        return start_inventory_session(
+            created_by=self.admin_user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def test_anonymous_post_is_redirected_to_login(self):
+        session = self._start_session()
+
+        response = self.client.post(reverse("inventory:session-close", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_user_in_scope_can_close_active_session(self):
+        session = self._start_session()
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.post(reverse("inventory:session-close", kwargs={"pk": session.pk}))
+
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventorySession.Status.CLOSED)
+        self.assertIsNotNone(session.closed_at)
+
+    def test_user_outside_scope_cannot_close_session(self):
+        session = self._start_session()
+        self.client.force_login(self.out_of_scope_user)
+
+        response = self.client.post(reverse("inventory:session-close", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 404)
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventorySession.Status.ACTIVE)
+        self.assertIsNone(session.closed_at)
+
+    def test_closing_closed_session_does_not_change_closed_at(self):
+        session = self._start_session()
+        closed_at = timezone.now()
+        session.status = InventorySession.Status.CLOSED
+        session.closed_at = closed_at
+        session.save(update_fields=["status", "closed_at", "updated_at"])
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.post(reverse("inventory:session-close", kwargs={"pk": session.pk}))
+
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventorySession.Status.CLOSED)
+        self.assertEqual(session.closed_at, closed_at)
+
+    def test_close_button_is_visible_for_active_session(self):
+        session = self._start_session()
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Zamknij inwentaryzację")
+        self.assertContains(response, reverse("inventory:session-close", kwargs={"pk": session.pk}))
+
+    def test_close_button_is_hidden_for_closed_session(self):
+        session = self._start_session()
+        session.status = InventorySession.Status.CLOSED
+        session.closed_at = timezone.now()
+        session.save(update_fields=["status", "closed_at", "updated_at"])
+        self.client.force_login(self.scoped_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Zamknij inwentaryzację")
+        self.assertNotContains(response, reverse("inventory:session-close", kwargs={"pk": session.pk}))
+
+
+class ImportInventoryScanTextTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="inventory-import-user", password="test-pass-123")
+        self.root = Location.objects.create(name="Import Root")
+        self.child = Location.objects.create(name="Import Child", parent=self.root)
+        self.other_location = Location.objects.create(name="Import Other")
+        self.in_scope_asset = self._create_asset("IMPORT-IN-001", self.child, barcode="BC-IMPORT-IN")
+        self.other_location_asset = self._create_asset("IMPORT-OTHERLOC-001", self.child, barcode="BC-IMPORT-OTHERLOC")
+        self.out_of_scope_asset = self._create_asset("IMPORT-OUT-001", self.other_location, barcode="BC-IMPORT-OUT")
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def _create_asset(self, inventory_number, location, barcode="", asset_type=Asset.AssetType.FIXED):
+        return Asset.objects.create(
+            name=f"Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=asset_type,
+            barcode=barcode,
+            location=location.path,
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+        )
+
+    def test_import_resolves_session_from_first_non_empty_line(self):
+        batch = import_inventory_scan_text(
+            f"\n\n{self.session.number}\n{self.child.code}\nBC-IMPORT-IN\n",
+            uploaded_by=self.user,
+        )
+
+        self.assertEqual(batch.session, self.session)
+        self.assertEqual(batch.uploaded_by, self.user)
+
+    def test_missing_session_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            import_inventory_scan_text("INV-999999\nBC-IMPORT-IN")
+
+    def test_closed_session_raises_value_error(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+
+        with self.assertRaises(ValueError):
+            import_inventory_scan_text(f"{self.session.number}\nBC-IMPORT-IN")
+
+    def test_location_code_sets_current_location(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN")
+
+        observed = InventoryObservedItem.objects.get(asset=self.in_scope_asset)
+        self.assertEqual(observed.scanned_location, self.child)
+
+    def test_asset_in_snapshot_location_is_found_ok(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN")
+
+        observed = InventoryObservedItem.objects.get(asset=self.in_scope_asset)
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OK)
+
+    def test_asset_in_snapshot_other_location_is_found_other_location(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.root.code}\nBC-IMPORT-OTHERLOC")
+
+        observed = InventoryObservedItem.objects.get(asset=self.other_location_asset)
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OTHER_LOCATION)
+
+    def test_asset_outside_snapshot_is_found_out_of_scope(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.other_location.code}\nBC-IMPORT-OUT")
+
+        observed = InventoryObservedItem.objects.get(asset=self.out_of_scope_asset)
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OUT_OF_SCOPE)
+
+    def test_barcode_has_priority_over_inventory_number(self):
+        barcode_asset = self._create_asset("IMPORT-BARCODE-ASSET", self.child, barcode="IMPORT-CONFLICT-001")
+        inventory_number_asset = self._create_asset("IMPORT-CONFLICT-001", self.child, barcode="BC-CONFLICT-INVENTORY")
+
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nIMPORT-CONFLICT-001")
+
+        self.assertTrue(InventoryObservedItem.objects.filter(asset=barcode_asset).exists())
+        self.assertFalse(InventoryObservedItem.objects.filter(asset=inventory_number_asset).exists())
+
+    def test_inventory_number_fallback_works(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nIMPORT-IN-001")
+
+        observed = InventoryObservedItem.objects.get(asset=self.in_scope_asset)
+        self.assertEqual(observed.code, "IMPORT-IN-001")
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OK)
+
+    def test_multiple_scans_of_same_asset_keep_one_observed_item(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN\nBC-IMPORT-IN")
+
+        self.assertEqual(InventoryObservedItem.objects.filter(asset=self.in_scope_asset).count(), 1)
+
+    def test_rescan_updates_location_status_and_last_seen_at(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.root.code}\nBC-IMPORT-IN")
+        observed = InventoryObservedItem.objects.get(asset=self.in_scope_asset)
+        first_seen_at = observed.first_seen_at
+        first_last_seen_at = observed.last_seen_at
+
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN")
+
+        observed.refresh_from_db()
+        self.assertEqual(observed.scanned_location, self.child)
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OK)
+        self.assertEqual(observed.first_seen_at, first_seen_at)
+        self.assertGreaterEqual(observed.last_seen_at, first_last_seen_at)
+
+    def test_unknown_code_creates_unknown_observed_item(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nUNKNOWN-CODE-001")
+
+        observed = InventoryObservedItem.objects.get(asset__isnull=True, code="UNKNOWN-CODE-001")
+        self.assertEqual(observed.status, InventoryObservedItem.Status.UNKNOWN_CODE)
+        self.assertEqual(observed.scanned_location, self.child)
+
+    def test_scan_batch_stores_raw_text_and_counters(self):
+        raw_text = f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN\nUNKNOWN-CODE-002\n"
+
+        batch = import_inventory_scan_text(raw_text, uploaded_by=self.user)
+
+        self.assertEqual(InventoryScanBatch.objects.count(), 1)
+        self.assertEqual(batch.raw_text, raw_text)
+        self.assertEqual(batch.total_lines, 4)
+        self.assertEqual(batch.processed_lines, 3)
+        self.assertEqual(batch.recognized_assets_count, 1)
+        self.assertEqual(batch.unknown_codes_count, 1)
+        self.assertIsNotNone(batch.processed_at)
+
+
+class InventorySessionDetailScanProgressTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="inventory-progress-admin",
+            email="inventory-progress-admin@example.com",
+            password="test-pass-123",
+        )
+        self.root = Location.objects.create(name="Progress Root")
+        self.child = Location.objects.create(name="Progress Child", parent=self.root)
+        self.other_location = Location.objects.create(name="Progress Other")
+        self.ok_asset = self._create_asset("PROGRESS-OK-001", self.child, barcode="BC-PROGRESS-OK")
+        self.other_asset = self._create_asset("PROGRESS-OTHER-001", self.child, barcode="BC-PROGRESS-OTHER")
+        self.out_asset = self._create_asset("PROGRESS-OUT-001", self.other_location, barcode="BC-PROGRESS-OUT")
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def _create_asset(self, inventory_number, location, barcode):
+        return Asset.objects.create(
+            name=f"Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=Asset.AssetType.FIXED,
+            barcode=barcode,
+            location=location.path,
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+        )
+
+    def _detail_response(self):
+        self.client.force_login(self.user)
+        return self.client.get(reverse("inventory:session-detail", kwargs={"pk": self.session.pk}))
+
+    def test_detail_shows_inventory_progress_section(self):
+        response = self._detail_response()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Postęp inwentaryzacji")
+
+    def test_progress_counters_show_observed_status_counts(self):
+        import_inventory_scan_text(
+            "\n".join(
+                [
+                    self.session.number,
+                    self.child.code,
+                    "BC-PROGRESS-OK",
+                    self.root.code,
+                    "BC-PROGRESS-OTHER",
+                    self.other_location.code,
+                    "BC-PROGRESS-OUT",
+                    "UNKNOWN-PROGRESS-001",
+                ]
+            )
+        )
+
+        response = self._detail_response()
+
+        self.assertContains(response, "Odczytano")
+        self.assertContains(response, "3 / 2")
+        self.assertContains(response, "Zgodne")
+        self.assertContains(response, "Inna lokalizacja")
+        self.assertContains(response, "Poza zakresem")
+        self.assertContains(response, "Nieznane kody")
+        self.assertContains(response, '<p class="inventory-summary-value">1</p>', html=True)
+
+    def test_observed_item_with_asset_shows_code_asset_status_and_location(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-PROGRESS-OK")
+
+        response = self._detail_response()
+
+        self.assertContains(response, "Odczyty")
+        self.assertContains(response, "BC-PROGRESS-OK")
+        self.assertContains(response, "PROGRESS-OK-001")
+        self.assertContains(response, "Asset PROGRESS-OK-001")
+        self.assertContains(response, "Zgodne")
+        self.assertContains(response, "Progress Root / Progress Child")
+
+    def test_unknown_observed_item_shows_code_and_empty_asset_columns(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nUNKNOWN-PROGRESS-002")
+
+        response = self._detail_response()
+
+        self.assertContains(response, "UNKNOWN-PROGRESS-002")
+        self.assertContains(response, "Nieznany kod")
+        self.assertContains(response, "<td>-</td>", html=True)
+
+    def test_scan_imports_list_shows_batch_counters(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-PROGRESS-OK\nUNKNOWN-PROGRESS-003")
+
+        response = self._detail_response()
+
+        self.assertContains(response, "Importy skanów")
+        self.assertContains(response, "<td>4</td>", html=True)
+        self.assertContains(response, "<td>3</td>", html=True)
+        self.assertContains(response, "<td>1</td>", html=True)
+
+    def test_empty_observed_state_is_shown(self):
+        response = self._detail_response()
+
+        self.assertContains(response, "Brak odczytów dla tej sesji.")
+
+    def test_empty_imports_state_is_shown(self):
+        response = self._detail_response()
+
+        self.assertContains(response, "Brak importów skanów.")
+
+    def test_snapshot_is_still_visible(self):
+        response = self._detail_response()
+
+        self.assertContains(response, "Snapshot startowy")
+        self.assertContains(response, "PROGRESS-OK-001")
+        self.assertContains(response, "PROGRESS-OTHER-001")

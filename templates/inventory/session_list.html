@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Inwentaryzacje{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .inventory-page {
+            display: grid;
+            gap: 18px;
+        }
+
+        .inventory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        .inventory-header-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .inventory-header h1 {
+            margin: 0;
+            font-size: 1.6rem;
+        }
+
+        .inventory-header p {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .inventory-table-wrap {
+            overflow-x: auto;
+        }
+
+        .inventory-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border: 1px solid var(--border);
+        }
+
+        .inventory-table th,
+        .inventory-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        .inventory-table th {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0;
+        }
+
+        .inventory-table td:nth-child(3),
+        .inventory-table td:nth-child(4) {
+            white-space: normal;
+        }
+
+        .inventory-number {
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-weight: 700;
+        }
+
+        .inventory-number a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .inventory-number a:hover,
+        .inventory-number a:focus-visible {
+            text-decoration: underline;
+        }
+
+        .inventory-empty {
+            padding: 18px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="inventory-page">
+        <div class="inventory-header">
+            <div class="inventory-header-copy">
+                <h1>Inwentaryzacje</h1>
+                <p>Lista uruchomionych sesji inwentaryzacji.</p>
+            </div>
+            <a class="ui-btn ui-btn--primary" href="{% url 'inventory:session-start' %}">Rozpocznij inwentaryzację</a>
+        </div>
+
+        {% if sessions %}
+            <div class="inventory-table-wrap">
+                <table class="inventory-table">
+                    <thead>
+                        <tr>
+                            <th>Numer</th>
+                            <th>Status</th>
+                            <th>Lokalizacje root</th>
+                            <th>Zakres rodzaju</th>
+                            <th>Start</th>
+                            <th>Pozycje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for session in sessions %}
+                            <tr>
+                                <td class="inventory-number">
+                                    <a href="{% url 'inventory:session-detail' session.pk %}">{{ session.number }}</a>
+                                </td>
+                                <td>{{ session.get_status_display }}</td>
+                                <td>{{ session.root_locations_display|default:"-" }}</td>
+                                <td>{{ session.asset_type_scope_display|default:"-" }}</td>
+                                <td>{{ session.started_at|date:"Y-m-d H:i" }}</td>
+                                <td>{{ session.snapshot_items_count }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="inventory-empty">Brak sesji inwentaryzacji w dostępnym zakresie.</div>
+        {% endif %}
+    </section>
+{% endblock %}

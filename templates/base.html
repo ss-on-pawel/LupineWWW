@@ -418,6 +418,7 @@
                         {% endif %}
                     {% endif %}
                     <a class="{% if request.path|slice:':13' == '/lokalizacje/' %}is-active{% endif %}" href="{% url 'locations:list' %}">Lokalizacje</a>
+                    <a class="{% if request.path|slice:':11' == '/inventory/' %}is-active{% endif %}" href="{% url 'inventory:session-list' %}">Inwentaryzacje</a>
                     <a href="#">Raporty</a>
                     <a href="#">Ustawienia</a>
                 {% endblock %}

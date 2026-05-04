@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Rozpocznij inwentaryzację{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .inventory-page {
+            display: grid;
+            gap: 18px;
+        }
+
+        .inventory-header {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .inventory-header h1 {
+            margin: 0;
+            font-size: 1.6rem;
+        }
+
+        .inventory-header p {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .inventory-start-panel {
+            display: grid;
+            gap: 18px;
+            max-width: 760px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .inventory-form-section {
+            display: grid;
+            gap: 8px;
+        }
+
+        .inventory-form-section > label,
+        .inventory-form-title {
+            font-weight: 700;
+        }
+
+        .inventory-checks {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .inventory-checks label {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .inventory-errors {
+            color: var(--danger);
+        }
+
+        .inventory-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .inventory-root-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="inventory-page">
+        <div class="inventory-header">
+            <h1>Rozpocznij inwentaryzację</h1>
+            <p>Snapshot ewidencji zostanie utworzony natychmiast po potwierdzeniu.</p>
+        </div>
+
+        <form class="inventory-start-panel" method="post">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="inventory-errors">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            {% if can_configure_scope %}
+                <div class="inventory-form-section">
+                    <div class="inventory-form-title">{{ form.root_locations.label }}</div>
+                    {% if form.root_locations.errors %}
+                        <div class="inventory-errors">{{ form.root_locations.errors }}</div>
+                    {% endif %}
+                    <ul class="inventory-checks">
+                        {% for checkbox in form.root_locations %}
+                            <li>{{ checkbox.tag }} {{ checkbox.choice_label }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="inventory-form-section">
+                    <div class="inventory-form-title">{{ form.asset_types.label }}</div>
+                    {% if form.asset_types.errors %}
+                        <div class="inventory-errors">{{ form.asset_types.errors }}</div>
+                    {% endif %}
+                    <ul class="inventory-checks">
+                        {% for checkbox in form.asset_types %}
+                            <li>{{ checkbox.tag }} {{ checkbox.choice_label }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% else %}
+                <div class="inventory-form-section">
+                    <p>Rozpoczniesz nową inwentaryzację w swoim dostępnym zakresie.</p>
+                    {% if user_root_locations %}
+                        <ul class="inventory-root-list">
+                            {% for location in user_root_locations %}
+                                <li>{{ location.path }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>Brak przypisanych lokalizacji.</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            <div class="inventory-actions">
+                <button class="ui-btn ui-btn--primary" type="submit">Rozpocznij inwentaryzację</button>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-list' %}">Anuluj</a>
+            </div>
+        </form>
+    </section>
+{% endblock %}

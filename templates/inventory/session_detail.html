@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}{{ session.number }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .inventory-page {
+            display: grid;
+            gap: 18px;
+        }
+
+        .inventory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        .inventory-header-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .inventory-header h1 {
+            margin: 0;
+            font-size: 1.6rem;
+        }
+
+        .inventory-backlink {
+            color: var(--muted);
+            text-decoration: none;
+        }
+
+        .inventory-backlink:hover,
+        .inventory-backlink:focus-visible {
+            text-decoration: underline;
+        }
+
+        .inventory-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1px;
+            border: 1px solid var(--border);
+            background: var(--border);
+        }
+
+        .inventory-summary-item {
+            padding: 12px 14px;
+            background: var(--surface);
+        }
+
+        .inventory-summary-label {
+            margin: 0 0 4px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+        }
+
+        .inventory-summary-value {
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .inventory-section {
+            display: grid;
+            gap: 10px;
+        }
+
+        .inventory-section h2 {
+            margin: 0;
+            font-size: 1.08rem;
+        }
+
+        .inventory-progress {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1px;
+            border: 1px solid var(--border);
+            background: var(--border);
+        }
+
+        .inventory-progress-item {
+            padding: 12px 14px;
+            background: var(--surface);
+        }
+
+        .inventory-table-wrap {
+            overflow-x: auto;
+        }
+
+        .inventory-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border: 1px solid var(--border);
+        }
+
+        .inventory-table th,
+        .inventory-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        .inventory-table th {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0;
+        }
+
+        .inventory-table td:nth-child(2),
+        .inventory-table td:nth-child(4) {
+            white-space: normal;
+        }
+
+        .inventory-mono {
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-weight: 700;
+        }
+
+        .inventory-empty {
+            padding: 18px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="inventory-page">
+        <div class="inventory-header">
+            <div class="inventory-header-copy">
+                <a class="inventory-backlink" href="{% url 'inventory:session-list' %}">Inwentaryzacje</a>
+                <h1>{{ session.number }}</h1>
+            </div>
+            {% if session.status == "active" %}
+                <form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
+                    {% csrf_token %}
+                    <button class="ui-btn ui-btn--danger" type="submit">Zamknij inwentaryzację</button>
+                </form>
+            {% endif %}
+        </div>
+
+        <div class="inventory-summary">
+            <div class="inventory-summary-item">
+                <p class="inventory-summary-label">Status</p>
+                <p class="inventory-summary-value">{{ session.get_status_display }}</p>
+            </div>
+            <div class="inventory-summary-item">
+                <p class="inventory-summary-label">Lokalizacje root</p>
+                <p class="inventory-summary-value">{{ root_locations_display|default:"-" }}</p>
+            </div>
+            <div class="inventory-summary-item">
+                <p class="inventory-summary-label">Zakres rodzaju</p>
+                <p class="inventory-summary-value">{{ asset_type_scope_display|default:"-" }}</p>
+            </div>
+            <div class="inventory-summary-item">
+                <p class="inventory-summary-label">Start</p>
+                <p class="inventory-summary-value">{{ session.started_at|date:"Y-m-d H:i" }}</p>
+            </div>
+            <div class="inventory-summary-item">
+                <p class="inventory-summary-label">Pozycje snapshotu</p>
+                <p class="inventory-summary-value">{{ session.snapshot_items_count }}</p>
+            </div>
+        </div>
+
+        <section class="inventory-section" aria-labelledby="inventory-progress-title">
+            <h2 id="inventory-progress-title">Postęp inwentaryzacji</h2>
+            <div class="inventory-progress">
+                <div class="inventory-progress-item">
+                    <p class="inventory-summary-label">Odczytano</p>
+                    <p class="inventory-summary-value">{{ observed_assets_count }} / {{ snapshot_total }}</p>
+                </div>
+                <div class="inventory-progress-item">
+                    <p class="inventory-summary-label">Zgodne</p>
+                    <p class="inventory-summary-value">{{ found_ok_count }}</p>
+                </div>
+                <div class="inventory-progress-item">
+                    <p class="inventory-summary-label">Inna lokalizacja</p>
+                    <p class="inventory-summary-value">{{ found_other_location_count }}</p>
+                </div>
+                <div class="inventory-progress-item">
+                    <p class="inventory-summary-label">Poza zakresem</p>
+                    <p class="inventory-summary-value">{{ found_out_of_scope_count }}</p>
+                </div>
+                <div class="inventory-progress-item">
+                    <p class="inventory-summary-label">Nieznane kody</p>
+                    <p class="inventory-summary-value">{{ unknown_code_count }}</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="inventory-section" aria-labelledby="inventory-observed-title">
+            <h2 id="inventory-observed-title">Odczyty</h2>
+            {% if observed_items %}
+                <div class="inventory-table-wrap">
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>Kod</th>
+                                <th>Numer inwentarzowy</th>
+                                <th>Nazwa</th>
+                                <th>Status</th>
+                                <th>Lokalizacja odczytu</th>
+                                <th>Ostatni odczyt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in observed_items %}
+                                <tr>
+                                    <td class="inventory-mono">{{ item.code }}</td>
+                                    <td class="inventory-mono">{% if item.asset %}{{ item.asset.inventory_number }}{% else %}-{% endif %}</td>
+                                    <td>{% if item.asset %}{{ item.asset.name }}{% else %}-{% endif %}</td>
+                                    <td>{{ item.status_display_pl }}</td>
+                                    <td>{{ item.scanned_location_display }}</td>
+                                    <td>{{ item.last_seen_at|date:"Y-m-d H:i" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-empty">Brak odczytów dla tej sesji.</div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-section" aria-labelledby="inventory-imports-title">
+            <h2 id="inventory-imports-title">Importy skanów</h2>
+            {% if scan_batches %}
+                <div class="inventory-table-wrap">
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Linie</th>
+                                <th>Przetworzone</th>
+                                <th>Rozpoznane assety</th>
+                                <th>Nieznane kody</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for batch in scan_batches %}
+                                <tr>
+                                    <td>{{ batch.created_at|date:"Y-m-d H:i" }}</td>
+                                    <td>{{ batch.total_lines }}</td>
+                                    <td>{{ batch.processed_lines }}</td>
+                                    <td>{{ batch.recognized_assets_count }}</td>
+                                    <td>{{ batch.unknown_codes_count }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-empty">Brak importów skanów.</div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-section" aria-labelledby="inventory-snapshot-title">
+            <h2 id="inventory-snapshot-title">Snapshot startowy</h2>
+        {% if snapshot_items %}
+            <div class="inventory-table-wrap">
+                <table class="inventory-table">
+                    <thead>
+                        <tr>
+                            <th>Numer inwentarzowy</th>
+                            <th>Nazwa</th>
+                            <th>Rodzaj</th>
+                            <th>Lokalizacja startowa</th>
+                            <th>Kod kreskowy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in snapshot_items %}
+                            <tr>
+                                <td class="inventory-mono">{{ item.inventory_number }}</td>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.asset_type_display|default:"-" }}</td>
+                                <td>{{ item.location_path|default:"-" }}</td>
+                                <td class="inventory-mono">{{ item.barcode|default:"-" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="inventory-empty">Brak pozycji snapshotu dla tej sesji.</div>
+        {% endif %}
+        </section>
+    </section>
+{% endblock %}
