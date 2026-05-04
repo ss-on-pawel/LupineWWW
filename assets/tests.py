@@ -16,6 +16,7 @@ from users.models import User
 from locations.models import Location
 
 from .forms import AssetForm
+from .filters import get_asset_filter_ui_schema
 from .models import Asset, AssetChangeRequest
 from .services import (
     approve_asset_change_request,
@@ -247,7 +248,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
         payload = {
             "name": "Not Created",
             "inventory_number": "DESERIALIZE-NO-CREATE-001",
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
         }
@@ -261,7 +262,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
         payload = {
             "name": "Create Payload",
             "inventory_number": "DESERIALIZE-CREATE-001",
-            "asset_type": Asset.AssetType.IT_EQUIPMENT,
+            "asset_type": Asset.AssetType.LOW_VALUE,
             "location": "Warehouse",
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
@@ -272,7 +273,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
 
         self.assertEqual(form_data["name"], "Create Payload")
         self.assertEqual(form_data["inventory_number"], "DESERIALIZE-CREATE-001")
-        self.assertEqual(form_data["asset_type"], Asset.AssetType.IT_EQUIPMENT)
+        self.assertEqual(form_data["asset_type"], Asset.AssetType.LOW_VALUE)
         self.assertEqual(form_data["location"], "Warehouse")
         self.assertNotIn("review_comment", form_data)
 
@@ -303,7 +304,7 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         payload = {
             "name": "Approved Asset",
             "inventory_number": inventory_number,
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "category": "IT",
@@ -536,7 +537,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         defaults = {
             "name": "Original Asset",
             "inventory_number": inventory_number,
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "category": "IT",
             "location": location_obj.path if location_obj else "Legacy location",
             "location_fk": location_obj,
@@ -585,7 +586,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         payload.update(
             {
                 "name": "Approved Update",
-                "asset_type": Asset.AssetType.IT_EQUIPMENT,
+                "asset_type": Asset.AssetType.LOW_VALUE,
                 "status": Asset.Status.IN_USE,
                 "technical_condition": Asset.TechnicalCondition.VERY_GOOD,
             }
@@ -847,7 +848,7 @@ class RejectAssetChangeRequestTests(TestCase):
         return {
             "name": "Rejected Asset",
             "inventory_number": inventory_number,
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
         }
@@ -1631,7 +1632,7 @@ class AssetChangeRequestListViewTests(TestCase):
             payload={
                 "name": "Queue Approve Post",
                 "inventory_number": "QUEUE-APPROVE-POST-001",
-                "asset_type": Asset.AssetType.IT_EQUIPMENT,
+                "asset_type": Asset.AssetType.LOW_VALUE,
                 "category": "IT",
                 "status": Asset.Status.IN_STOCK,
                 "technical_condition": Asset.TechnicalCondition.GOOD,
@@ -2050,7 +2051,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         return Asset.objects.create(
             name=f"Post Asset {inventory_number}",
             inventory_number=inventory_number,
-            asset_type=Asset.AssetType.FIXED_ASSET,
+            asset_type=Asset.AssetType.FIXED,
             category="IT",
             location=location.path if location else "Legacy only",
             location_fk=location,
@@ -2071,7 +2072,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         return {
             "name": f"Post Create {inventory_number}",
             "inventory_number": inventory_number,
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "category": "IT",
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
@@ -2602,6 +2603,57 @@ class AssetListApiTests(TestCase):
         self.assertEqual(payload["pagination"]["total_items"], 1)
         self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
 
+    def test_api_filters_by_asset_type_equals(self):
+        fixed_asset = Asset.objects.create(
+            name="Fixed Filter Asset",
+            inventory_number="FILTER-FIXED-001",
+            asset_type=Asset.AssetType.FIXED,
+            status=Asset.Status.IN_STOCK,
+            location="Filter Lab",
+        )
+        Asset.objects.create(
+            name="Low Value Filter Asset",
+            inventory_number="FILTER-LOW-001",
+            asset_type=Asset.AssetType.LOW_VALUE,
+            status=Asset.Status.IN_STOCK,
+            location="Filter Lab",
+        )
+
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {
+                "filter__asset_type__equals": Asset.AssetType.FIXED,
+                "location": "Filter Lab",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["id"], fixed_asset.id)
+
+    def test_asset_type_filter_schema_uses_current_model_choices(self):
+        schema = get_asset_filter_ui_schema()
+        asset_type_schema = next(item for item in schema if item["field"] == "asset_type")
+
+        self.assertEqual(asset_type_schema["label"], "Rodzaj")
+        self.assertEqual(
+            asset_type_schema["choices"],
+            [
+                {"value": "fixed", "label": "Środek trwały"},
+                {"value": "low_value", "label": "Wyposażenie / niskocenne"},
+                {"value": "intangible", "label": "WNiP"},
+                {"value": "quantity", "label": "Ilościówka"},
+                {"value": "other", "label": "Inne"},
+            ],
+        )
+        self.assertFalse(
+            {"fixed_asset", "low_value_asset", "it_equipment"}.intersection(
+                {choice["value"] for choice in asset_type_schema["choices"]}
+            )
+        )
+
     def test_api_supports_enum_in_filters(self):
         response = self.client.get(
             reverse("assets:api-list"),
@@ -2680,7 +2732,7 @@ class AssetListApiTests(TestCase):
         asset = Asset.objects.create(
             name="Laptop Test",
             inventory_number="EXT-001",
-            asset_type=Asset.AssetType.IT_EQUIPMENT,
+            asset_type=Asset.AssetType.LOW_VALUE,
             manufacturer="Dell",
             model="Latitude",
             serial_number="SN-123",
@@ -2701,7 +2753,7 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         row = response.json()["results"][0]
-        self.assertEqual(row["asset_type_display"], "Sprzęt IT")
+        self.assertEqual(row["asset_type_display"], "Wyposażenie / niskocenne")
         self.assertEqual(row["manufacturer"], "Dell")
         self.assertEqual(row["serial_number"], "SN-123")
         self.assertEqual(row["responsible_person"], "Jan Kowalski")
@@ -3639,7 +3691,7 @@ class AssetUpdateViewTests(TestCase):
         defaults = {
             "name": "Update Asset",
             "inventory_number": inventory_number,
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "location": location_value,
@@ -3654,7 +3706,7 @@ class AssetUpdateViewTests(TestCase):
         payload = {
             "name": "Updated Asset",
             "inventory_number": asset.inventory_number,
-            "asset_type": Asset.AssetType.IT_EQUIPMENT,
+            "asset_type": Asset.AssetType.LOW_VALUE,
             "category": "Updated IT",
             "manufacturer": "Dell",
             "model": "Latitude",
@@ -4091,7 +4143,7 @@ class AssetCreateViewTests(TestCase):
         payload = {
             "name": "Created Asset",
             "inventory_number": "CREATE-001",
-            "asset_type": Asset.AssetType.FIXED_ASSET,
+            "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "location": "Warehouse",
@@ -4118,7 +4170,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(Asset.objects.filter(inventory_number="CREATE-001").count(), 1)
         asset = Asset.objects.get(inventory_number="CREATE-001")
         self.assertEqual(asset.name, "Created Asset")
-        self.assertEqual(asset.asset_type, Asset.AssetType.FIXED_ASSET)
+        self.assertEqual(asset.asset_type, Asset.AssetType.FIXED)
         self.assertEqual(asset.status, Asset.Status.IN_STOCK)
         self.assertEqual(asset.technical_condition, Asset.TechnicalCondition.GOOD)
         self.assertEqual(asset.location, "Warehouse")
@@ -4160,7 +4212,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(change_request.requested_by, user)
         self.assertEqual(change_request.payload["name"], "Queued Asset")
         self.assertEqual(change_request.payload["inventory_number"], "CREATE-APPROVAL-001")
-        self.assertEqual(change_request.payload["asset_type"], Asset.AssetType.FIXED_ASSET)
+        self.assertEqual(change_request.payload["asset_type"], Asset.AssetType.FIXED)
         self.assertEqual(change_request.payload["status"], Asset.Status.IN_STOCK)
         self.assertEqual(change_request.payload["technical_condition"], Asset.TechnicalCondition.GOOD)
         self.assertEqual(change_request.payload["location"], "Warehouse")
@@ -4385,3 +4437,4 @@ class BackfillAssetLocationFkCommandTests(TestCase):
         self.assertIn("Pewne dopasowania: 1", stdout.getvalue())
         self.assertIn("Bez dopasowania: 1", stdout.getvalue())
         self.assertIn("Pozostaje bez location_fk: 1", stdout.getvalue())
+

@@ -2215,7 +2215,7 @@
                 { key: "category", label: "Kategoria", visible: true, sortable: true, sticky: false, className: "" },
                 { key: "updated_at", label: "Data modyfikacji", visible: true, sortable: true, sticky: false, className: "" },
                 { key: "purchase_value", label: "Wartość", visible: true, sortable: true, sticky: false, className: "cell-value" },
-                { key: "asset_type", label: "Typ", visible: false, sortable: true, sticky: false, className: "" },
+                { key: "asset_type", label: "Rodzaj", visible: true, sortable: true, sticky: false, className: "" },
                 { key: "manufacturer", label: "Producent", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "model", label: "Model", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "serial_number", label: "Nr seryjny", visible: false, sortable: true, sticky: false, className: "" },
@@ -3946,6 +3946,9 @@ let searchDebounceId = null;
                 }
 
                 if (displayColumns[columnKey]) {
+                    if (columnKey === "asset_type") {
+                        return row[displayColumns[columnKey]] || "";
+                    }
                     return row[displayColumns[columnKey]] || "-";
                 }
 

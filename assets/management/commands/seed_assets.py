@@ -62,14 +62,14 @@ CONDITION_WEIGHTS = [
     (Asset.TechnicalCondition.DAMAGED, 2),
 ]
 ASSET_TYPE_BY_CATEGORY = {
-    "IT": Asset.AssetType.IT_EQUIPMENT,
-    "Biuro": Asset.AssetType.LOW_VALUE_ASSET,
-    "Meble": Asset.AssetType.LOW_VALUE_ASSET,
-    "Mobilne": Asset.AssetType.IT_EQUIPMENT,
-    "Siec": Asset.AssetType.IT_EQUIPMENT,
-    "Infrastruktura": Asset.AssetType.FIXED_ASSET,
-    "AV": Asset.AssetType.LOW_VALUE_ASSET,
-    "Magazyn": Asset.AssetType.FIXED_ASSET,
+    "IT": Asset.AssetType.LOW_VALUE,
+    "Biuro": Asset.AssetType.LOW_VALUE,
+    "Meble": Asset.AssetType.LOW_VALUE,
+    "Mobilne": Asset.AssetType.LOW_VALUE,
+    "Siec": Asset.AssetType.LOW_VALUE,
+    "Infrastruktura": Asset.AssetType.FIXED,
+    "AV": Asset.AssetType.LOW_VALUE,
+    "Magazyn": Asset.AssetType.FIXED,
 }
 
 

@@ -4,12 +4,11 @@ from django.db import models
 
 class Asset(models.Model):
     class AssetType(models.TextChoices):
-        FIXED_ASSET = "fixed_asset", "Środek trwały"
-        LOW_VALUE_ASSET = "low_value_asset", "Wyposażenie"
-        IT_EQUIPMENT = "it_equipment", "Sprzęt IT"
-        SOFTWARE = "software", "Oprogramowanie"
-        VEHICLE = "vehicle", "Pojazd"
-        OTHER = "other", "Inny składnik"
+        FIXED = "fixed", "Środek trwały"
+        LOW_VALUE = "low_value", "Wyposażenie / niskocenne"
+        INTANGIBLE = "intangible", "WNiP"
+        QUANTITY = "quantity", "Ilościówka"
+        OTHER = "other", "Inne"
 
     class Status(models.TextChoices):
         IN_STOCK = "in_stock", "Na stanie"
@@ -38,11 +37,11 @@ class Asset(models.Model):
         verbose_name="Numer inwentarzowy",
     )
     asset_type = models.CharField(
-        max_length=30,
+        max_length=32,
         choices=AssetType.choices,
-        default=AssetType.FIXED_ASSET,
+        blank=True,
         db_index=True,
-        verbose_name="Typ składnika",
+        verbose_name="Rodzaj",
     )
     category = models.CharField(
         max_length=120,

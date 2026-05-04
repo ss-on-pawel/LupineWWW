@@ -5,6 +5,8 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from .models import Asset
+
 
 FILTER_QUERY_PREFIX = "filter__"
 
@@ -95,18 +97,11 @@ ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
     ),
     "asset_type": FilterFieldSpec(
         "asset_type",
-        "Typ",
+        "Rodzaj",
         "enum",
         "asset_type",
         TYPE_OPERATORS["enum"],
-        (
-            ("fixed_asset", "Środek trwały"),
-            ("low_value_asset", "Wyposażenie"),
-            ("it_equipment", "Sprzęt IT"),
-            ("software", "Oprogramowanie"),
-            ("vehicle", "Pojazd"),
-            ("other", "Inny składnik"),
-        ),
+        tuple(Asset.AssetType.choices),
     ),
     "technical_condition": FilterFieldSpec(
         "technical_condition",
