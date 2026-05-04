@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -773,6 +773,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Postęp inwentaryzacji")
+        self.assertContains(response, "Składniki inwentaryzacji")
 
     def test_progress_counters_show_observed_status_counts(self):
         import_inventory_scan_text(
@@ -798,28 +799,57 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertContains(response, "Inna lokalizacja")
         self.assertContains(response, "Poza zakresem")
         self.assertContains(response, "Nieznane kody")
-        self.assertContains(response, '<p class="inventory-summary-value">1</p>', html=True)
+        self.assertContains(response, "<dd>1</dd>", html=True)
 
-    def test_observed_item_with_asset_shows_code_asset_status_and_location(self):
+    def test_work_table_shows_snapshot_item_without_scan_as_missing(self):
+        response = self._detail_response()
+
+        self.assertContains(response, "Składniki inwentaryzacji")
+        self.assertContains(response, "PROGRESS-OK-001")
+        self.assertContains(response, "Brak odczytu")
+
+    def test_work_table_shows_found_ok_status_location_and_last_seen(self):
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-PROGRESS-OK")
+        observed = InventoryObservedItem.objects.get(asset=self.ok_asset)
+        last_seen_display = timezone.localtime(observed.last_seen_at).strftime("%Y-%m-%d %H:%M")
 
         response = self._detail_response()
 
-        self.assertContains(response, "Odczyty")
+        self.assertContains(response, "Składniki inwentaryzacji")
         self.assertContains(response, "BC-PROGRESS-OK")
         self.assertContains(response, "PROGRESS-OK-001")
         self.assertContains(response, "Asset PROGRESS-OK-001")
         self.assertContains(response, "Zgodne")
         self.assertContains(response, "Progress Root / Progress Child")
+        self.assertContains(response, last_seen_display)
 
-    def test_unknown_observed_item_shows_code_and_empty_asset_columns(self):
+    def test_work_table_shows_found_other_location(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.root.code}\nBC-PROGRESS-OTHER")
+
+        response = self._detail_response()
+
+        self.assertContains(response, "PROGRESS-OTHER-001")
+        self.assertContains(response, "Inna lokalizacja")
+        self.assertContains(response, "Progress Root")
+
+    def test_unknown_code_is_shown_in_problem_section(self):
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nUNKNOWN-PROGRESS-002")
 
         response = self._detail_response()
 
+        self.assertContains(response, "Problemy i odczyty spoza ewidencji")
         self.assertContains(response, "UNKNOWN-PROGRESS-002")
         self.assertContains(response, "Nieznany kod")
-        self.assertContains(response, "<td>-</td>", html=True)
+
+    def test_found_out_of_scope_is_shown_in_problem_section(self):
+        import_inventory_scan_text(f"{self.session.number}\n{self.other_location.code}\nBC-PROGRESS-OUT")
+
+        response = self._detail_response()
+
+        self.assertContains(response, "Problemy i odczyty spoza ewidencji")
+        self.assertContains(response, "BC-PROGRESS-OUT")
+        self.assertContains(response, "Poza zakresem")
+        self.assertContains(response, "Progress Other")
 
     def test_scan_imports_list_shows_batch_counters(self):
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-PROGRESS-OK\nUNKNOWN-PROGRESS-003")
@@ -831,19 +861,219 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertContains(response, "<td>3</td>", html=True)
         self.assertContains(response, "<td>1</td>", html=True)
 
-    def test_empty_observed_state_is_shown(self):
+    def test_empty_problem_state_is_shown(self):
         response = self._detail_response()
 
-        self.assertContains(response, "Brak odczytów dla tej sesji.")
+        self.assertContains(response, "Brak problemów poza ewidencją.")
 
     def test_empty_imports_state_is_shown(self):
         response = self._detail_response()
 
         self.assertContains(response, "Brak importów skanów.")
 
-    def test_snapshot_is_still_visible(self):
+    def test_snapshot_items_are_visible_in_work_table(self):
         response = self._detail_response()
 
-        self.assertContains(response, "Snapshot startowy")
+        self.assertNotContains(response, "Snapshot startowy")
         self.assertContains(response, "PROGRESS-OK-001")
         self.assertContains(response, "PROGRESS-OTHER-001")
+
+
+class ScanFileImportApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="scan-api-user", password="test-pass-123")
+        self.root = Location.objects.create(name="API Root")
+        self.child = Location.objects.create(name="API Child", parent=self.root)
+        self.other_root = Location.objects.create(name="API Other Root")
+        self.other_child = Location.objects.create(name="API Other Child", parent=self.other_root)
+        self.user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_user = User.objects.create_user(username="scan-api-out-user", password="test-pass-123")
+        self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
+        self.manager_user = User.objects.create_user(username="scan-api-manager", password="test-pass-123")
+        self.manager_user.profile.role = UserProfile.Role.MANAGER
+        self.manager_user.profile.save(update_fields=["role"])
+        self.manager_user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_manager = User.objects.create_user(username="scan-api-out-manager", password="test-pass-123")
+        self.out_of_scope_manager.profile.role = UserProfile.Role.MANAGER
+        self.out_of_scope_manager.profile.save(update_fields=["role"])
+        self.out_of_scope_manager.profile.allowed_locations.add(self.other_root)
+        self.superuser = User.objects.create_superuser(
+            username="scan-api-superuser",
+            email="scan-api-superuser@example.com",
+            password="test-pass-123",
+        )
+        self.asset = Asset.objects.create(
+            name="API Asset",
+            inventory_number="API-ASSET-001",
+            asset_type=Asset.AssetType.FIXED,
+            barcode="BC-API-ASSET",
+            location=self.child.path,
+            location_fk=self.child,
+            status=Asset.Status.IN_STOCK,
+        )
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+        self.other_session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.other_root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+        self.url = reverse("inventory:scan-file-import-api")
+
+    def _post_text(self, raw_text, user=None):
+        if user is not None:
+            self.client.force_login(user)
+        return self.client.post(self.url, data=raw_text, content_type="text/plain")
+
+    @override_settings(DEBUG=False)
+    def test_anonymous_post_redirects_to_login_when_debug_false(self):
+        response = self._post_text(f"{self.session.number}\n{self.child.code}\nBC-API-ASSET")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    @override_settings(DEBUG=True)
+    def test_anonymous_post_imports_with_first_superuser_when_debug_true(self):
+        response = self._post_text(f"{self.session.number}\n{self.child.code}\nBC-API-ASSET")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ok")
+        batch = InventoryScanBatch.objects.get()
+        self.assertEqual(batch.uploaded_by, self.superuser)
+
+    def test_logged_user_posts_text_plain_and_gets_ok(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.user,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["session"], self.session.number)
+
+    def test_user_can_import_to_session_in_scope(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.user,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
+    def test_user_cannot_import_to_session_outside_scope(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.out_of_scope_user,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertEqual(response.json()["message"], "Brak dostępu do tej sesji inwentaryzacji.")
+
+    def test_forbidden_import_does_not_create_scan_batch(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.out_of_scope_user,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(InventoryScanBatch.objects.count(), 0)
+
+    def test_manager_can_import_to_session_in_scope(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.manager_user,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
+    def test_manager_cannot_import_to_session_outside_scope(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.out_of_scope_manager,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["message"], "Brak dostępu do tej sesji inwentaryzacji.")
+        self.assertEqual(InventoryScanBatch.objects.count(), 0)
+
+    def test_superuser_can_import_to_any_session(self):
+        response = self._post_text(
+            f"{self.other_session.number}\n{self.other_child.code}\nUNKNOWN-SUPERUSER",
+            user=self.superuser,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["session"], self.other_session.number)
+
+    def test_endpoint_creates_scan_batch(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.user,
+        )
+
+        batch = InventoryScanBatch.objects.get()
+        self.assertEqual(response.json()["batch_id"], batch.id)
+        self.assertEqual(batch.raw_text, f"{self.session.number}\n{self.child.code}\nBC-API-ASSET")
+        self.assertEqual(batch.uploaded_by, self.user)
+
+    def test_endpoint_updates_observed_item(self):
+        self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
+            user=self.user,
+        )
+
+        observed = InventoryObservedItem.objects.get(asset=self.asset)
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OK)
+        self.assertEqual(observed.scanned_location, self.child)
+
+    def test_empty_body_returns_400(self):
+        response = self._post_text("", user=self.user)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertEqual(InventoryScanBatch.objects.count(), 0)
+
+    def test_missing_session_returns_400(self):
+        response = self._post_text("INV-999999\nBC-API-ASSET", user=self.user)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertEqual(InventoryScanBatch.objects.count(), 0)
+
+    def test_closed_session_returns_400(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+
+        response = self._post_text(f"{self.session.number}\nBC-API-ASSET", user=self.user)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertEqual(InventoryScanBatch.objects.count(), 0)
+
+    def test_success_json_contains_batch_id_and_counters(self):
+        response = self._post_text(
+            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET\nUNKNOWN-API",
+            user=self.user,
+        )
+
+        payload = response.json()
+        self.assertIn("batch_id", payload)
+        self.assertEqual(payload["total_lines"], 4)
+        self.assertEqual(payload["processed_lines"], 3)
+        self.assertEqual(payload["recognized_assets_count"], 1)
+        self.assertEqual(payload["unknown_codes_count"], 1)
+
+    def test_get_returns_method_not_allowed(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 405)
