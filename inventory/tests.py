@@ -1,13 +1,23 @@
+import json
+from io import StringIO
+
+from django.core.management import call_command
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
-from assets.models import Asset
+from assets.models import Asset, AssetTypeDictionary
 from locations.models import Location
 from users.models import User
 
-from .models import InventoryObservedItem, InventoryScanBatch, InventorySession
+from .models import (
+    InventoryObservedItem,
+    InventoryScanBatch,
+    InventorySession,
+    InventorySessionManualQuantity,
+)
 from .services import import_inventory_scan_text, start_inventory_session
 
 
@@ -753,11 +763,11 @@ class InventorySessionDetailScanProgressTests(TestCase):
             asset_types=[Asset.AssetType.FIXED],
         )
 
-    def _create_asset(self, inventory_number, location, barcode):
+    def _create_asset(self, inventory_number, location, barcode, asset_type=Asset.AssetType.FIXED):
         return Asset.objects.create(
             name=f"Asset {inventory_number}",
             inventory_number=inventory_number,
-            asset_type=Asset.AssetType.FIXED,
+            asset_type=asset_type,
             barcode=barcode,
             location=location.path,
             location_fk=location,
@@ -823,6 +833,158 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertContains(response, "Progress Root / Progress Child")
         self.assertContains(response, last_seen_display)
 
+    def test_work_table_shows_operational_quantity_columns(self):
+        response = self._detail_response()
+
+        self.assertContains(response, "Odczyt")
+        self.assertContains(response, "Kod kreskowy")
+        self.assertContains(response, "Ręczne")
+        self.assertContains(response, "Ilość faktyczna")
+
+    def test_regular_asset_is_not_quantity_based_and_read_is_binary(self):
+        import_inventory_scan_text(
+            "\n".join(
+                [
+                    self.session.number,
+                    self.child.code,
+                    "BC-PROGRESS-OK",
+                    "BC-PROGRESS-OK",
+                ]
+            )
+        )
+
+        response = self._detail_response()
+        work_item = next(
+            item for item in response.context["inventory_work_items"]
+            if item["snapshot"].inventory_number == "PROGRESS-OK-001"
+        )
+
+        self.assertFalse(work_item["is_quantity_based"])
+        self.assertEqual(work_item["read_quantity"], 1)
+        self.assertEqual(work_item["actual_quantity"], 1)
+
+    def test_work_table_context_includes_asset_record_quantity(self):
+        self.ok_asset.record_quantity = 42
+        self.ok_asset.save(update_fields=["record_quantity"])
+
+        response = self._detail_response()
+        work_item = next(
+            item for item in response.context["inventory_work_items"]
+            if item["snapshot"].inventory_number == "PROGRESS-OK-001"
+        )
+
+        self.assertEqual(work_item["record_quantity"], 42)
+
+    def test_quantity_asset_read_is_sum_of_scan_occurrences(self):
+        quantity_type = AssetTypeDictionary.objects.get(code=Asset.AssetType.QUANTITY)
+        quantity_asset = self._create_asset(
+            "PROGRESS-QTY-001",
+            self.child,
+            barcode="BC-PROGRESS-QTY",
+            asset_type=Asset.AssetType.QUANTITY,
+        )
+        self.assertEqual(quantity_asset.asset_type_ref, quantity_type)
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.QUANTITY],
+        )
+        import_inventory_scan_text(
+            "\n".join(
+                [
+                    session.number,
+                    self.child.code,
+                    "BC-PROGRESS-QTY",
+                    "BC-PROGRESS-QTY",
+                    "BC-PROGRESS-QTY",
+                ]
+            )
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_item = response.context["inventory_work_items"][0]
+
+        self.assertTrue(work_item["is_quantity_based"])
+        self.assertEqual(work_item["read_quantity"], 3)
+        self.assertEqual(work_item["actual_quantity"], 3)
+
+    def test_quantity_asset_read_uses_exact_scan_line_matches(self):
+        self._create_asset(
+            "TEST-QTY-0001",
+            self.child,
+            barcode="TEST-QTY-0001",
+            asset_type=Asset.AssetType.QUANTITY,
+        )
+        self._create_asset(
+            "TEST-QTY-001",
+            self.child,
+            barcode="TEST-QTY-001",
+            asset_type=Asset.AssetType.QUANTITY,
+        )
+        self._create_asset(
+            "TEST-QTY-0010",
+            self.child,
+            barcode="TEST-QTY-0010",
+            asset_type=Asset.AssetType.QUANTITY,
+        )
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.QUANTITY],
+        )
+        import_inventory_scan_text(
+            "\n".join(
+                [
+                    session.number,
+                    self.child.code,
+                    " TEST-QTY-0001 ",
+                    "TEST-QTY-0010",
+                    "TEST-QTY-0001",
+                ]
+            )
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_items = {
+            item["snapshot"].inventory_number: item
+            for item in response.context["inventory_work_items"]
+        }
+
+        self.assertEqual(work_items["TEST-QTY-0001"]["read_quantity"], 2)
+        self.assertEqual(work_items["TEST-QTY-001"]["read_quantity"], 0)
+        self.assertEqual(work_items["TEST-QTY-0010"]["read_quantity"], 1)
+
+    def test_work_table_uses_saved_manual_quantity(self):
+        quantity_asset = self._create_asset(
+            "PROGRESS-MANUAL-001",
+            self.child,
+            barcode="BC-PROGRESS-MANUAL",
+            asset_type=Asset.AssetType.QUANTITY,
+        )
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.QUANTITY],
+        )
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\nBC-PROGRESS-MANUAL")
+        InventorySessionManualQuantity.objects.create(
+            session=session,
+            asset=quantity_asset,
+            quantity=4,
+            updated_by=self.user,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_item = response.context["inventory_work_items"][0]
+
+        self.assertEqual(work_item["manual_quantity"], 4)
+        self.assertEqual(work_item["read_quantity"], 1)
+        self.assertEqual(work_item["actual_quantity"], 5)
+        self.assertContains(response, 'value="4"')
+
     def test_work_table_shows_found_other_location(self):
         import_inventory_scan_text(f"{self.session.number}\n{self.root.code}\nBC-PROGRESS-OTHER")
 
@@ -877,6 +1039,206 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertNotContains(response, "Snapshot startowy")
         self.assertContains(response, "PROGRESS-OK-001")
         self.assertContains(response, "PROGRESS-OTHER-001")
+
+
+class InventorySessionManualQuantityModelTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="manual-model-admin",
+            email="manual-model-admin@example.com",
+            password="test-pass-123",
+        )
+        self.root = Location.objects.create(name="Manual Model Root")
+        self.asset = Asset.objects.create(
+            name="Manual Model Asset",
+            inventory_number="MANUAL-MODEL-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            barcode="BC-MANUAL-MODEL",
+            location=self.root.path,
+            location_fk=self.root,
+            status=Asset.Status.IN_STOCK,
+        )
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.QUANTITY],
+        )
+
+    def test_can_store_manual_quantity_for_session_asset(self):
+        manual_quantity = InventorySessionManualQuantity.objects.create(
+            session=self.session,
+            asset=self.asset,
+            quantity=5,
+            updated_by=self.user,
+        )
+
+        self.assertEqual(manual_quantity.quantity, 5)
+        self.assertEqual(manual_quantity.session, self.session)
+        self.assertEqual(manual_quantity.asset, self.asset)
+
+    def test_unique_constraint_prevents_duplicate_session_asset_quantity(self):
+        InventorySessionManualQuantity.objects.create(
+            session=self.session,
+            asset=self.asset,
+            quantity=1,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventorySessionManualQuantity.objects.create(
+                    session=self.session,
+                    asset=self.asset,
+                    quantity=2,
+                )
+
+
+class InventoryManualQuantityApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="manual-api-user", password="test-pass-123")
+        self.root = Location.objects.create(name="Manual API Root")
+        self.child = Location.objects.create(name="Manual API Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Manual API Other")
+        self.user.profile.allowed_locations.add(self.root)
+        self.quantity_asset = self._create_asset(
+            "MANUAL-QTY-001",
+            self.child,
+            barcode="BC-MANUAL-QTY",
+            asset_type=Asset.AssetType.QUANTITY,
+        )
+        self.fixed_asset = self._create_asset(
+            "MANUAL-FIXED-001",
+            self.child,
+            barcode="BC-MANUAL-FIXED",
+            asset_type=Asset.AssetType.FIXED,
+        )
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.QUANTITY, Asset.AssetType.FIXED],
+        )
+        self.url = reverse("inventory:manual-quantity-api", kwargs={"session_id": self.session.pk})
+
+    def _create_asset(self, inventory_number, location, barcode, asset_type):
+        return Asset.objects.create(
+            name=f"Asset {inventory_number}",
+            inventory_number=inventory_number,
+            asset_type=asset_type,
+            barcode=barcode,
+            location=location.path,
+            location_fk=location,
+            status=Asset.Status.IN_STOCK,
+        )
+
+    def _post(self, payload):
+        self.client.force_login(self.user)
+        return self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+    def test_logged_in_user_can_save_quantity(self):
+        response = self._post({"asset_id": self.quantity_asset.id, "quantity": 5})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(payload["asset_id"], self.quantity_asset.id)
+        self.assertEqual(payload["manual_quantity"], 5)
+        self.assertEqual(payload["actual_quantity"], 5)
+        self.assertEqual(
+            InventorySessionManualQuantity.objects.get(session=self.session, asset=self.quantity_asset).quantity,
+            5,
+        )
+
+    def test_second_post_updates_existing_quantity(self):
+        self._post({"asset_id": self.quantity_asset.id, "quantity": 5})
+
+        response = self._post({"asset_id": self.quantity_asset.id, "quantity": 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["manual_quantity"], 2)
+        self.assertEqual(InventorySessionManualQuantity.objects.count(), 1)
+
+    def test_blank_quantity_is_saved_as_zero(self):
+        response = self._post({"asset_id": self.quantity_asset.id, "quantity": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["manual_quantity"], 0)
+
+    def test_negative_quantity_returns_400(self):
+        response = self._post({"asset_id": self.quantity_asset.id, "quantity": -1})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(InventorySessionManualQuantity.objects.exists())
+
+    def test_non_numeric_quantity_returns_400(self):
+        response = self._post({"asset_id": self.quantity_asset.id, "quantity": "abc"})
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_asset_id_returns_400(self):
+        response = self._post({"quantity": 3})
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_asset_id_returns_404(self):
+        response = self._post({"asset_id": 999999, "quantity": 3})
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_regular_asset_rejects_manual_quantity(self):
+        response = self._post({"asset_id": self.fixed_asset.id, "quantity": 3})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(
+            InventorySessionManualQuantity.objects.filter(session=self.session, asset=self.fixed_asset).exists()
+        )
+
+
+class SeedInventoryDemoCommandTests(TestCase):
+    def _run_command(self):
+        stdout = StringIO()
+        call_command("seed_inventory_demo", stdout=stdout)
+        return stdout.getvalue()
+
+    def test_command_creates_demo_inventory_data(self):
+        output = self._run_command()
+
+        session = InventorySession.objects.get(number="INV-DEMO-001")
+        self.assertIn("Seed demo inwentaryzacji zakończony", output)
+        self.assertEqual(session.scope_root_locations.count(), 2)
+        self.assertEqual(Asset.objects.filter(inventory_number__startswith="TEST-AST-").count(), 30)
+        self.assertEqual(Asset.objects.filter(inventory_number__startswith="TEST-QTY-").count(), 10)
+        self.assertEqual(session.snapshot_items.count(), 40)
+        self.assertEqual(InventoryScanBatch.objects.filter(session=session).count(), 1)
+        self.assertFalse(
+            Asset.objects
+            .filter(inventory_number__startswith="TEST-QTY-", record_quantity__lte=1)
+            .exists()
+        )
+        self.assertTrue(
+            InventoryScanBatch.objects
+            .filter(session=session, raw_text__contains="UNKNOWN-DEMO-001")
+            .exists()
+        )
+        self.assertTrue(
+            InventoryScanBatch.objects
+            .filter(session=session, raw_text__contains="TEST-QTY-0010")
+            .exists()
+        )
+        self.assertEqual(InventorySessionManualQuantity.objects.filter(session=session).count(), 4)
+
+    def test_command_can_be_run_twice_without_uncontrolled_duplicates(self):
+        self._run_command()
+        self._run_command()
+
+        session = InventorySession.objects.get(number="INV-DEMO-001")
+        self.assertEqual(InventorySession.objects.filter(number="INV-DEMO-001").count(), 1)
+        self.assertEqual(Asset.objects.filter(inventory_number__startswith="TEST-AST-").count(), 30)
+        self.assertEqual(Asset.objects.filter(inventory_number__startswith="TEST-QTY-").count(), 10)
+        self.assertEqual(InventoryScanBatch.objects.filter(session=session).count(), 1)
+        self.assertEqual(InventorySessionManualQuantity.objects.filter(session=session).count(), 4)
 
 
 class ScanFileImportApiTests(TestCase):

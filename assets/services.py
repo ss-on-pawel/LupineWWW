@@ -91,7 +91,7 @@ def approve_asset_change_request(change_request, reviewer):
                 field_name: getattr(asset, field_name)
                 for field_name in AssetForm.Meta.fields
             }
-            if serialize_asset_form_payload(actual_current) != payload["current"]:
+            if serialize_asset_form_payload(actual_current) != _with_asset_payload_defaults(payload["current"]):
                 raise ValidationError("Asset has changed since the request was created.")
 
             form_data = deserialize_asset_payload_for_form(payload["proposed"])
@@ -145,6 +145,15 @@ def _get_locked_asset_for_update_approval(change_request):
         return Asset.objects.select_for_update().get(pk=change_request.asset_id)
     except Asset.DoesNotExist:
         raise ValidationError("Update request must reference an existing asset.")
+
+
+def _with_asset_payload_defaults(payload):
+    if not isinstance(payload, dict):
+        return payload
+
+    payload = dict(payload)
+    payload.setdefault("record_quantity", 1)
+    return payload
 
 
 def _validate_reviewer_update_scope(reviewer, asset):

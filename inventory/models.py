@@ -152,3 +152,40 @@ class InventoryObservedItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.session.number}: {self.code}"
+
+
+class InventorySessionManualQuantity(models.Model):
+    session = models.ForeignKey(
+        InventorySession,
+        on_delete=models.CASCADE,
+        related_name="manual_quantities",
+    )
+    asset = models.ForeignKey(
+        "assets.Asset",
+        on_delete=models.CASCADE,
+        related_name="inventory_manual_quantities",
+    )
+    quantity = models.PositiveIntegerField(default=0)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inventory_manual_quantity_updates",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "asset"],
+                name="inv_manual_qty_unique_session_asset",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quantity__gte=0),
+                name="inv_manual_qty_non_negative",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.session.number}: {self.asset_id} = {self.quantity}"

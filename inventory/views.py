@@ -1,7 +1,9 @@
+import json
 from collections import defaultdict
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
@@ -14,11 +16,16 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from accounts.utils import get_accessible_location_ids
-from assets.models import Asset
+from assets.models import Asset, AssetTypeDictionary
 from locations.models import Location
 
 from .forms import DEFAULT_ASSET_TYPES, InventorySessionStartForm, SimpleInventorySessionStartForm
-from .models import InventoryObservedItem, InventoryScanBatch, InventorySession
+from .models import (
+    InventoryObservedItem,
+    InventoryScanBatch,
+    InventorySession,
+    InventorySessionManualQuantity,
+)
 from .services import import_inventory_scan_text, start_inventory_session
 
 
@@ -139,12 +146,20 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
             item.status_display_pl = status_labels.get(item.status, item.status)
             item.scanned_location_display = item.scanned_location.path if item.scanned_location else "-"
 
+        is_quantity_based_by_type = dict(
+            AssetTypeDictionary.objects.values_list("code", "is_quantity_based")
+        )
+        scanned_code_counts = _get_scanned_code_counts(session)
         observed_by_asset_id = {
             item.asset_id: item
             for item in observed_items
             if item.asset_id is not None
         }
-        snapshot_items = list(session.snapshot_items.all())
+        manual_quantities_by_asset_id = {
+            item.asset_id: item.quantity
+            for item in InventorySessionManualQuantity.objects.filter(session=session)
+        }
+        snapshot_items = list(session.snapshot_items.select_related("asset").all())
         inventory_work_items = []
         for snapshot_item in snapshot_items:
             observed_item = observed_by_asset_id.get(snapshot_item.asset_id_snapshot)
@@ -156,6 +171,17 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
                 display_status = status_labels.get(observed_item.status, observed_item.status)
                 scanned_location_display = observed_item.scanned_location_display
                 last_seen_at = observed_item.last_seen_at
+            is_quantity_based = is_quantity_based_by_type.get(snapshot_item.asset_type, False)
+            scan_code_display = snapshot_item.barcode or snapshot_item.inventory_number
+            read_quantity = _get_inventory_read_quantity(
+                snapshot_item=snapshot_item,
+                observed_item=observed_item,
+                is_quantity_based=is_quantity_based,
+                scanned_code_counts=scanned_code_counts,
+            )
+            manual_quantity = manual_quantities_by_asset_id.get(snapshot_item.asset_id_snapshot, 0)
+            if not is_quantity_based:
+                manual_quantity = 0
             inventory_work_items.append(
                 {
                     "snapshot": snapshot_item,
@@ -163,6 +189,12 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
                     "display_status": display_status,
                     "scanned_location_display": scanned_location_display,
                     "last_seen_at": last_seen_at,
+                    "is_quantity_based": is_quantity_based,
+                    "read_quantity": read_quantity,
+                    "manual_quantity": manual_quantity,
+                    "actual_quantity": read_quantity + manual_quantity,
+                    "record_quantity": snapshot_item.asset.record_quantity if snapshot_item.asset_id else 1,
+                    "scan_code_display": scan_code_display,
                 }
             )
 
@@ -211,6 +243,108 @@ class InventorySessionCloseView(LoginRequiredMixin, View):
             session.save(update_fields=["status", "closed_at", "updated_at"])
             messages.success(request, f"Zamknięto sesję inwentaryzacji {session.number}.")
         return redirect("inventory:session-detail", pk=session.pk)
+
+
+def _get_scanned_code_counts(session):
+    code_counts = defaultdict(int)
+    raw_texts = InventoryScanBatch.objects.filter(session=session).values_list("raw_text", flat=True)
+    for raw_text in raw_texts:
+        lines = [line.strip() for line in str(raw_text).splitlines() if line.strip()]
+        for code in lines[1:]:
+            if code.startswith("LOC-"):
+                continue
+            code_counts[code] += 1
+    return code_counts
+
+
+def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_based, scanned_code_counts):
+    if not is_quantity_based:
+        return 1 if observed_item is not None else 0
+
+    scan_codes = {
+        code
+        for code in (snapshot_item.barcode, snapshot_item.inventory_number)
+        if code
+    }
+    return sum(scanned_code_counts.get(code, 0) for code in scan_codes)
+
+
+@login_required
+@require_POST
+def manual_quantity_api(request, session_id):
+    session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=session_id)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+
+    asset_id = _parse_positive_int(payload.get("asset_id"), default=0)
+    if asset_id <= 0:
+        return JsonResponse({"ok": False, "error": "asset_id is required."}, status=400)
+
+    raw_quantity = payload.get("quantity", 0)
+    if raw_quantity == "":
+        quantity = 0
+    else:
+        try:
+            quantity = int(raw_quantity)
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "quantity must be an integer."}, status=400)
+    if quantity < 0:
+        return JsonResponse({"ok": False, "error": "quantity must be non-negative."}, status=400)
+
+    snapshot_item = get_object_or_404(
+        session.snapshot_items.select_related("asset"),
+        asset_id_snapshot=asset_id,
+    )
+    if snapshot_item.asset_id is None:
+        return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
+
+    is_quantity_based = _is_snapshot_item_quantity_based(snapshot_item)
+    if not is_quantity_based:
+        return JsonResponse({"ok": False, "error": "Manual quantity is only available for quantity-based asset types."}, status=400)
+
+    manual_quantity, _created = InventorySessionManualQuantity.objects.update_or_create(
+        session=session,
+        asset=snapshot_item.asset,
+        defaults={
+            "quantity": quantity,
+            "updated_by": request.user,
+        },
+    )
+
+    observed_item = InventoryObservedItem.objects.filter(session=session, asset_id=asset_id).first()
+    read_quantity = _get_inventory_read_quantity(
+        snapshot_item=snapshot_item,
+        observed_item=observed_item,
+        is_quantity_based=is_quantity_based,
+        scanned_code_counts=_get_scanned_code_counts(session),
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "asset_id": asset_id,
+            "manual_quantity": manual_quantity.quantity,
+            "actual_quantity": read_quantity + manual_quantity.quantity,
+        }
+    )
+
+
+def _is_snapshot_item_quantity_based(snapshot_item):
+    return AssetTypeDictionary.objects.filter(
+        code=snapshot_item.asset_type,
+        is_quantity_based=True,
+    ).exists()
+
+
+def _parse_positive_int(raw_value, default):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
 
 
 @csrf_exempt

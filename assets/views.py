@@ -14,8 +14,8 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
-from .forms import AssetForm
-from .models import Asset, AssetChangeRequest
+from .forms import AssetForm, AssetTypeDictionaryForm
+from .models import Asset, AssetChangeRequest, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     reject_asset_change_request,
@@ -35,6 +35,97 @@ def _user_can_review_asset_changes(user):
     except ObjectDoesNotExist:
         return False
     return profile.can_approve_asset_changes
+
+
+def _user_can_manage_asset_types(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser:
+        return True
+    if user.is_staff:
+        return True
+    try:
+        profile = user.profile
+    except ObjectDoesNotExist:
+        return False
+    return profile.can_approve_asset_changes
+
+
+class AssetTypeManagePermissionMixin(LoginRequiredMixin):
+    def dispatch(self, request, *args, **kwargs):
+        if not _user_can_manage_asset_types(request.user):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AssetTypeListView(AssetTypeManagePermissionMixin, ListView):
+    model = AssetTypeDictionary
+    template_name = "settings/asset_types.html"
+    context_object_name = "asset_types"
+
+    def get_queryset(self):
+        return AssetTypeDictionary.objects.all().order_by("sort_order", "name")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Rodzaje środków"
+        return context
+
+
+class AssetTypeCreateView(AssetTypeManagePermissionMixin, CreateView):
+    model = AssetTypeDictionary
+    form_class = AssetTypeDictionaryForm
+    template_name = "settings/asset_type_form.html"
+    success_url = reverse_lazy("settings:asset-types")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Dodaj rodzaj"
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, "Rodzaj środka został zapisany.")
+        return super().form_valid(form)
+
+
+class AssetTypeUpdateView(AssetTypeManagePermissionMixin, UpdateView):
+    model = AssetTypeDictionary
+    form_class = AssetTypeDictionaryForm
+    template_name = "settings/asset_type_form.html"
+    success_url = reverse_lazy("settings:asset-types")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Edytuj rodzaj"
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, "Rodzaj środka został zaktualizowany.")
+        return super().form_valid(form)
+
+
+@login_required
+@require_POST
+def asset_type_deactivate(request, pk):
+    if not _user_can_manage_asset_types(request.user):
+        raise PermissionDenied
+    asset_type = get_object_or_404(AssetTypeDictionary, pk=pk)
+    asset_type.is_active = False
+    asset_type.save(update_fields=["is_active", "updated_at"])
+    messages.success(request, "Rodzaj środka został dezaktywowany.")
+    return redirect("settings:asset-types")
+
+
+@login_required
+@require_POST
+def asset_type_activate(request, pk):
+    if not _user_can_manage_asset_types(request.user):
+        raise PermissionDenied
+    asset_type = get_object_or_404(AssetTypeDictionary, pk=pk)
+    asset_type.is_active = True
+    asset_type.save(update_fields=["is_active", "updated_at"])
+    messages.success(request, "Rodzaj środka został aktywowany.")
+    return redirect("settings:asset-types")
 
 
 def _scope_asset_change_request_queryset(queryset, user):
@@ -466,19 +557,34 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
 
 @login_required
 def asset_detail(request, id):
-    asset = get_object_or_404(Asset, pk=id)
+    asset = get_object_or_404(Asset.objects.select_related("asset_type_ref"), pk=id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
         raise Http404
 
+    asset_type_names_by_code = dict(AssetTypeDictionary.objects.values_list("code", "name"))
     return render(
         request,
         "assets/asset_detail.html",
         {
             "asset": asset,
+            "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "page_title": "Karta środka",
         },
     )
+
+
+def _format_asset_type_display(asset, asset_type_names_by_code=None):
+    if asset.asset_type_ref_id and asset.asset_type_ref:
+        return asset.asset_type_ref.name
+
+    asset_type_names_by_code = asset_type_names_by_code or {}
+    dictionary_name = asset_type_names_by_code.get(asset.asset_type)
+    if dictionary_name:
+        return dictionary_name
+
+    legacy_display = asset.get_asset_type_display()
+    return legacy_display or asset.asset_type
 
 
 def asset_list_api(request):
@@ -490,12 +596,16 @@ def asset_list_api(request):
     ordering = request.GET.get("ordering", "-updated_at").strip() or "-updated_at"
 
     queryset = (
-        Asset.objects.select_related("responsible_person", "current_user")
+        Asset.objects.select_related("responsible_person", "current_user", "asset_type_ref")
         .only(
             "id",
             "inventory_number",
             "name",
             "asset_type",
+            "asset_type_ref",
+            "asset_type_ref__code",
+            "asset_type_ref__name",
+            "record_quantity",
             "category",
             "manufacturer",
             "model",
@@ -583,6 +693,10 @@ def asset_list_api(request):
     except EmptyPage:
         page_obj = paginator.page(paginator.num_pages or 1)
 
+    page_assets = list(page_obj.object_list)
+    asset_type_names_by_code = {}
+    if any(asset.asset_type and not asset.asset_type_ref_id for asset in page_assets):
+        asset_type_names_by_code = dict(AssetTypeDictionary.objects.values_list("code", "name"))
     results = [
         {
             "id": asset.id,
@@ -592,7 +706,8 @@ def asset_list_api(request):
             "has_rejected_update": asset.has_rejected_update,
             "rejected_update_comment": asset.rejected_update_comment or "",
             "asset_type": asset.asset_type,
-            "asset_type_display": asset.get_asset_type_display(),
+            "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
+            "record_quantity": asset.record_quantity,
             "category": asset.category,
             "manufacturer": asset.manufacturer,
             "model": asset.model,
@@ -624,7 +739,7 @@ def asset_list_api(request):
             "updated_at": asset.updated_at.isoformat(),
             "updated_at_display": asset.updated_at.strftime("%Y-%m-%d %H:%M"),
         }
-        for asset in page_obj.object_list
+        for asset in page_assets
     ]
 
     return JsonResponse(

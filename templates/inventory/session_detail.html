@@ -168,7 +168,7 @@
         }
 
         .inventory-work-table {
-            min-width: 1120px;
+            min-width: 1320px;
         }
 
         .inventory-table th,
@@ -252,6 +252,33 @@
             width: 132px;
             min-width: 120px;
             max-width: 150px;
+        }
+
+        .inventory-col-read,
+        .inventory-col-manual,
+        .inventory-col-actual,
+        .inventory-col-record {
+            width: 88px;
+            min-width: 78px;
+            max-width: 96px;
+            text-align: right;
+        }
+
+        .inventory-quantity-input {
+            width: 68px;
+            min-height: 26px;
+            padding: 3px 5px;
+            border: 1px solid rgba(15, 23, 42, 0.16);
+            background: #ffffff;
+            color: #101828;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.78rem;
+            line-height: 1;
+            text-align: right;
+        }
+
+        .inventory-disabled-mark {
+            color: var(--muted);
         }
 
         .inventory-status-pill {
@@ -429,7 +456,7 @@
             </div>
             {% if inventory_work_items %}
                 <div class="inventory-table-wrap">
-                    <table class="inventory-table inventory-work-table">
+                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}">
                         <thead>
                             <tr>
                                 <th class="inventory-col-number">Numer inwentarzowy</th>
@@ -439,12 +466,16 @@
                                 <th class="inventory-col-status">Status spisu</th>
                                 <th class="inventory-col-scan-location">Lokalizacja odczytu</th>
                                 <th class="inventory-col-last-seen">Ostatni odczyt</th>
+                                <th class="inventory-col-read">Odczyt</th>
                                 <th class="inventory-col-barcode">Kod kreskowy</th>
+                                <th class="inventory-col-manual">Ręczne</th>
+                                <th class="inventory-col-actual">Ilość faktyczna</th>
+                                <th class="inventory-col-record">Ilość ewidencyjna</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in inventory_work_items %}
-                                <tr>
+                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-is-quantity-based="{% if item.is_quantity_based %}true{% else %}false{% endif %}">
                                     <td class="inventory-col-number inventory-mono">{{ item.snapshot.inventory_number }}</td>
                                     <td class="inventory-col-name">{{ item.snapshot.name }}</td>
                                     <td class="inventory-col-type">{{ item.snapshot.asset_type_display|default:"-" }}</td>
@@ -464,7 +495,17 @@
                                     </td>
                                     <td class="inventory-col-scan-location" title="{{ item.scanned_location_display }}">{{ item.scanned_location_display }}</td>
                                     <td class="inventory-col-last-seen inventory-mono">{% if item.last_seen_at %}{{ item.last_seen_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
-                                    <td class="inventory-col-barcode inventory-mono">{{ item.snapshot.barcode|default:"-" }}</td>
+                                    <td class="inventory-col-read inventory-mono">{{ item.read_quantity }}</td>
+                                    <td class="inventory-col-barcode inventory-mono">{{ item.scan_code_display|default:"-" }}</td>
+                                    <td class="inventory-col-manual inventory-mono">
+                                        {% if item.is_quantity_based %}
+                                            <input class="inventory-quantity-input" type="number" min="0" step="1" value="{{ item.manual_quantity }}" inputmode="numeric" aria-label="Ilość ręczna dla {{ item.snapshot.inventory_number }}" data-role="inventory-manual-quantity">
+                                        {% else %}
+                                            <span class="inventory-disabled-mark">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="inventory-col-actual inventory-mono" data-role="inventory-actual-quantity">{{ item.actual_quantity }}</td>
+                                    <td class="inventory-col-record inventory-mono">{{ item.record_quantity }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -538,4 +579,94 @@
             {% endif %}
         </section>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        (function () {
+            const workTable = document.querySelector("[data-manual-quantity-url]");
+            const manualQuantityUrl = workTable ? workTable.dataset.manualQuantityUrl : "";
+
+            function getCookie(name) {
+                const cookies = document.cookie ? document.cookie.split(";") : [];
+                for (let index = 0; index < cookies.length; index += 1) {
+                    const cookie = cookies[index].trim();
+                    if (cookie.substring(0, name.length + 1) === name + "=") {
+                        return decodeURIComponent(cookie.substring(name.length + 1));
+                    }
+                }
+                return "";
+            }
+
+            function parseQuantity(value) {
+                if (value === undefined || value === null || value === "") {
+                    return 0;
+                }
+                const parsed = Number.parseInt(String(value), 10);
+                return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+            }
+
+            function updateActualQuantity(row) {
+                const readQuantity = parseQuantity(row.dataset.readQuantity);
+                const manualInput = row.querySelector('[data-role="inventory-manual-quantity"]');
+                const actualCell = row.querySelector('[data-role="inventory-actual-quantity"]');
+                if (!actualCell) {
+                    return;
+                }
+                const manualQuantity = manualInput ? parseQuantity(manualInput.value) : 0;
+                actualCell.textContent = String(readQuantity + manualQuantity);
+            }
+
+            function saveManualQuantity(row, input) {
+                if (!manualQuantityUrl || !row.dataset.assetId) {
+                    return;
+                }
+                const rawQuantity = input.value === "" ? 0 : input.value;
+                fetch(manualQuantityUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie("csrftoken")
+                    },
+                    body: JSON.stringify({
+                        asset_id: Number.parseInt(row.dataset.assetId, 10),
+                        quantity: rawQuantity
+                    })
+                })
+                    .then(function (response) {
+                        return response.json().then(function (payload) {
+                            if (!response.ok || !payload.ok) {
+                                throw payload;
+                            }
+                            return payload;
+                        });
+                    })
+                    .then(function (payload) {
+                        const actualCell = row.querySelector('[data-role="inventory-actual-quantity"]');
+                        if (actualCell) {
+                            actualCell.textContent = String(payload.actual_quantity);
+                        }
+                        input.dataset.saveState = "saved";
+                    })
+                    .catch(function (error) {
+                        input.dataset.saveState = "error";
+                        console.error("Nie zapisano ilości ręcznej.", error);
+                    });
+            }
+
+            document.querySelectorAll("[data-inventory-work-row]").forEach(function (row) {
+                const manualInput = row.querySelector('[data-role="inventory-manual-quantity"]');
+                if (!manualInput) {
+                    return;
+                }
+                manualInput.addEventListener("input", function () {
+                    updateActualQuantity(row);
+                });
+                manualInput.addEventListener("change", function () {
+                    saveManualQuantity(row, manualInput);
+                });
+                updateActualQuantity(row);
+            });
+        })();
+    </script>
 {% endblock %}

@@ -43,6 +43,15 @@ class Asset(models.Model):
         db_index=True,
         verbose_name="Rodzaj",
     )
+    asset_type_ref = models.ForeignKey(
+        "assets.AssetTypeDictionary",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="assets",
+        verbose_name="Rodzaj (słownik)",
+    )
+    record_quantity = models.PositiveIntegerField(default=1, verbose_name="Ilość ewidencyjna")
     category = models.CharField(
         max_length=120,
         blank=True,
@@ -214,6 +223,60 @@ class Asset(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.inventory_number})"
+
+    def save(self, *args, **kwargs):
+        synced_fields = self._sync_asset_type_fields()
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and synced_fields:
+            kwargs["update_fields"] = set(update_fields) | synced_fields
+        super().save(*args, **kwargs)
+
+    def _sync_asset_type_fields(self) -> set[str]:
+        synced_fields = set()
+        if self.asset_type:
+            asset_type = self._get_asset_type_dictionary_by_code(self.asset_type)
+            if asset_type is None:
+                asset_type = self._get_asset_type_dictionary_by_code(Asset.AssetType.OTHER)
+            if asset_type is not None:
+                if self.asset_type != asset_type.code:
+                    self.asset_type = asset_type.code
+                    synced_fields.add("asset_type")
+                if self.asset_type_ref_id != asset_type.pk:
+                    self.asset_type_ref = asset_type
+                    synced_fields.add("asset_type_ref")
+            return synced_fields
+
+        if self.asset_type_ref_id:
+            if self.asset_type_ref.code != self.asset_type:
+                self.asset_type = self.asset_type_ref.code
+                synced_fields.add("asset_type")
+        return synced_fields
+
+    @staticmethod
+    def _get_asset_type_dictionary_by_code(code):
+        try:
+            return AssetTypeDictionary.objects.get(code=code)
+        except AssetTypeDictionary.DoesNotExist:
+            return None
+
+
+class AssetTypeDictionary(models.Model):
+    name = models.CharField(max_length=120, verbose_name="Nazwa")
+    code = models.SlugField(max_length=64, unique=True, verbose_name="Kod")
+    is_quantity_based = models.BooleanField(default=False, verbose_name="Ilościowy")
+    is_active = models.BooleanField(default=True, verbose_name="Aktywny")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="Kolejność")
+    is_system = models.BooleanField(default=False, verbose_name="Systemowy")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data utworzenia")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Data aktualizacji")
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "Rodzaj środka"
+        verbose_name_plural = "Rodzaje środków"
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class AssetChangeRequest(models.Model):

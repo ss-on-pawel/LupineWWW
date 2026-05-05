@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Rodzaje środków{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+        .settings-title {
+            margin: 0;
+            font-size: 1.45rem;
+            letter-spacing: 0;
+        }
+        .settings-table-wrap {
+            overflow-x: auto;
+            border-top: 1px solid rgba(15, 23, 42, 0.12);
+        }
+        .settings-table {
+            min-width: 760px;
+            font-size: 0.9rem;
+        }
+        .settings-table th,
+        .settings-table td {
+            padding: 9px 10px;
+            white-space: nowrap;
+        }
+        .settings-code {
+            font-family: var(--mono-font);
+            font-size: 0.86rem;
+        }
+        .settings-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .settings-inline-form {
+            margin: 0;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <header class="settings-header">
+        <h1 class="settings-title">Rodzaje środków</h1>
+        <a class="ui-btn ui-btn--primary" href="{% url 'settings:asset-type-create' %}">Dodaj rodzaj</a>
+    </header>
+
+    <div class="settings-table-wrap">
+        <table class="settings-table">
+            <thead>
+                <tr>
+                    <th>Nazwa</th>
+                    <th>Kod</th>
+                    <th>Ilościowy</th>
+                    <th>Aktywny</th>
+                    <th>Kolejność</th>
+                    <th>Akcje</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asset_type in asset_types %}
+                    <tr>
+                        <td data-label="Nazwa">{{ asset_type.name }}</td>
+                        <td data-label="Kod"><span class="settings-code">{{ asset_type.code }}</span></td>
+                        <td data-label="Ilościowy">{% if asset_type.is_quantity_based %}Tak{% else %}Nie{% endif %}</td>
+                        <td data-label="Aktywny">{% if asset_type.is_active %}Tak{% else %}Nie{% endif %}</td>
+                        <td data-label="Kolejność">{{ asset_type.sort_order }}</td>
+                        <td data-label="Akcje">
+                            <div class="settings-actions">
+                                <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-type-update' asset_type.pk %}">Edytuj</a>
+                                {% if asset_type.is_active %}
+                                    <form class="settings-inline-form" method="post" action="{% url 'settings:asset-type-deactivate' asset_type.pk %}">
+                                        {% csrf_token %}
+                                        <button class="ui-btn ui-btn--secondary" type="submit">Dezaktywuj</button>
+                                    </form>
+                                {% else %}
+                                    <form class="settings-inline-form" method="post" action="{% url 'settings:asset-type-activate' asset_type.pk %}">
+                                        {% csrf_token %}
+                                        <button class="ui-btn ui-btn--secondary" type="submit">Aktywuj</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6">Brak rodzajów środków.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

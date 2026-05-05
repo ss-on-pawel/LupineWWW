@@ -1,6 +1,21 @@
 from django.contrib import admin
 
-from .models import Asset, AssetChangeRequest
+from .models import Asset, AssetChangeRequest, AssetTypeDictionary
+
+
+@admin.register(AssetTypeDictionary)
+class AssetTypeDictionaryAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "code",
+        "is_quantity_based",
+        "is_active",
+        "sort_order",
+        "is_system",
+    )
+    list_filter = ("is_quantity_based", "is_active", "is_system")
+    search_fields = ("name", "code")
+    ordering = ("sort_order", "name")
 
 
 @admin.register(Asset)
@@ -12,6 +27,7 @@ class AssetAdmin(admin.ModelAdmin):
         "inventory_number",
         "name",
         "asset_type",
+        "asset_type_ref",
         "category",
         "status",
         "technical_condition",
@@ -57,6 +73,10 @@ class AssetAdmin(admin.ModelAdmin):
     list_select_related = ("responsible_person", "current_user")
     readonly_fields = ("created_at", "updated_at")
     ordering = ("-created_at",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("asset_type_ref")
+
     fieldsets = (
         (
             "Dane podstawowe",

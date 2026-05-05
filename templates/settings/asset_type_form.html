@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .settings-form-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+        .settings-form-title {
+            margin: 0;
+            font-size: 1.45rem;
+            letter-spacing: 0;
+        }
+        .settings-form {
+            max-width: 760px;
+        }
+        .settings-check-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 40px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <header class="settings-form-header">
+        <h1 class="settings-form-title">{{ page_title }}</h1>
+        <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Wróć</a>
+    </header>
+
+    <form class="settings-form" method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <ul class="errorlist">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <div class="form-grid">
+            <div class="form-field">
+                {{ form.name.label_tag }}
+                {{ form.name }}
+                {{ form.name.errors }}
+            </div>
+            <div class="form-field">
+                {{ form.code.label_tag }}
+                {{ form.code }}
+                {{ form.code.errors }}
+            </div>
+            <div class="form-field">
+                {{ form.sort_order.label_tag }}
+                {{ form.sort_order }}
+                {{ form.sort_order.errors }}
+            </div>
+            <div class="form-field">
+                <label for="{{ form.is_quantity_based.id_for_label }}">Ilościowy</label>
+                <div class="settings-check-row">
+                    {{ form.is_quantity_based }}
+                    <span class="muted">Pozwala obsługiwać ilość większą niż 1.</span>
+                </div>
+                {{ form.is_quantity_based.errors }}
+            </div>
+            <div class="form-field">
+                <label for="{{ form.is_active.id_for_label }}">Aktywny</label>
+                <div class="settings-check-row">
+                    {{ form.is_active }}
+                    <span class="muted">Widoczny w formularzu środka.</span>
+                </div>
+                {{ form.is_active.errors }}
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="ui-btn ui-btn--primary" type="submit">Zapisz</button>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Anuluj</a>
+        </div>
+    </form>
+{% endblock %}

@@ -1,13 +1,16 @@
 import json
+import importlib
 
 from datetime import date, datetime
 from decimal import Decimal
 from io import StringIO
 
+from django.apps import apps as django_apps
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
+from django.db import IntegrityError, transaction
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -17,7 +20,7 @@ from locations.models import Location
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
-from .models import Asset, AssetChangeRequest
+from .models import Asset, AssetChangeRequest, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
@@ -26,6 +29,404 @@ from .services import (
     user_requires_asset_change_approval,
 )
 from .views import AssetChangeRequestListView, _user_can_review_asset_changes
+
+
+backfill_asset_type_ref = importlib.import_module(
+    "assets.migrations.0010_asset_asset_type_ref"
+).backfill_asset_type_ref
+
+
+class AssetTypeDictionaryModelTests(TestCase):
+    def test_default_asset_types_exist_after_migrations(self):
+        expected = {
+            "fixed": ("Środek trwały", False, 10, True),
+            "low_value": ("Wyposażenie / niskocenne", False, 20, True),
+            "intangible": ("WNiP", False, 30, True),
+            "quantity": ("Ilościówka", True, 40, True),
+            "other": ("Inne", False, 50, True),
+        }
+
+        rows = {
+            item.code: item
+            for item in AssetTypeDictionary.objects.filter(code__in=expected)
+        }
+
+        self.assertEqual(set(rows), set(expected))
+        for code, (name, is_quantity_based, sort_order, is_system) in expected.items():
+            with self.subTest(code=code):
+                self.assertEqual(rows[code].name, name)
+                self.assertEqual(rows[code].is_quantity_based, is_quantity_based)
+                self.assertTrue(rows[code].is_active)
+                self.assertEqual(rows[code].sort_order, sort_order)
+                self.assertEqual(rows[code].is_system, is_system)
+
+    def test_code_is_unique(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AssetTypeDictionary.objects.create(name="Duplicate fixed", code="fixed")
+
+    def test_quantity_is_quantity_based(self):
+        self.assertTrue(AssetTypeDictionary.objects.get(code="quantity").is_quantity_based)
+
+    def test_non_quantity_defaults_are_not_quantity_based(self):
+        non_quantity_codes = ["fixed", "low_value", "intangible", "other"]
+
+        self.assertFalse(
+            AssetTypeDictionary.objects
+            .filter(code__in=non_quantity_codes, is_quantity_based=True)
+            .exists()
+        )
+
+    def test_str_returns_name(self):
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        self.assertEqual(str(asset_type), asset_type.name)
+
+    def test_existing_asset_type_choices_remain_available(self):
+        self.assertEqual(Asset.AssetType.FIXED, "fixed")
+        self.assertIn(("fixed", "Środek trwały"), Asset.AssetType.choices)
+        self.assertIn(("quantity", "Ilościówka"), Asset.AssetType.choices)
+
+
+class AssetTypeRefBridgeMigrationTests(TestCase):
+    def test_backfill_assigns_matching_asset_type_ref(self):
+        asset = Asset.objects.create(
+            name="Fixed bridge asset",
+            inventory_number="BRIDGE-FIXED-001",
+            asset_type=Asset.AssetType.FIXED,
+        )
+        Asset.objects.filter(pk=asset.pk).update(asset_type_ref=None)
+
+        backfill_asset_type_ref(django_apps, None)
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.asset_type_ref.code, "fixed")
+
+    def test_backfill_assigns_other_when_code_has_no_match(self):
+        asset = Asset.objects.create(
+            name="Legacy bridge asset",
+            inventory_number="BRIDGE-LEGACY-001",
+            asset_type=Asset.AssetType.FIXED,
+        )
+        Asset.objects.filter(pk=asset.pk).update(asset_type="legacy_unknown", asset_type_ref=None)
+
+        backfill_asset_type_ref(django_apps, None)
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.asset_type_ref.code, "other")
+
+    def test_backfill_does_not_overwrite_existing_asset_type_ref(self):
+        low_value_type = AssetTypeDictionary.objects.get(code="low_value")
+        asset = Asset.objects.create(
+            name="Preset bridge asset",
+            inventory_number="BRIDGE-PRESET-001",
+            asset_type=Asset.AssetType.FIXED,
+        )
+        Asset.objects.filter(pk=asset.pk).update(asset_type_ref=low_value_type)
+
+        backfill_asset_type_ref(django_apps, None)
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.asset_type_ref.code, "low_value")
+
+    def test_asset_type_ref_does_not_change_existing_choices(self):
+        self.assertEqual(
+            list(Asset.AssetType.choices),
+            [
+                ("fixed", "Środek trwały"),
+                ("low_value", "Wyposażenie / niskocenne"),
+                ("intangible", "WNiP"),
+                ("quantity", "Ilościówka"),
+                ("other", "Inne"),
+            ],
+        )
+
+
+class AssetTypeFieldSyncTests(TestCase):
+    def test_save_with_asset_type_sets_asset_type_ref(self):
+        asset = Asset.objects.create(
+            name="Sync fixed asset",
+            inventory_number="SYNC-FIXED-001",
+            asset_type=Asset.AssetType.FIXED,
+        )
+
+        self.assertEqual(asset.asset_type_ref.code, "fixed")
+
+    def test_save_with_asset_type_ref_sets_asset_type_code(self):
+        fixed_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        asset = Asset.objects.create(
+            name="Sync ref asset",
+            inventory_number="SYNC-REF-001",
+            asset_type="",
+            asset_type_ref=fixed_type,
+        )
+
+        self.assertEqual(asset.asset_type, "fixed")
+
+    def test_asset_type_wins_when_code_and_ref_conflict(self):
+        fixed_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        asset = Asset.objects.create(
+            name="Sync conflict asset",
+            inventory_number="SYNC-CONFLICT-001",
+            asset_type=Asset.AssetType.LOW_VALUE,
+            asset_type_ref=fixed_type,
+        )
+
+        self.assertEqual(asset.asset_type, "low_value")
+        self.assertEqual(asset.asset_type_ref.code, "low_value")
+
+    def test_unknown_asset_type_falls_back_to_other(self):
+        asset = Asset.objects.create(
+            name="Sync unknown asset",
+            inventory_number="SYNC-UNKNOWN-001",
+            asset_type="unknown",
+        )
+
+        self.assertEqual(asset.asset_type, "other")
+        self.assertEqual(asset.asset_type_ref.code, "other")
+
+    def test_save_with_update_fields_persists_synced_ref(self):
+        asset = Asset.objects.create(
+            name="Sync update fields asset",
+            inventory_number="SYNC-UPDATE-FIELDS-001",
+            asset_type=Asset.AssetType.FIXED,
+        )
+
+        asset.asset_type = Asset.AssetType.LOW_VALUE
+        asset.save(update_fields=["asset_type"])
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.asset_type, "low_value")
+        self.assertEqual(asset.asset_type_ref.code, "low_value")
+
+
+class AssetRecordQuantityModelTests(TestCase):
+    def test_record_quantity_defaults_to_one(self):
+        asset = Asset.objects.create(
+            name="Record quantity default asset",
+            inventory_number="RQ-DEFAULT-001",
+        )
+
+        self.assertEqual(asset.record_quantity, 1)
+
+    def test_record_quantity_can_store_non_negative_value(self):
+        asset = Asset.objects.create(
+            name="Record quantity custom asset",
+            inventory_number="RQ-CUSTOM-001",
+            record_quantity=0,
+        )
+
+        self.assertEqual(asset.record_quantity, 0)
+
+
+class AssetFormAssetTypeDictionaryTests(TestCase):
+    def _valid_form_data(self, **overrides):
+        data = {
+            "name": "Form dictionary asset",
+            "inventory_number": "FORM-DICT-001",
+            "asset_type": "fixed",
+            "category": "",
+            "manufacturer": "",
+            "model": "",
+            "serial_number": "",
+            "barcode": "",
+            "description": "",
+            "purchase_date": "",
+            "commissioning_date": "",
+            "purchase_value": "",
+            "invoice_number": "",
+            "external_id": "",
+            "cost_center": "",
+            "organizational_unit": "",
+            "department": "",
+            "location": "",
+            "room": "",
+            "responsible_person": "",
+            "current_user": "",
+            "status": Asset.Status.IN_STOCK,
+            "technical_condition": Asset.TechnicalCondition.GOOD,
+            "last_inventory_date": "",
+            "next_review_date": "",
+            "warranty_until": "",
+            "insurance_until": "",
+            "is_active": "on",
+        }
+        data.update(overrides)
+        return data
+
+    def test_form_shows_active_asset_types_from_dictionary(self):
+        form = AssetForm()
+
+        choices = dict(form.fields["asset_type"].choices)
+        self.assertEqual(choices["fixed"], "Środek trwały")
+        self.assertEqual(choices["low_value"], "Wyposażenie / niskocenne")
+        self.assertEqual(choices["quantity"], "Ilościówka")
+
+    def test_form_does_not_show_inactive_asset_types(self):
+        AssetTypeDictionary.objects.filter(code="other").update(is_active=False)
+
+        form = AssetForm()
+
+        choice_values = {value for value, _label in form.fields["asset_type"].choices}
+        self.assertNotIn("other", choice_values)
+
+    def test_form_save_sets_asset_type_ref_from_selected_code(self):
+        form = AssetForm(data=self._valid_form_data(asset_type="low_value"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+
+        self.assertEqual(asset.asset_type_ref.code, "low_value")
+
+    def test_form_save_keeps_asset_type_as_code(self):
+        form = AssetForm(data=self._valid_form_data(asset_type="quantity"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+
+        self.assertEqual(asset.asset_type, "quantity")
+
+    def test_form_accepts_custom_active_dictionary_type(self):
+        AssetTypeDictionary.objects.create(
+            name="Custom active type",
+            code="custom-active-type",
+            is_active=True,
+            sort_order=70,
+        )
+        form = AssetForm(data=self._valid_form_data(asset_type="custom-active-type"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+
+        self.assertEqual(asset.asset_type, "custom-active-type")
+        self.assertEqual(asset.asset_type_ref.code, "custom-active-type")
+
+    def test_edit_existing_asset_uses_current_asset_type(self):
+        asset = Asset.objects.create(
+            name="Existing form dictionary asset",
+            inventory_number="FORM-DICT-EXISTING-001",
+            asset_type=Asset.AssetType.INTANGIBLE,
+        )
+
+        form = AssetForm(instance=asset)
+
+        self.assertEqual(form["asset_type"].value(), "intangible")
+
+    def test_edit_existing_asset_falls_back_to_asset_type_ref(self):
+        fixed_type = AssetTypeDictionary.objects.get(code="fixed")
+        asset = Asset.objects.create(
+            name="Existing form ref asset",
+            inventory_number="FORM-DICT-REF-001",
+            asset_type=Asset.AssetType.LOW_VALUE,
+        )
+        Asset.objects.filter(pk=asset.pk).update(asset_type="", asset_type_ref=fixed_type)
+        asset.refresh_from_db()
+
+        form = AssetForm(instance=asset)
+
+        self.assertEqual(form["asset_type"].value(), "fixed")
+
+
+class AssetTypeDictionarySettingsViewTests(TestCase):
+    def _form_data(self, **overrides):
+        data = {
+            "name": "Custom type",
+            "code": "custom-type",
+            "is_quantity_based": "",
+            "is_active": "on",
+            "sort_order": "60",
+        }
+        data.update(overrides)
+        return data
+
+    def _manager_user(self):
+        user = User.objects.create_user(username="asset-type-manager", password="test-pass-123")
+        user.profile.can_approve_asset_changes = True
+        user.profile.save(update_fields=["can_approve_asset_changes"])
+        return user
+
+    def test_staff_admin_can_access_list(self):
+        user = User.objects.create_user(username="asset-type-staff", password="test-pass-123", is_staff=True)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("settings:asset-types"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rodzaje środków")
+
+    def test_manager_can_access_list(self):
+        self.client.force_login(self._manager_user())
+
+        response = self.client.get(reverse("settings:asset-types"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dodaj rodzaj")
+
+    def test_regular_user_cannot_access_list(self):
+        user = User.objects.create_user(username="asset-type-user", password="test-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("settings:asset-types"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_asset_type(self):
+        self.client.force_login(self._manager_user())
+
+        response = self.client.post(
+            reverse("settings:asset-type-create"),
+            data=self._form_data(name="Custom quantity", code="Custom Quantity", is_quantity_based="on"),
+        )
+
+        self.assertRedirects(response, reverse("settings:asset-types"))
+        asset_type = AssetTypeDictionary.objects.get(code="custom-quantity")
+        self.assertEqual(asset_type.name, "Custom quantity")
+        self.assertTrue(asset_type.is_quantity_based)
+        self.assertTrue(asset_type.is_active)
+        self.assertEqual(asset_type.sort_order, 60)
+
+    def test_update_asset_type(self):
+        self.client.force_login(self._manager_user())
+        asset_type = AssetTypeDictionary.objects.create(
+            name="Editable",
+            code="editable",
+            sort_order=80,
+        )
+
+        response = self.client.post(
+            reverse("settings:asset-type-update", kwargs={"pk": asset_type.pk}),
+            data=self._form_data(name="Edited", code="edited", sort_order="90"),
+        )
+
+        self.assertRedirects(response, reverse("settings:asset-types"))
+        asset_type.refresh_from_db()
+        self.assertEqual(asset_type.name, "Edited")
+        self.assertEqual(asset_type.code, "edited")
+        self.assertEqual(asset_type.sort_order, 90)
+
+    def test_deactivate_asset_type(self):
+        self.client.force_login(self._manager_user())
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        response = self.client.post(reverse("settings:asset-type-deactivate", kwargs={"pk": asset_type.pk}))
+
+        self.assertRedirects(response, reverse("settings:asset-types"))
+        asset_type.refresh_from_db()
+        self.assertFalse(asset_type.is_active)
+
+    def test_activate_asset_type(self):
+        self.client.force_login(self._manager_user())
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+        asset_type.is_active = False
+        asset_type.save(update_fields=["is_active", "updated_at"])
+
+        response = self.client.post(reverse("settings:asset-type-activate", kwargs={"pk": asset_type.pk}))
+
+        self.assertRedirects(response, reverse("settings:asset-types"))
+        asset_type.refresh_from_db()
+        self.assertTrue(asset_type.is_active)
 
 
 class UserRequiresAssetChangeApprovalTests(TestCase):
@@ -2632,6 +3033,84 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(payload["pagination"]["total_items"], 1)
         self.assertEqual(payload["results"][0]["id"], fixed_asset.id)
+
+    def test_api_returns_record_quantity(self):
+        asset = Asset.objects.create(
+            name="Record Quantity API Asset",
+            inventory_number="RQ-API-001",
+            record_quantity=37,
+            status=Asset.Status.IN_STOCK,
+            location="Record Quantity Lab",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["inventory_number"], "RQ-API-001")
+        self.assertEqual(row["record_quantity"], 37)
+
+    def test_api_displays_custom_dictionary_asset_type_name(self):
+        AssetTypeDictionary.objects.create(
+            name="Testowy Ilościowy",
+            code="tt",
+            is_quantity_based=True,
+            is_active=True,
+            sort_order=70,
+        )
+        asset = Asset.objects.create(
+            name="Custom Type Display Asset",
+            inventory_number="DISPLAY-CUSTOM-001",
+            asset_type="tt",
+            status=Asset.Status.IN_STOCK,
+            location="Display Lab",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["asset_type"], "tt")
+        self.assertEqual(row["asset_type_display"], "Testowy Ilościowy")
+
+    def test_api_displays_legacy_asset_type_name(self):
+        asset = Asset.objects.create(
+            name="Legacy Type Display Asset",
+            inventory_number="DISPLAY-LEGACY-001",
+            asset_type=Asset.AssetType.FIXED,
+            status=Asset.Status.IN_STOCK,
+            location="Display Lab",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["asset_type"], "fixed")
+        self.assertEqual(row["asset_type_display"], "Środek trwały")
+
+    def test_api_uses_dictionary_name_when_asset_type_ref_is_null(self):
+        AssetTypeDictionary.objects.create(
+            name="Słownik bez FK",
+            code="no-ref-type",
+            is_active=True,
+            sort_order=80,
+        )
+        asset = Asset.objects.create(
+            name="No Ref Type Display Asset",
+            inventory_number="DISPLAY-NO-REF-001",
+            asset_type="no-ref-type",
+            status=Asset.Status.IN_STOCK,
+            location="Display Lab",
+        )
+        Asset.objects.filter(pk=asset.pk).update(asset_type_ref=None)
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["asset_type"], "no-ref-type")
+        self.assertEqual(row["asset_type_display"], "Słownik bez FK")
 
     def test_asset_type_filter_schema_uses_current_model_choices(self):
         schema = get_asset_filter_ui_schema()

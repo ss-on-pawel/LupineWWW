@@ -274,7 +274,7 @@
                 <p class="asset-subtitle">{{ asset.inventory_number }}</p>
                 <div class="asset-meta-row">
                     <span class="meta-pill">STATUS / {{ asset.get_status_display }}</span>
-                    <span class="meta-pill">TYP / {{ asset.get_asset_type_display }}</span>
+                    <span class="meta-pill">TYP / {{ asset_type_display }}</span>
                     <span class="meta-pill">STAN / {{ asset.get_technical_condition_display }}</span>
                 </div>
             </div>
@@ -324,7 +324,7 @@
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Typ</span>
-                            <div class="detail-value is-mono">{{ asset.get_asset_type_display }}</div>
+                            <div class="detail-value is-mono">{{ asset_type_display }}</div>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Wartość</span>

@@ -420,7 +420,11 @@
                     <a class="{% if request.path|slice:':13' == '/lokalizacje/' %}is-active{% endif %}" href="{% url 'locations:list' %}">Lokalizacje</a>
                     <a class="{% if request.path|slice:':11' == '/inventory/' %}is-active{% endif %}" href="{% url 'inventory:session-list' %}">Inwentaryzacje</a>
                     <a href="#">Raporty</a>
-                    <a href="#">Ustawienia</a>
+                    {% if request.user.is_authenticated %}
+                        {% if request.user.is_superuser or request.user.is_staff or request.user.profile.can_approve_asset_changes %}
+                            <a class="{% if request.path|slice:':10' == '/settings/' %}is-active{% endif %}" href="{% url 'settings:asset-types' %}">Rodzaje środków</a>
+                        {% endif %}
+                    {% endif %}
                 {% endblock %}
             </nav>
             <div class="app-header-actions">
