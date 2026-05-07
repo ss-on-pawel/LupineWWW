@@ -1141,6 +1141,7 @@ class InventorySessionReportViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "RAPORT ROZBIEŻNOŚCI")
         self.assertContains(response, self.session.number)
+        self.assertContains(response, "Zamknięta")
 
     def test_closed_detail_shows_discrepancy_report_button(self):
         self._close_session()
@@ -1176,7 +1177,7 @@ class InventorySessionReportViewTests(TestCase):
         self.assertContains(response, "POZYCJE POTWIERDZONE RĘCZNIE")
         self.assertContains(response, self.manual_asset.inventory_number)
 
-    def test_discrepancy_report_uses_snapshot_purchase_value(self):
+    def test_discrepancy_report_uses_inventory_date_purchase_value(self):
         self._close_session()
         self.no_read_asset.purchase_value = Decimal("999.99")
         self.no_read_asset.save(update_fields=["purchase_value", "updated_at"])
@@ -1184,9 +1185,12 @@ class InventorySessionReportViewTests(TestCase):
 
         response = self.client.get(self._discrepancy_report_url())
 
-        self.assertContains(response, "Wartość wg snapshotu")
+        self.assertContains(response, "Ilość wg ewidencji na dzień spisu")
+        self.assertContains(response, "Wartość na dzień spisu")
         self.assertContains(response, "123.45")
         self.assertNotContains(response, "999.99")
+        self.assertNotContains(response, "snapshot")
+        self.assertNotContains(response, "Snapshot")
 
     def test_discrepancy_report_does_not_contain_resolution_fields(self):
         self._close_session()

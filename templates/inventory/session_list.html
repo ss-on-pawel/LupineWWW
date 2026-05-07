@@ -116,7 +116,7 @@
                                 <td class="inventory-number">
                                     <a href="{% url 'inventory:session-detail' session.pk %}">{{ session.number }}</a>
                                 </td>
-                                <td>{{ session.get_status_display }}</td>
+                                <td>{% if session.status == "active" %}Aktywna{% elif session.status == "closed" %}Zamknięta{% else %}{{ session.get_status_display }}{% endif %}</td>
                                 <td>{{ session.root_locations_display|default:"-" }}</td>
                                 <td>{{ session.asset_type_scope_display|default:"-" }}</td>
                                 <td>{{ session.started_at|date:"Y-m-d H:i" }}</td>

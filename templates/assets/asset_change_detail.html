@@ -10,7 +10,17 @@
             <dt>Operacja</dt>
             <dd>{{ change_request.get_operation_display }}</dd>
             <dt>Status</dt>
-            <dd>{{ change_request.get_status_display }}</dd>
+            <dd>
+                {% if change_request.status == "pending" %}
+                    Oczekuje
+                {% elif change_request.status == "approved" %}
+                    Zatwierdzona
+                {% elif change_request.status == "rejected" %}
+                    Odrzucona
+                {% else %}
+                    {{ change_request.get_status_display }}
+                {% endif %}
+            </dd>
             <dt>Zgłosił</dt>
             <dd>{{ change_request.requested_by }}</dd>
             <dt>Utworzono</dt>
