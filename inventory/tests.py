@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from io import StringIO
 from types import SimpleNamespace
 
@@ -368,6 +369,85 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertNotContains(response, "Detail Other")
         self.assertNotContains(response, "BC-CURRENT")
 
+    def test_start_session_snapshots_record_quantity_and_purchase_value(self):
+        asset = self._create_asset(
+            "DETAIL-VALUE-SNAP-001",
+            self.child,
+            record_quantity=7,
+            purchase_value=Decimal("123.45"),
+        )
+        session = self._start_session(self.root)
+
+        snapshot_item = session.snapshot_items.get(asset_id_snapshot=asset.pk)
+
+        self.assertEqual(snapshot_item.record_quantity_snapshot, 7)
+        self.assertEqual(snapshot_item.purchase_value_snapshot, Decimal("123.45"))
+
+    def test_analysis_uses_snapshot_record_quantity_after_asset_update(self):
+        asset = self._create_asset("DETAIL-QTY-HISTORY-001", self.child, record_quantity=5)
+        session = self._start_session(self.root)
+
+        asset.record_quantity = 99
+        asset.save(update_fields=["record_quantity", "updated_at"])
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_item = next(
+            item for item in response.context["inventory_work_items"]
+            if item["snapshot"].asset_id_snapshot == asset.pk
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(work_item["record_quantity"], 5)
+        self.assertEqual(work_item["difference"], -5)
+
+    def test_analysis_uses_snapshot_purchase_value_after_asset_update(self):
+        asset = self._create_asset(
+            "DETAIL-VALUE-HISTORY-001",
+            self.child,
+            purchase_value=Decimal("123.45"),
+        )
+        session = self._start_session(self.root)
+
+        asset.purchase_value = Decimal("999.99")
+        asset.save(update_fields=["purchase_value", "updated_at"])
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_item = next(
+            item for item in response.context["inventory_work_items"]
+            if item["snapshot"].asset_id_snapshot == asset.pk
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(work_item["purchase_value"], Decimal("123.45"))
+        self.assertEqual(work_item["purchase_value_display"], "123.45 zł")
+
+    def test_old_snapshot_without_quantity_and_value_uses_asset_fallback(self):
+        asset = self._create_asset(
+            "DETAIL-OLD-SNAP-001",
+            self.child,
+            record_quantity=6,
+            purchase_value=Decimal("88.00"),
+        )
+        session = self._start_session(self.root)
+        session.snapshot_items.filter(asset_id_snapshot=asset.pk).update(
+            record_quantity_snapshot=None,
+            purchase_value_snapshot=None,
+        )
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_item = next(
+            item for item in response.context["inventory_work_items"]
+            if item["snapshot"].asset_id_snapshot == asset.pk
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(work_item["record_quantity"], 6)
+        self.assertEqual(work_item["purchase_value"], Decimal("88.00"))
+        self.assertEqual(work_item["purchase_value_display"], "88.00 zł")
+
 
 class InventorySessionStartViewTests(TestCase):
     def setUp(self):
@@ -637,7 +717,12 @@ class InventorySessionReportViewTests(TestCase):
         self.user.profile.allowed_locations.add(self.root)
         self.out_of_scope_user = User.objects.create_user(username="inventory-report-out", password="test-pass-123")
         self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
-        self.no_read_asset = self._create_asset("REPORT-NOREAD-001", self.child, barcode="BC-REPORT-NOREAD")
+        self.no_read_asset = self._create_asset(
+            "REPORT-NOREAD-001",
+            self.child,
+            barcode="BC-REPORT-NOREAD",
+            purchase_value=Decimal("123.45"),
+        )
         self.manual_asset = self._create_asset("REPORT-MANUAL-001", self.child, barcode="BC-REPORT-MANUAL")
         self.wrong_location_asset = self._create_asset("REPORT-WRONG-001", self.child, barcode="BC-REPORT-WRONG")
         self.quantity_asset = self._create_asset(
@@ -744,6 +829,18 @@ class InventorySessionReportViewTests(TestCase):
         self.assertContains(response, "UNKNOWN-REPORT-001")
         self.assertContains(response, "POZYCJE POTWIERDZONE RĘCZNIE")
         self.assertContains(response, self.manual_asset.inventory_number)
+
+
+    def test_report_shows_snapshot_purchase_value(self):
+        self.no_read_asset.purchase_value = Decimal("999.99")
+        self.no_read_asset.save(update_fields=["purchase_value", "updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertContains(response, "Wartość")
+        self.assertContains(response, "123.45 zł")
+        self.assertNotContains(response, "999.99 zł")
 
 
 class InventorySessionSheetViewTests(TestCase):
@@ -1141,7 +1238,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertEqual(work_item["read_quantity"], 1)
         self.assertEqual(work_item["actual_quantity"], 1)
 
-    def test_work_table_context_includes_asset_record_quantity(self):
+    def test_work_table_context_uses_snapshot_record_quantity(self):
         self.ok_asset.record_quantity = 42
         self.ok_asset.save(update_fields=["record_quantity"])
 
@@ -1151,7 +1248,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
             if item["snapshot"].inventory_number == "PROGRESS-OK-001"
         )
 
-        self.assertEqual(work_item["record_quantity"], 42)
+        self.assertEqual(work_item["record_quantity"], 1)
 
     def test_regular_asset_without_scan_has_negative_difference(self):
         self.ok_asset.record_quantity = 1

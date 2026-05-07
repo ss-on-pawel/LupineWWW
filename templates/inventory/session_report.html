@@ -229,6 +229,7 @@
                                 <th>Nazwa</th>
                                 <th>Rodzaj</th>
                                 <th>Lokalizacja startowa</th>
+                                <th>Wartość</th>
                                 <th>Ilość faktyczna</th>
                                 <th>Ilość ewidencyjna</th>
                                 <th>Różnica</th>
@@ -241,6 +242,7 @@
                                     <td>{{ item.snapshot.name }}</td>
                                     <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
                                     <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td class="inventory-report-mono">{{ item.purchase_value_display }}</td>
                                     <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.record_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.difference_display }}</td>
@@ -266,6 +268,7 @@
                                 <th>Lokalizacja startowa</th>
                                 <th>Lokalizacja odczytu</th>
                                 <th>Ostatni odczyt</th>
+                                <th>Wartość</th>
                                 <th>Ilość faktyczna</th>
                                 <th>Ilość ewidencyjna</th>
                                 <th>Różnica</th>
@@ -279,6 +282,7 @@
                                     <td>{{ item.snapshot.location_path|default:"-" }}</td>
                                     <td>{{ item.scanned_location_display }}</td>
                                     <td class="inventory-report-mono">{% if item.last_seen_at %}{{ item.last_seen_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                                    <td class="inventory-report-mono">{{ item.purchase_value_display }}</td>
                                     <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.record_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.difference_display }}</td>
@@ -304,6 +308,7 @@
                                 <th>Rodzaj</th>
                                 <th>Odczyt</th>
                                 <th>Ręczne</th>
+                                <th>Wartość</th>
                                 <th>Ilość faktyczna</th>
                                 <th>Ilość ewidencyjna</th>
                                 <th>Różnica</th>
@@ -318,6 +323,7 @@
                                     <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
                                     <td class="inventory-report-mono">{{ item.read_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.manual_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.purchase_value_display }}</td>
                                     <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.record_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.difference_display }}</td>
@@ -370,6 +376,7 @@
                                 <th>Nr inw.</th>
                                 <th>Nazwa</th>
                                 <th>Lokalizacja startowa</th>
+                                <th>Wartość</th>
                                 <th>Ilość faktyczna</th>
                                 <th>Ilość ewidencyjna</th>
                                 <th>Różnica</th>
@@ -381,6 +388,7 @@
                                     <td class="inventory-report-mono">{{ item.snapshot.inventory_number }}</td>
                                     <td>{{ item.snapshot.name }}</td>
                                     <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td class="inventory-report-mono">{{ item.purchase_value_display }}</td>
                                     <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.record_quantity }}</td>
                                     <td class="inventory-report-mono">{{ item.difference_display }}</td>

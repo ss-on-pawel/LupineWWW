@@ -270,7 +270,8 @@ def _build_inventory_session_analysis(session):
                 manual_confirmed=manual_confirmed,
                 is_quantity_based=is_quantity_based,
             )
-            record_quantity = snapshot_item.asset.record_quantity if snapshot_item.asset_id else 1
+            record_quantity = _get_snapshot_record_quantity(snapshot_item)
+            purchase_value = _get_snapshot_purchase_value(snapshot_item)
             difference = actual_quantity - record_quantity
             work_item = {
                 "snapshot": snapshot_item,
@@ -284,6 +285,8 @@ def _build_inventory_session_analysis(session):
                 "manual_confirmed": manual_confirmed,
                 "actual_quantity": actual_quantity,
                 "record_quantity": record_quantity,
+                "purchase_value": purchase_value,
+                "purchase_value_display": _format_inventory_purchase_value(purchase_value),
                 "difference": difference,
                 "difference_display": _format_inventory_difference(difference),
                 "scan_code_display": scan_code_display,
@@ -360,6 +363,26 @@ def _get_scanned_code_counts(session):
                 continue
             code_counts[code] += 1
     return code_counts
+
+
+def _get_snapshot_record_quantity(snapshot_item):
+    if snapshot_item.record_quantity_snapshot is not None:
+        return snapshot_item.record_quantity_snapshot
+    if snapshot_item.asset_id and snapshot_item.asset:
+        return snapshot_item.asset.record_quantity
+    return 1
+
+
+def _get_snapshot_purchase_value(snapshot_item):
+    if snapshot_item.purchase_value_snapshot is not None:
+        return snapshot_item.purchase_value_snapshot
+    if snapshot_item.asset_id and snapshot_item.asset:
+        return snapshot_item.asset.purchase_value
+    return None
+
+
+def _format_inventory_purchase_value(value):
+    return f"{value} zł" if value is not None else "-"
 
 
 def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_based, scanned_code_counts):

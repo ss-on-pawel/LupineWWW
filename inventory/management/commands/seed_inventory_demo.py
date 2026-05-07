@@ -271,6 +271,8 @@ class Command(BaseCommand):
             barcode=asset.barcode,
             asset_type=asset.asset_type,
             asset_type_display=asset.asset_type_ref.name if asset.asset_type_ref else asset.get_asset_type_display(),
+            record_quantity_snapshot=asset.record_quantity,
+            purchase_value_snapshot=asset.purchase_value,
             location_fk_id_snapshot=location.id,
             location_code=location.code,
             location_name=location.name,
