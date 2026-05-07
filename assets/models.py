@@ -177,6 +177,26 @@ class Asset(models.Model):
         db_index=True,
         verbose_name="Data ostatniej inwentaryzacji",
     )
+    last_inventory_quantity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Ilość z ostatniej inwentaryzacji",
+    )
+    last_inventory_session = models.ForeignKey(
+        "inventory.InventorySession",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="applied_assets",
+        verbose_name="Sesja ostatniej inwentaryzacji",
+    )
+    last_inventory_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Data naniesienia ostatniej inwentaryzacji",
+    )
     next_review_date = models.DateField(
         null=True,
         blank=True,
@@ -225,11 +245,22 @@ class Asset(models.Model):
         return f"{self.name} ({self.inventory_number})"
 
     def save(self, *args, **kwargs):
+        synced_location_fields = self._sync_location_cache()
         synced_fields = self._sync_asset_type_fields()
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and synced_fields:
-            kwargs["update_fields"] = set(update_fields) | synced_fields
+        all_synced_fields = synced_fields | synced_location_fields
+        if update_fields is not None and all_synced_fields:
+            kwargs["update_fields"] = set(update_fields) | all_synced_fields
         super().save(*args, **kwargs)
+
+    def _sync_location_cache(self) -> set[str]:
+        if not self.location_fk_id:
+            return set()
+        location_path = self.location_fk.path
+        if self.location == location_path:
+            return set()
+        self.location = location_path
+        return {"location"}
 
     def _sync_asset_type_fields(self) -> set[str]:
         synced_fields = set()

@@ -223,8 +223,34 @@ class AssetRecordQuantityModelTests(TestCase):
         self.assertEqual(asset.record_quantity, 0)
 
 
+class AssetLocationSyncModelTests(TestCase):
+    def test_save_syncs_location_cache_from_location_fk_path(self):
+        root = Location.objects.create(name="Sync Root")
+        location = Location.objects.create(name="Sync Room", parent=root)
+        asset = Asset.objects.create(
+            name="Location sync asset",
+            inventory_number="LOC-SYNC-001",
+            location="Stale legacy value",
+            location_fk=location,
+        )
+
+        self.assertEqual(asset.location, location.path)
+
+    def test_save_without_location_fk_keeps_legacy_location_for_old_records(self):
+        asset = Asset.objects.create(
+            name="Legacy location asset",
+            inventory_number="LOC-LEGACY-001",
+            location="Legacy only",
+            location_fk=None,
+        )
+
+        self.assertEqual(asset.location, "Legacy only")
+        self.assertIsNone(asset.location_fk)
+
+
 class AssetFormAssetTypeDictionaryTests(TestCase):
     def _valid_form_data(self, **overrides):
+        location, _ = Location.objects.get_or_create(name="Form dictionary location")
         data = {
             "name": "Form dictionary asset",
             "inventory_number": "FORM-DICT-001",
@@ -243,7 +269,7 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
             "cost_center": "",
             "organizational_unit": "",
             "department": "",
-            "location": "",
+            "location_fk": str(location.id),
             "room": "",
             "responsible_person": "",
             "current_user": "",
@@ -273,6 +299,14 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
 
         choice_values = {value for value, _label in form.fields["asset_type"].choices}
         self.assertNotIn("other", choice_values)
+
+    def test_form_requires_location_fk_and_does_not_expose_legacy_location(self):
+        form = AssetForm(data=self._valid_form_data(location_fk=""))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("location_fk", form.errors)
+        self.assertIn("location_fk", form.fields)
+        self.assertNotIn("location", form.fields)
 
     def test_form_save_sets_asset_type_ref_from_selected_code(self):
         form = AssetForm(data=self._valid_form_data(asset_type="low_value"))
@@ -662,11 +696,12 @@ class DeserializeAssetPayloadForFormTests(TestCase):
         self.assertFalse(Asset.objects.filter(inventory_number="DESERIALIZE-NO-CREATE-001").exists())
 
     def test_handles_flat_create_payload(self):
+        location = Location.objects.create(name="Deserialize Warehouse")
         payload = {
             "name": "Create Payload",
             "inventory_number": "DESERIALIZE-CREATE-001",
             "asset_type": Asset.AssetType.LOW_VALUE,
-            "location": "Warehouse",
+            "location_fk": location.id,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "review_comment": "ignored",
@@ -677,10 +712,11 @@ class DeserializeAssetPayloadForFormTests(TestCase):
         self.assertEqual(form_data["name"], "Create Payload")
         self.assertEqual(form_data["inventory_number"], "DESERIALIZE-CREATE-001")
         self.assertEqual(form_data["asset_type"], Asset.AssetType.LOW_VALUE)
-        self.assertEqual(form_data["location"], "Warehouse")
+        self.assertEqual(form_data["location_fk"], location.id)
         self.assertNotIn("review_comment", form_data)
 
     def test_handles_update_proposed_payload(self):
+        location = Location.objects.create(name="Deserialize Updated")
         update_payload = {
             "current": {
                 "name": "Old Name",
@@ -689,7 +725,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
             "proposed": {
                 "name": "New Name",
                 "inventory_number": "DESERIALIZE-UPDATE-001",
-                "location": "Updated location",
+                "location_fk": location.id,
                 "unexpected": "ignored",
             },
         }
@@ -698,12 +734,13 @@ class DeserializeAssetPayloadForFormTests(TestCase):
 
         self.assertEqual(form_data["name"], "New Name")
         self.assertEqual(form_data["inventory_number"], "DESERIALIZE-UPDATE-001")
-        self.assertEqual(form_data["location"], "Updated location")
+        self.assertEqual(form_data["location_fk"], location.id)
         self.assertNotIn("unexpected", form_data)
 
 
 class ApproveAssetChangeRequestCreateTests(TestCase):
     def _create_payload(self, inventory_number="APPROVE-CREATE-001", **overrides):
+        location, _ = Location.objects.get_or_create(name="Approve Create Location")
         payload = {
             "name": "Approved Asset",
             "inventory_number": inventory_number,
@@ -711,7 +748,7 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "category": "IT",
-            "location": "Legacy location",
+            "location_fk": location.id,
             "is_active": True,
         }
         payload.update(overrides)
@@ -741,6 +778,8 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         change_request.refresh_from_db()
         self.assertEqual(asset.inventory_number, "APPROVE-CREATE-001")
         self.assertEqual(asset.name, "Approved Asset")
+        self.assertIsNotNone(asset.location_fk)
+        self.assertEqual(asset.location, asset.location_fk.path)
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
         self.assertEqual(change_request.reviewed_by, reviewer)
         self.assertIsNotNone(change_request.reviewed_at)
@@ -970,7 +1009,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
             "cost_center": asset.cost_center,
             "organizational_unit": asset.organizational_unit,
             "department": asset.department,
-            "location": asset.location,
+            "location_fk": asset.location_fk,
             "room": asset.room,
             "responsible_person": asset.responsible_person,
             "current_user": asset.current_user,
@@ -1214,8 +1253,9 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         self.assertEqual(asset.inventory_number, "APPROVE-UPDATE-INVALID-001")
         self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
 
-    def test_extra_fields_are_ignored_and_legacy_location_is_updated(self):
+    def test_extra_fields_are_ignored_and_location_fk_updates_cache(self):
         location, _ = self._create_location_tree()
+        target_location = Location.objects.create(name="Nowe biuro", parent=location)
         requester = User.objects.create_user(username="approve-update-extra-requester", password="test-pass-123")
         reviewer = User.objects.create_superuser(
             username="approve-update-extra-reviewer",
@@ -1226,7 +1266,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         proposed = self._proposed_payload(
             asset,
             name="Extra Ignored Update",
-            location="LOKALIZACJA SPOZA ZAKRESU",
+            location_fk=target_location.id,
             malicious_field="ignored",
             id=999,
         )
@@ -1239,7 +1279,8 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         updated_asset = approve_asset_change_request(change_request, reviewer)
 
         self.assertEqual(updated_asset.name, "Extra Ignored Update")
-        self.assertEqual(updated_asset.location, "LOKALIZACJA SPOZA ZAKRESU")
+        self.assertEqual(updated_asset.location_fk, target_location)
+        self.assertEqual(updated_asset.location, target_location.path)
         self.assertNotEqual(updated_asset.pk, 999)
         self.assertFalse(hasattr(updated_asset, "malicious_field"))
         change_request.refresh_from_db()
@@ -2028,6 +2069,7 @@ class AssetChangeRequestListViewTests(TestCase):
             email="queue-approve-post-superuser@example.com",
             password="test-pass-123",
         )
+        location = Location.objects.create(name="Queue Approve Location")
         change_request = self._create_change_request(
             requester,
             AssetChangeRequest.Operation.CREATE,
@@ -2039,6 +2081,7 @@ class AssetChangeRequestListViewTests(TestCase):
                 "category": "IT",
                 "status": Asset.Status.IN_STOCK,
                 "technical_condition": Asset.TechnicalCondition.GOOD,
+                "location_fk": location.id,
                 "is_active": True,
             },
         )
@@ -2472,6 +2515,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         )
 
     def _create_payload(self, inventory_number):
+        location, _ = Location.objects.get_or_create(name="Post Create Location")
         return {
             "name": f"Post Create {inventory_number}",
             "inventory_number": inventory_number,
@@ -2479,6 +2523,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
             "category": "IT",
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
+            "location_fk": location.id,
             "is_active": True,
         }
 
@@ -4270,7 +4315,7 @@ class AssetUpdateViewTests(TestCase):
             "cost_center": "",
             "organizational_unit": "",
             "department": "",
-            "location": asset.location,
+            "location_fk": str(asset.location_fk_id) if asset.location_fk_id else "",
             "room": "101",
             "responsible_person": "",
             "current_user": "",
@@ -4417,14 +4462,15 @@ class AssetUpdateViewTests(TestCase):
 
         response = self.client.post(
             reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(asset, name="Saved Update", location="Updated legacy location"),
+            data=self._valid_update_payload(asset, name="Saved Update"),
         )
 
         asset.refresh_from_db()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("assets:detail", kwargs={"id": asset.pk}))
         self.assertEqual(asset.name, "Saved Update")
-        self.assertEqual(asset.location, "Updated legacy location")
+        self.assertEqual(asset.location, allowed_location.path)
+        self.assertEqual(asset.location_fk, allowed_location)
         self.assertEqual(asset.status, Asset.Status.IN_USE)
         self.assertFalse(AssetChangeRequest.objects.exists())
 
@@ -4441,7 +4487,6 @@ class AssetUpdateViewTests(TestCase):
             data=self._valid_update_payload(
                 asset,
                 name="Queued Update",
-                location="Queued legacy location",
                 malicious_field="not-in-payload",
             ),
         )
@@ -4459,9 +4504,9 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(change_request.requested_by, user)
         self.assertSetEqual(set(change_request.payload.keys()), {"current", "proposed"})
         self.assertEqual(change_request.payload["current"]["name"], "Original Name")
-        self.assertEqual(change_request.payload["current"]["location"], allowed_location.path)
+        self.assertEqual(change_request.payload["current"]["location_fk"], allowed_location.id)
         self.assertEqual(change_request.payload["proposed"]["name"], "Queued Update")
-        self.assertEqual(change_request.payload["proposed"]["location"], "Queued legacy location")
+        self.assertEqual(change_request.payload["proposed"]["location_fk"], allowed_location.id)
         self.assertNotIn("malicious_field", change_request.payload["current"])
         self.assertNotIn("malicious_field", change_request.payload["proposed"])
         self.assertEqual(self._messages(response), ["Zmiana została przekazana do akceptacji."])
@@ -4588,21 +4633,25 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(hasattr(asset, "malicious_field"))
 
-    def test_update_saves_legacy_location_string_as_text(self):
+    def test_update_changes_location_through_location_fk_and_syncs_cache(self):
         allowed_location, _ = self._create_location_tree()
+        child_location = Location.objects.create(name="Sala 2", parent=allowed_location)
         asset = self._create_asset(location_obj=allowed_location)
-        user = self._manager_with_location("update-legacy-location", allowed_location)
+        user = self._manager_with_location("update-location-fk", allowed_location)
         self.client.force_login(user)
 
         response = self.client.post(
             reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(asset, location="LOKALIZACJA SPOZA ZAKRESU"),
+            data=self._valid_update_payload(asset, location_fk=str(child_location.id)),
         )
 
         asset.refresh_from_db()
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(asset.location, "LOKALIZACJA SPOZA ZAKRESU")
-        self.assertEqual(asset.location_fk, allowed_location)
+        self.assertEqual(asset.location, child_location.path)
+        self.assertEqual(asset.location_fk, child_location)
+
+        detail_response = self.client.get(reverse("assets:detail", kwargs={"id": asset.pk}))
+        self.assertEqual(detail_response.status_code, 200)
 
     def test_superuser_and_approver_update_asset_without_queue(self):
         allowed_location, _ = self._create_location_tree()
@@ -4689,13 +4738,14 @@ class AssetUpdateViewTests(TestCase):
 
 class AssetCreateViewTests(TestCase):
     def _valid_asset_payload(self, **overrides):
+        location, _ = Location.objects.get_or_create(name="Create Warehouse")
         payload = {
             "name": "Created Asset",
             "inventory_number": "CREATE-001",
             "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
-            "location": "Warehouse",
+            "location_fk": str(location.id),
             "is_active": "on",
         }
         payload.update(overrides)
@@ -4722,7 +4772,8 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(asset.asset_type, Asset.AssetType.FIXED)
         self.assertEqual(asset.status, Asset.Status.IN_STOCK)
         self.assertEqual(asset.technical_condition, Asset.TechnicalCondition.GOOD)
-        self.assertEqual(asset.location, "Warehouse")
+        self.assertIsNotNone(asset.location_fk)
+        self.assertEqual(asset.location, asset.location_fk.path)
 
     def test_invalid_create_form_does_not_create_asset(self):
         user = User.objects.create_user(username="asset-invalid", password="test-pass-123")
@@ -4764,7 +4815,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(change_request.payload["asset_type"], Asset.AssetType.FIXED)
         self.assertEqual(change_request.payload["status"], Asset.Status.IN_STOCK)
         self.assertEqual(change_request.payload["technical_condition"], Asset.TechnicalCondition.GOOD)
-        self.assertEqual(change_request.payload["location"], "Warehouse")
+        self.assertIn("location_fk", change_request.payload)
 
     def test_approval_payload_uses_cleaned_data_and_ignores_extra_post_fields(self):
         user = User.objects.create_user(username="asset-approval-payload", password="test-pass-123")
@@ -4859,9 +4910,9 @@ class AssetCreateViewTests(TestCase):
         self.assertTrue(Asset.objects.filter(inventory_number="CREATE-ADMIN-DIRECT-001").exists())
         self.assertFalse(AssetChangeRequest.objects.exists())
 
-    def test_create_ignores_posted_location_fk(self):
+    def test_create_uses_posted_location_fk_and_syncs_location_cache(self):
         user = User.objects.create_user(username="asset-location-fk", password="test-pass-123")
-        location = Location.objects.create(name="Ignored Location")
+        location = Location.objects.create(name="Used Location")
         self.client.force_login(user)
 
         response = self.client.post(
@@ -4874,9 +4925,10 @@ class AssetCreateViewTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         asset = Asset.objects.get(inventory_number="CREATE-FK-001")
-        self.assertIsNone(asset.location_fk)
+        self.assertEqual(asset.location_fk, location)
+        self.assertEqual(asset.location, location.path)
 
-    def test_create_accepts_legacy_location_string_without_scope_validation(self):
+    def test_create_without_location_fk_does_not_create_asset(self):
         user = User.objects.create_user(username="asset-legacy-location", password="test-pass-123")
         self.client.force_login(user)
 
@@ -4884,13 +4936,14 @@ class AssetCreateViewTests(TestCase):
             reverse("assets:create"),
             data=self._valid_asset_payload(
                 inventory_number="CREATE-LOC-001",
+                location_fk="",
                 location="LOKALIZACJA SPOZA ZAKRESU",
             ),
         )
 
-        self.assertEqual(response.status_code, 302)
-        asset = Asset.objects.get(inventory_number="CREATE-LOC-001")
-        self.assertEqual(asset.location, "LOKALIZACJA SPOZA ZAKRESU")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Asset.objects.filter(inventory_number="CREATE-LOC-001").exists())
+        self.assertIn("location_fk", response.context["form"].errors)
 
 
 class SeedAssetsCommandTests(TestCase):

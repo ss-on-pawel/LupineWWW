@@ -51,6 +51,16 @@ def _user_can_manage_asset_types(user):
     return profile.can_approve_asset_changes
 
 
+def _get_asset_form_location_queryset(user):
+    accessible_location_ids = get_accessible_location_ids(user)
+    queryset = Location.objects.filter(is_active=True).order_by("name", "id")
+    if accessible_location_ids is None:
+        return queryset
+    if not accessible_location_ids:
+        return queryset.none()
+    return queryset.filter(id__in=accessible_location_ids)
+
+
 class AssetTypeManagePermissionMixin(LoginRequiredMixin):
     def dispatch(self, request, *args, **kwargs):
         if not _user_can_manage_asset_types(request.user):
@@ -504,6 +514,11 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
     form_class = AssetForm
     template_name = "assets/asset_form.html"
     context_object_name = "asset"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["location_queryset"] = _get_asset_form_location_queryset(self.request.user)
+        return kwargs
 
     def get_queryset(self):
         queryset = super().get_queryset()

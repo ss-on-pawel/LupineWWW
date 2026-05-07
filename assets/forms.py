@@ -1,11 +1,18 @@
 from django import forms
 from django.utils.text import slugify
 
+from locations.models import Location
+
 from .models import Asset, AssetTypeDictionary
 
 
 class AssetForm(forms.ModelForm):
     asset_type = forms.ChoiceField(label="Rodzaj", required=False)
+    location_fk = forms.ModelChoiceField(
+        label="Lokalizacja",
+        queryset=Location.objects.none(),
+        required=True,
+    )
     record_quantity = forms.IntegerField(
         label="Ilość ewidencyjna",
         min_value=0,
@@ -14,6 +21,7 @@ class AssetForm(forms.ModelForm):
     )
 
     def __init__(self, *args, **kwargs):
+        location_queryset = kwargs.pop("location_queryset", None)
         super().__init__(*args, **kwargs)
         asset_type_choices = [
             (asset_type.code, asset_type.name)
@@ -21,6 +29,11 @@ class AssetForm(forms.ModelForm):
         ]
         self.fields["asset_type"].choices = [("", "---------")] + asset_type_choices
         self.fields["asset_type"].label = "Rodzaj"
+        self.fields["location_fk"].queryset = (
+            location_queryset
+            if location_queryset is not None
+            else Location.objects.filter(is_active=True).order_by("name", "id")
+        )
 
         if self.instance and self.instance.pk and not self.initial.get("asset_type") and self.instance.asset_type_ref_id:
             self.initial["asset_type"] = self.instance.asset_type_ref.code
@@ -46,7 +59,7 @@ class AssetForm(forms.ModelForm):
             "cost_center",
             "organizational_unit",
             "department",
-            "location",
+            "location_fk",
             "room",
             "responsible_person",
             "current_user",
