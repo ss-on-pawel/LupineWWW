@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Raport rozbieżności {{ session.number }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .inventory-discrepancy-screenbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .inventory-discrepancy-page {
+            max-width: none;
+            margin: 0 auto;
+            color: #111827;
+            background: #ffffff;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .inventory-discrepancy-document {
+            display: grid;
+            gap: 12px;
+            padding: 18px;
+            border: 1px solid #111827;
+            background: #ffffff;
+        }
+
+        .inventory-discrepancy-title {
+            margin: 0 0 6px;
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+
+        .inventory-discrepancy-note {
+            margin: 0;
+            padding: 8px;
+            border: 1px solid #111827;
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+
+        .inventory-discrepancy-meta,
+        .inventory-discrepancy-formal {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 5px 18px;
+            margin: 0;
+            font-size: 0.82rem;
+        }
+
+        .inventory-discrepancy-meta div,
+        .inventory-discrepancy-formal div {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .inventory-discrepancy-meta dt,
+        .inventory-discrepancy-formal dt {
+            font-weight: 700;
+        }
+
+        .inventory-discrepancy-meta dd,
+        .inventory-discrepancy-formal dd {
+            margin: 0;
+            min-width: 0;
+        }
+
+        .inventory-discrepancy-section {
+            display: grid;
+            gap: 5px;
+        }
+
+        .inventory-discrepancy-section-title {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .inventory-discrepancy-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.66rem;
+            line-height: 1.2;
+        }
+
+        .inventory-discrepancy-table th,
+        .inventory-discrepancy-table td {
+            padding: 4px 5px;
+            border: 1px solid #111827;
+            vertical-align: top;
+        }
+
+        .inventory-discrepancy-table th {
+            text-align: center;
+            font-weight: 800;
+            background: #f3f4f6;
+        }
+
+        .inventory-discrepancy-table td:nth-child(1),
+        .inventory-discrepancy-table td:nth-last-child(5),
+        .inventory-discrepancy-table td:nth-last-child(4),
+        .inventory-discrepancy-table td:nth-last-child(3) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .inventory-discrepancy-empty-note {
+            padding: 8px;
+            border: 1px solid #111827;
+            font-size: 0.82rem;
+        }
+
+        .inventory-discrepancy-footer {
+            display: grid;
+            gap: 14px;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            font-size: 0.82rem;
+        }
+
+        .inventory-discrepancy-line {
+            display: block;
+            min-height: 1.2em;
+            border-bottom: 1px dotted #111827;
+        }
+
+        .inventory-discrepancy-signatures {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .inventory-discrepancy-signature {
+            min-height: 58px;
+            padding-top: 34px;
+            border-top: 1px dotted #111827;
+            text-align: center;
+            font-size: 0.76rem;
+        }
+
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        @media print {
+            body {
+                background: #ffffff !important;
+            }
+
+            .app-sidebar,
+            .topbar,
+            .inventory-discrepancy-screenbar {
+                display: none !important;
+            }
+
+            .app-main,
+            .content {
+                display: block !important;
+                width: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+            }
+
+            .inventory-discrepancy-page {
+                width: auto;
+                margin: 0;
+            }
+
+            .inventory-discrepancy-document {
+                padding: 0;
+                border: 0;
+            }
+
+            .inventory-discrepancy-table {
+                font-size: 0.58rem;
+            }
+
+            .inventory-discrepancy-table thead {
+                display: table-header-group;
+            }
+
+            .inventory-discrepancy-table tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+
+            .inventory-discrepancy-signatures {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="inventory-discrepancy-screenbar">
+        <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Powrót do sesji</a>
+        <button class="ui-btn ui-btn--secondary" type="button" onclick="window.print()">Drukuj / PDF</button>
+    </div>
+
+    <section class="inventory-discrepancy-page">
+        <article class="inventory-discrepancy-document">
+            <header>
+                <h1 class="inventory-discrepancy-title">RAPORT ROZBIEŻNOŚCI</h1>
+                <dl class="inventory-discrepancy-meta">
+                    <div>
+                        <dt>Numer sesji</dt>
+                        <dd>{{ session.number }}</dd>
+                    </div>
+                    <div>
+                        <dt>Status</dt>
+                        <dd>Zamknięta</dd>
+                    </div>
+                    <div>
+                        <dt>Data rozpoczęcia</dt>
+                        <dd>{{ session.started_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Data zamknięcia</dt>
+                        <dd>{{ session.closed_at|date:"Y-m-d H:i"|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Data wygenerowania</dt>
+                        <dd>{{ generated_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Utworzył</dt>
+                        <dd>{{ session.created_by|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Zakres lokalizacji</dt>
+                        <dd>{{ root_locations_display|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Zakres typów assetów</dt>
+                        <dd>{{ asset_type_scope_display|default:"-" }}</dd>
+                    </div>
+                </dl>
+            </header>
+
+            <p class="inventory-discrepancy-note">Raport przedstawia faktyczne rozbieżności stwierdzone w toku inwentaryzacji. Dokument nie zawiera przyczyn rozbieżności ani decyzji komisji.</p>
+
+            <section class="inventory-discrepancy-section" aria-labelledby="discrepancy-missing-title">
+                <h2 class="inventory-discrepancy-section-title" id="discrepancy-missing-title">BRAKI / ILOŚĆ FAKTYCZNA 0</h2>
+                {% if missing_items %}
+                    <table class="inventory-discrepancy-table">
+                        <thead>
+                            <tr>
+                                <th>Lp.</th>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Rodzaj</th>
+                                <th>Lokalizacja wg spisu/snapshotu</th>
+                                <th>Ilość wg snapshotu</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Różnica</th>
+                                <th>Wartość wg snapshotu</th>
+                                <th>Uwagi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in missing_items %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td>{{ item.record_quantity }}</td>
+                                    <td>{{ item.actual_quantity }}</td>
+                                    <td>{{ item.difference_display }}</td>
+                                    <td>{{ item.purchase_value_display }}</td>
+                                    <td></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="inventory-discrepancy-empty-note">Brak pozycji w tej sekcji.</div>
+                {% endif %}
+            </section>
+
+            <section class="inventory-discrepancy-section" aria-labelledby="discrepancy-quantity-title">
+                <h2 class="inventory-discrepancy-section-title" id="discrepancy-quantity-title">RÓŻNICE ILOŚCIOWE</h2>
+                {% if quantity_difference_items %}
+                    <table class="inventory-discrepancy-table">
+                        <thead>
+                            <tr>
+                                <th>Lp.</th>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Rodzaj</th>
+                                <th>Lokalizacja wg snapshotu</th>
+                                <th>Odczyt</th>
+                                <th>Ręcznie</th>
+                                <th>Ilość wg snapshotu</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Różnica</th>
+                                <th>Wartość wg snapshotu</th>
+                                <th>Uwagi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in quantity_difference_items %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td>{{ item.read_quantity }}</td>
+                                    <td>{{ item.manual_quantity }}</td>
+                                    <td>{{ item.record_quantity }}</td>
+                                    <td>{{ item.actual_quantity }}</td>
+                                    <td>{{ item.difference_display }}</td>
+                                    <td>{{ item.purchase_value_display }}</td>
+                                    <td></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="inventory-discrepancy-empty-note">Brak pozycji w tej sekcji.</div>
+                {% endif %}
+            </section>
+
+            <section class="inventory-discrepancy-section" aria-labelledby="discrepancy-location-title">
+                <h2 class="inventory-discrepancy-section-title" id="discrepancy-location-title">INNA LOKALIZACJA</h2>
+                {% if wrong_location_items %}
+                    <table class="inventory-discrepancy-table">
+                        <thead>
+                            <tr>
+                                <th>Lp.</th>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Rodzaj</th>
+                                <th>Lokalizacja wg snapshotu</th>
+                                <th>Lokalizacja odczytu</th>
+                                <th>Ostatni odczyt</th>
+                                <th>Ilość wg snapshotu</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Różnica</th>
+                                <th>Wartość wg snapshotu</th>
+                                <th>Uwagi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in wrong_location_items %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td>{{ item.scanned_location_display }}</td>
+                                    <td>{{ item.last_seen_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                                    <td>{{ item.record_quantity }}</td>
+                                    <td>{{ item.actual_quantity }}</td>
+                                    <td>{{ item.difference_display }}</td>
+                                    <td>{{ item.purchase_value_display }}</td>
+                                    <td></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="inventory-discrepancy-empty-note">Brak pozycji w tej sekcji.</div>
+                {% endif %}
+            </section>
+
+            <section class="inventory-discrepancy-section" aria-labelledby="discrepancy-unknown-title">
+                <h2 class="inventory-discrepancy-section-title" id="discrepancy-unknown-title">NIEZNANE KODY</h2>
+                {% if unknown_code_items %}
+                    <table class="inventory-discrepancy-table">
+                        <thead>
+                            <tr>
+                                <th>Lp.</th>
+                                <th>Kod</th>
+                                <th>Lokalizacja odczytu</th>
+                                <th>Ostatni odczyt</th>
+                                <th>Uwagi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in unknown_code_items %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.code }}</td>
+                                    <td>{{ item.scanned_location_display }}</td>
+                                    <td>{{ item.last_seen_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                                    <td></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="inventory-discrepancy-empty-note">Brak pozycji w tej sekcji.</div>
+                {% endif %}
+            </section>
+
+            <section class="inventory-discrepancy-section" aria-labelledby="discrepancy-manual-title">
+                <h2 class="inventory-discrepancy-section-title" id="discrepancy-manual-title">POZYCJE POTWIERDZONE RĘCZNIE</h2>
+                <p class="inventory-discrepancy-note">Sekcja kontrolna, nie rozbieżnościowa.</p>
+                {% if manual_confirmation_items %}
+                    <table class="inventory-discrepancy-table">
+                        <thead>
+                            <tr>
+                                <th>Lp.</th>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Rodzaj</th>
+                                <th>Lokalizacja wg snapshotu</th>
+                                <th>Ilość wg snapshotu</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Różnica</th>
+                                <th>Wartość wg snapshotu</th>
+                                <th>Uwagi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in manual_confirmation_items %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td>{{ item.record_quantity }}</td>
+                                    <td>{{ item.actual_quantity }}</td>
+                                    <td>{{ item.difference_display }}</td>
+                                    <td>{{ item.purchase_value_display }}</td>
+                                    <td></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="inventory-discrepancy-empty-note">Brak pozycji w tej sekcji.</div>
+                {% endif %}
+            </section>
+
+            <footer class="inventory-discrepancy-footer">
+                <dl class="inventory-discrepancy-formal">
+                    <div>
+                        <dt>Miejsce i data</dt>
+                        <dd><span class="inventory-discrepancy-line"></span></dd>
+                    </div>
+                    <div>
+                        <dt>Uwagi</dt>
+                        <dd><span class="inventory-discrepancy-line"></span></dd>
+                    </div>
+                </dl>
+                <div class="inventory-discrepancy-signatures">
+                    <div class="inventory-discrepancy-signature">Podpis osoby sporządzającej</div>
+                    <div class="inventory-discrepancy-signature">Podpis komisji</div>
+                    <div class="inventory-discrepancy-signature">Podpis zatwierdzającego</div>
+                </div>
+            </footer>
+        </article>
+    </section>
+{% endblock %}

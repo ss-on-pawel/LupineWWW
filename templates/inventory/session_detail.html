@@ -483,7 +483,22 @@
 
             <div class="inventory-header-actions">
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
+                {% if is_session_closed %}
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-discrepancy-report' session.pk %}">Raport rozbieżności</a>
+                {% endif %}
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Arkusz spisu</a>
+                {% if is_session_closed %}
+                    {% if session.applied_to_assets_at %}
+                        <span class="inventory-table-tool-stat">
+                            Wyniki naniesiono na Ewidencję: <strong>{{ session.applied_to_assets_at|date:"Y-m-d H:i" }}</strong>{% if session.applied_to_assets_by %} przez <strong>{{ session.applied_to_assets_by }}</strong>{% endif %}
+                        </span>
+                    {% else %}
+                        <form method="post" action="{% url 'inventory:session-apply-to-assets' session.pk %}" onsubmit="return confirm('Naniesienie wyników zapisze wynik spisu w Ewidencji Głównej. Nie zmieni ilości ewidencyjnej, lokalizacji ani danych księgowych. Kontynuować?');">
+                            {% csrf_token %}
+                            <button class="ui-btn ui-btn--primary" type="submit">Nanieś wyniki na Ewidencję</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
                 {% if session.status == "active" %}
                     <form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
                         {% csrf_token %}

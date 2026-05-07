@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
-from assets.models import Asset, AssetTypeDictionary
+from assets.models import Asset, AssetChangeRequest, AssetTypeDictionary
 from locations.models import Location
 from users.models import User
 
@@ -708,6 +708,260 @@ class InventorySessionCloseViewTests(TestCase):
         self.assertContains(response, 'data-session-closed="true"')
 
 
+class InventorySessionApplyToAssetsViewTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="Apply Root")
+        self.child = Location.objects.create(name="Apply Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Apply Other")
+        self.user = User.objects.create_user(username="inventory-apply-user", password="test-pass-123")
+        self.user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_user = User.objects.create_user(username="inventory-apply-out", password="test-pass-123")
+        self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
+
+    def _create_asset(self, inventory_number, location=None, asset_type=Asset.AssetType.FIXED, **overrides):
+        location = location or self.child
+        defaults = {
+            "name": f"Asset {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": asset_type,
+            "barcode": f"BC-{inventory_number}",
+            "location": location.path,
+            "location_fk": location,
+            "status": Asset.Status.IN_STOCK,
+            "purchase_value": Decimal("123.45"),
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _start_session(self, asset_types=None):
+        return start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=asset_types or [Asset.AssetType.FIXED, Asset.AssetType.QUANTITY],
+        )
+
+    def _close_session(self, session):
+        session.status = InventorySession.Status.CLOSED
+        session.closed_at = timezone.now()
+        session.save(update_fields=["status", "closed_at", "updated_at"])
+
+    def _url(self, session):
+        return reverse("inventory:session-apply-to-assets", kwargs={"pk": session.pk})
+
+    def test_anonymous_post_is_redirected_to_login(self):
+        self._create_asset("APPLY-ANON-001")
+        session = self._start_session()
+        self._close_session(session)
+
+        response = self.client.post(self._url(session))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_user_outside_scope_gets_404(self):
+        asset = self._create_asset("APPLY-SCOPE-001")
+        session = self._start_session()
+        self._close_session(session)
+        self.client.force_login(self.out_of_scope_user)
+
+        response = self.client.post(self._url(session))
+
+        self.assertEqual(response.status_code, 404)
+        asset.refresh_from_db()
+        self.assertIsNone(asset.last_inventory_quantity)
+
+    def test_active_session_blocks_apply(self):
+        asset = self._create_asset("APPLY-ACTIVE-001")
+        session = self._start_session()
+        self.client.force_login(self.user)
+
+        response = self.client.post(self._url(session))
+
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        session.refresh_from_db()
+        asset.refresh_from_db()
+        self.assertIsNone(session.applied_to_assets_at)
+        self.assertIsNone(session.applied_to_assets_by)
+        self.assertIsNone(asset.last_inventory_quantity)
+
+    def test_closed_session_applies_results_and_session_audit(self):
+        asset = self._create_asset("APPLY-CLOSED-001")
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\n{asset.barcode}")
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        response = self.client.post(self._url(session))
+
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        session.refresh_from_db()
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 1)
+        self.assertEqual(asset.last_inventory_session, session)
+        self.assertIsNotNone(asset.last_inventory_at)
+        self.assertIsNotNone(session.applied_to_assets_at)
+        self.assertEqual(session.applied_to_assets_by, self.user)
+
+    def test_second_post_is_idempotent_and_does_not_update_assets_again(self):
+        asset = self._create_asset("APPLY-IDEMP-001")
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\n{asset.barcode}")
+        self._close_session(session)
+        self.client.force_login(self.user)
+        self.client.post(self._url(session))
+        session.refresh_from_db()
+        first_applied_at = session.applied_to_assets_at
+        Asset.objects.filter(pk=asset.pk).update(last_inventory_quantity=99)
+
+        response = self.client.post(self._url(session))
+
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        session.refresh_from_db()
+        asset.refresh_from_db()
+        self.assertEqual(session.applied_to_assets_at, first_applied_at)
+        self.assertEqual(asset.last_inventory_quantity, 99)
+
+    def test_no_read_sets_last_inventory_quantity_to_zero(self):
+        asset = self._create_asset("APPLY-NOREAD-001")
+        session = self._start_session()
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 0)
+
+    def test_manual_confirmation_sets_regular_asset_to_one(self):
+        asset = self._create_asset("APPLY-MANUAL-001")
+        session = self._start_session()
+        InventorySessionManualConfirmation.objects.create(
+            session=session,
+            asset=asset,
+            confirmed_by=self.user,
+        )
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 1)
+
+    def test_quantity_asset_with_reads_saves_read_count(self):
+        asset = self._create_asset(
+            "APPLY-QTY-READ-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=5,
+        )
+        session = self._start_session()
+        import_inventory_scan_text(
+            "\n".join([session.number, self.child.code, asset.barcode, asset.barcode, asset.barcode])
+        )
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 3)
+
+    def test_quantity_asset_with_manual_quantity_saves_read_plus_manual(self):
+        asset = self._create_asset(
+            "APPLY-QTY-MANUAL-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=5,
+        )
+        session = self._start_session()
+        import_inventory_scan_text("\n".join([session.number, self.child.code, asset.barcode, asset.barcode]))
+        InventorySessionManualQuantity.objects.create(
+            session=session,
+            asset=asset,
+            quantity=4,
+            updated_by=self.user,
+        )
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 6)
+
+    def test_wrong_location_updates_quantity_without_changing_asset_location(self):
+        asset = self._create_asset("APPLY-WRONG-LOC-001")
+        original_location = asset.location
+        original_location_fk = asset.location_fk
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.root.code}\n{asset.barcode}")
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 1)
+        self.assertEqual(asset.location, original_location)
+        self.assertEqual(asset.location_fk, original_location_fk)
+
+    def test_unknown_code_does_not_update_extra_asset(self):
+        asset = self._create_asset("APPLY-UNKNOWN-001")
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\nUNKNOWN-APPLY-CODE")
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.last_inventory_quantity, 0)
+        self.assertEqual(Asset.objects.filter(last_inventory_session=session).count(), 1)
+
+    def test_apply_does_not_change_record_quantity_or_purchase_value(self):
+        asset = self._create_asset(
+            "APPLY-UNCHANGED-001",
+            record_quantity=7,
+            purchase_value=Decimal("999.99"),
+        )
+        session = self._start_session()
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertEqual(asset.record_quantity, 7)
+        self.assertEqual(asset.purchase_value, Decimal("999.99"))
+
+    def test_apply_does_not_create_asset_change_request(self):
+        asset = self._create_asset("APPLY-NO-APPROVAL-001")
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\n{asset.barcode}")
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        self.assertEqual(AssetChangeRequest.objects.count(), 0)
+
+    def test_closed_session_detail_shows_apply_button_and_applied_status(self):
+        self._create_asset("APPLY-UI-001")
+        session = self._start_session()
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertContains(response, "Nanieś wyniki na Ewidencję")
+        self.assertContains(response, reverse("inventory:session-apply-to-assets", kwargs={"pk": session.pk}))
+
+        self.client.post(self._url(session))
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+
+        self.assertContains(response, "Wyniki naniesiono na Ewidencję")
+        self.assertNotContains(response, "Nanieś wyniki na Ewidencję")
+
+
 class InventorySessionReportViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="inventory-report-user", password="test-pass-123")
@@ -773,6 +1027,18 @@ class InventorySessionReportViewTests(TestCase):
         if session is None:
             session = self.session
         return reverse("inventory:session-report", kwargs={"pk": session.pk})
+
+    def _discrepancy_report_url(self, session=None):
+        if session is None:
+            session = self.session
+        return reverse("inventory:session-discrepancy-report", kwargs={"pk": session.pk})
+
+    def _close_session(self, session=None):
+        if session is None:
+            session = self.session
+        session.status = InventorySession.Status.CLOSED
+        session.closed_at = timezone.now()
+        session.save(update_fields=["status", "closed_at", "updated_at"])
 
     def test_anonymous_user_is_redirected_to_login(self):
         response = self.client.get(self._report_url())
@@ -841,6 +1107,116 @@ class InventorySessionReportViewTests(TestCase):
         self.assertContains(response, "Wartość")
         self.assertContains(response, "123.45 zł")
         self.assertNotContains(response, "999.99 zł")
+
+
+    def test_discrepancy_report_anonymous_user_is_redirected_to_login(self):
+        self._close_session()
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_discrepancy_report_user_outside_scope_gets_404(self):
+        self._close_session()
+        self.client.force_login(self.out_of_scope_user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_active_session_cannot_access_discrepancy_report(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_closed_session_can_access_discrepancy_report(self):
+        self._close_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "RAPORT ROZBIEŻNOŚCI")
+        self.assertContains(response, self.session.number)
+
+    def test_closed_detail_shows_discrepancy_report_button(self):
+        self._close_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": self.session.pk}))
+
+        self.assertContains(response, "Raport rozbieżności")
+        self.assertContains(response, self._discrepancy_report_url())
+
+    def test_active_detail_hides_discrepancy_report_button(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": self.session.pk}))
+
+        self.assertNotContains(response, "Raport rozbieżności")
+        self.assertNotContains(response, self._discrepancy_report_url())
+
+    def test_discrepancy_report_contains_expected_sections(self):
+        self._close_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertContains(response, "BRAKI / ILOŚĆ FAKTYCZNA 0")
+        self.assertContains(response, self.no_read_asset.inventory_number)
+        self.assertContains(response, "RÓŻNICE ILOŚCIOWE")
+        self.assertContains(response, self.quantity_asset.inventory_number)
+        self.assertContains(response, "INNA LOKALIZACJA")
+        self.assertContains(response, self.wrong_location_asset.inventory_number)
+        self.assertContains(response, "NIEZNANE KODY")
+        self.assertContains(response, "UNKNOWN-REPORT-001")
+        self.assertContains(response, "POZYCJE POTWIERDZONE RĘCZNIE")
+        self.assertContains(response, self.manual_asset.inventory_number)
+
+    def test_discrepancy_report_uses_snapshot_purchase_value(self):
+        self._close_session()
+        self.no_read_asset.purchase_value = Decimal("999.99")
+        self.no_read_asset.save(update_fields=["purchase_value", "updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertContains(response, "Wartość wg snapshotu")
+        self.assertContains(response, "123.45")
+        self.assertNotContains(response, "999.99")
+
+    def test_discrepancy_report_does_not_contain_resolution_fields(self):
+        self._close_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertNotContains(response, "Przyczyna")
+        self.assertNotContains(response, "Decyzja komisji")
+        self.assertNotContains(response, "Wyjaśnienie")
+        self.assertNotContains(response, "Wartość różnicy")
+        self.assertNotContains(response, "Cena jednostkowa")
+
+    def test_discrepancy_report_contains_print_button(self):
+        self._close_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._discrepancy_report_url())
+
+        self.assertContains(response, "Drukuj / PDF")
+        self.assertContains(response, "window.print()")
+
+    def test_existing_inventory_report_still_works(self):
+        self._close_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Raport")
 
 
 class InventorySessionSheetViewTests(TestCase):

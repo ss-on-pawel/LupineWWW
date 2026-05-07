@@ -3,10 +3,12 @@ from django.urls import path
 from .views import (
     InventorySessionCloseView,
     InventorySessionDetailView,
+    InventorySessionDiscrepancyReportView,
     InventorySessionListView,
     InventorySessionReportView,
     InventorySessionSheetView,
     InventorySessionStartView,
+    apply_inventory_session_to_assets,
     manual_confirmation_api,
     manual_quantity_api,
     scan_file_import_api,
@@ -23,6 +25,8 @@ urlpatterns = [
     path("inventory/start/", InventorySessionStartView.as_view(), name="session-start"),
     path("inventory/<int:pk>/", InventorySessionDetailView.as_view(), name="session-detail"),
     path("inventory/<int:pk>/report/", InventorySessionReportView.as_view(), name="session-report"),
+    path("inventory/<int:pk>/discrepancies/", InventorySessionDiscrepancyReportView.as_view(), name="session-discrepancy-report"),
     path("inventory/<int:pk>/sheet/", InventorySessionSheetView.as_view(), name="session-sheet"),
     path("inventory/<int:pk>/close/", InventorySessionCloseView.as_view(), name="session-close"),
+    path("inventory/<int:pk>/apply-to-assets/", apply_inventory_session_to_assets, name="session-apply-to-assets"),
 ]

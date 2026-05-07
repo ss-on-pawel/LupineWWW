@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
+from django.db import transaction
 from django.db.models import Count
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -164,6 +165,52 @@ class InventorySessionReportView(LoginRequiredMixin, DetailView):
         context["quantity_difference_items"] = [
             item for item in inventory_work_items
             if item["is_quantity_based"] and item["difference"] != 0
+        ]
+        context["unknown_code_items"] = [
+            item for item in analysis["observed_items"]
+            if item.status == InventoryObservedItem.Status.UNKNOWN_CODE
+        ]
+        context["manual_confirmation_items"] = [
+            item for item in inventory_work_items
+            if item["manual_confirmed"]
+        ]
+        return context
+
+
+class InventorySessionDiscrepancyReportView(LoginRequiredMixin, DetailView):
+    model = InventorySession
+    template_name = "inventory/session_discrepancy_report.html"
+    context_object_name = "session"
+
+    def get_queryset(self):
+        return (
+            get_visible_inventory_sessions(self.request.user)
+            .filter(status=InventorySession.Status.CLOSED)
+            .prefetch_related("snapshot_items")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        session = self.object
+        analysis = _build_inventory_session_analysis(session)
+        inventory_work_items = analysis["inventory_work_items"]
+
+        context.update(analysis)
+        context["analysis"] = analysis
+        context["summary"] = analysis
+        context["page_title"] = f"Raport rozbieżności {session.number}"
+        context["generated_at"] = timezone.now()
+        context["missing_items"] = [
+            item for item in inventory_work_items
+            if item["actual_quantity"] == 0
+        ]
+        context["quantity_difference_items"] = [
+            item for item in inventory_work_items
+            if item["difference"] != 0
+        ]
+        context["wrong_location_items"] = [
+            item for item in inventory_work_items
+            if item["row_status"] == "wrong_location"
         ]
         context["unknown_code_items"] = [
             item for item in analysis["observed_items"]
@@ -351,6 +398,58 @@ class InventorySessionCloseView(LoginRequiredMixin, View):
             session.save(update_fields=["status", "closed_at", "updated_at"])
             messages.success(request, f"Zamknięto sesję inwentaryzacji {session.number}.")
         return redirect("inventory:session-detail", pk=session.pk)
+
+
+@login_required
+@require_POST
+def apply_inventory_session_to_assets(request, pk):
+    with transaction.atomic():
+        session = get_object_or_404(
+            get_visible_inventory_sessions(request.user).select_for_update(),
+            pk=pk,
+        )
+
+        if session.status != InventorySession.Status.CLOSED:
+            messages.error(request, "Wyniki można nanieść na Ewidencję tylko dla zamkniętej sesji.")
+            return redirect("inventory:session-detail", pk=session.pk)
+
+        if session.applied_to_assets_at is not None:
+            messages.info(request, "Wyniki tej sesji zostały już naniesione na Ewidencję.")
+            return redirect("inventory:session-detail", pk=session.pk)
+
+        now = timezone.now()
+        analysis = _build_inventory_session_analysis(session)
+        assets_to_update = []
+        for work_item in analysis["inventory_work_items"]:
+            asset = work_item["snapshot"].asset
+            if asset is None:
+                continue
+            asset.last_inventory_quantity = work_item["actual_quantity"]
+            asset.last_inventory_session = session
+            asset.last_inventory_at = now
+            asset.updated_at = now
+            assets_to_update.append(asset)
+
+        Asset.objects.bulk_update(
+            assets_to_update,
+            [
+                "last_inventory_quantity",
+                "last_inventory_session",
+                "last_inventory_at",
+                "updated_at",
+            ],
+            batch_size=500,
+        )
+
+        session.applied_to_assets_at = now
+        session.applied_to_assets_by = request.user
+        session.save(update_fields=["applied_to_assets_at", "applied_to_assets_by", "updated_at"])
+
+    messages.success(
+        request,
+        f"Naniesiono wyniki inwentaryzacji na {len(assets_to_update)} składników Ewidencji.",
+    )
+    return redirect("inventory:session-detail", pk=session.pk)
 
 
 def _get_scanned_code_counts(session):
