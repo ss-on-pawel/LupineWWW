@@ -176,6 +176,30 @@ class InventorySessionReportView(LoginRequiredMixin, DetailView):
         return context
 
 
+class InventorySessionSheetView(LoginRequiredMixin, DetailView):
+    model = InventorySession
+    template_name = "inventory/session_sheet.html"
+    context_object_name = "session"
+
+    def get_queryset(self):
+        return get_visible_inventory_sessions(self.request.user).prefetch_related("snapshot_items")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        session = self.object
+        analysis = _build_inventory_session_analysis(session)
+
+        context.update(analysis)
+        context["page_title"] = f"Arkusz spisu {session.number}"
+        context["sheet_generated_at"] = timezone.now()
+        context["sheet_note"] = (
+            "Arkusz końcowy — sesja zamknięta."
+            if context["is_session_closed"]
+            else "Arkusz roboczy — sesja nadal aktywna, dane mogą się zmieniać."
+        )
+        return context
+
+
 def _build_inventory_session_analysis(session):
         context = {}
         asset_type_labels = dict(Asset.AssetType.choices)

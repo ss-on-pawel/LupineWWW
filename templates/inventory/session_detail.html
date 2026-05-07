@@ -483,6 +483,7 @@
 
             <div class="inventory-header-actions">
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Arkusz spisu</a>
                 {% if session.status == "active" %}
                     <form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
                         {% csrf_token %}

@@ -5,6 +5,7 @@ from .views import (
     InventorySessionDetailView,
     InventorySessionListView,
     InventorySessionReportView,
+    InventorySessionSheetView,
     InventorySessionStartView,
     manual_confirmation_api,
     manual_quantity_api,
@@ -22,5 +23,6 @@ urlpatterns = [
     path("inventory/start/", InventorySessionStartView.as_view(), name="session-start"),
     path("inventory/<int:pk>/", InventorySessionDetailView.as_view(), name="session-detail"),
     path("inventory/<int:pk>/report/", InventorySessionReportView.as_view(), name="session-report"),
+    path("inventory/<int:pk>/sheet/", InventorySessionSheetView.as_view(), name="session-sheet"),
     path("inventory/<int:pk>/close/", InventorySessionCloseView.as_view(), name="session-close"),
 ]

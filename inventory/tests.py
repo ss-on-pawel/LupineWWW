@@ -746,6 +746,120 @@ class InventorySessionReportViewTests(TestCase):
         self.assertContains(response, self.manual_asset.inventory_number)
 
 
+class InventorySessionSheetViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="inventory-sheet-user", password="test-pass-123")
+        self.root = Location.objects.create(name="Sheet Root")
+        self.child = Location.objects.create(name="Sheet Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Sheet Other")
+        self.user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_user = User.objects.create_user(username="inventory-sheet-out", password="test-pass-123")
+        self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
+        self.no_read_asset = self._create_asset("SHEET-NOREAD-001", self.child, barcode="BC-SHEET-NOREAD")
+        self.scanned_asset = self._create_asset("SHEET-SCANNED-001", self.child, barcode="BC-SHEET-SCANNED")
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+        import_inventory_scan_text(
+            "\n".join(
+                [
+                    self.session.number,
+                    self.child.code,
+                    "BC-SHEET-SCANNED",
+                    "UNKNOWN-SHEET-001",
+                ]
+            )
+        )
+
+    def _create_asset(self, inventory_number, location, barcode, **overrides):
+        defaults = {
+            "name": f"Asset {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": Asset.AssetType.FIXED,
+            "barcode": barcode,
+            "location": location.path,
+            "location_fk": location,
+            "status": Asset.Status.IN_STOCK,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _sheet_url(self, session=None):
+        if session is None:
+            session = self.session
+        return reverse("inventory:session-sheet", kwargs={"pk": session.pk})
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        response = self.client.get(self._sheet_url())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_user_in_scope_sees_sheet(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.session.number)
+
+    def test_user_outside_scope_gets_404(self):
+        self.client.force_login(self.out_of_scope_user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_active_sheet_is_available_and_shows_working_note(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Arkusz roboczy")
+
+    def test_closed_sheet_is_available_and_shows_final_note(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Arkusz końcowy")
+
+    def test_sheet_contains_snapshot_items_and_quantities(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertContains(response, self.no_read_asset.inventory_number)
+        self.assertContains(response, self.scanned_asset.inventory_number)
+        self.assertContains(response, "Ilość ewidencyjna")
+        self.assertContains(response, "Ilość faktyczna")
+        self.assertContains(response, "Różnica")
+        self.assertContains(response, "-1")
+        self.assertContains(response, "0")
+
+    def test_unknown_code_is_not_rendered_as_sheet_item(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertNotContains(response, "UNKNOWN-SHEET-001")
+
+    def test_detail_view_contains_sheet_link(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": self.session.pk}))
+
+        self.assertContains(response, "Arkusz spisu")
+        self.assertContains(response, self._sheet_url())
+
+
 class ImportInventoryScanTextTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="inventory-import-user", password="test-pass-123")
