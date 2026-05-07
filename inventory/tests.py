@@ -628,6 +628,124 @@ class InventorySessionCloseViewTests(TestCase):
         self.assertContains(response, 'data-session-closed="true"')
 
 
+class InventorySessionReportViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="inventory-report-user", password="test-pass-123")
+        self.root = Location.objects.create(name="Report Root")
+        self.child = Location.objects.create(name="Report Child", parent=self.root)
+        self.other_root = Location.objects.create(name="Report Other")
+        self.user.profile.allowed_locations.add(self.root)
+        self.out_of_scope_user = User.objects.create_user(username="inventory-report-out", password="test-pass-123")
+        self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
+        self.no_read_asset = self._create_asset("REPORT-NOREAD-001", self.child, barcode="BC-REPORT-NOREAD")
+        self.manual_asset = self._create_asset("REPORT-MANUAL-001", self.child, barcode="BC-REPORT-MANUAL")
+        self.wrong_location_asset = self._create_asset("REPORT-WRONG-001", self.child, barcode="BC-REPORT-WRONG")
+        self.quantity_asset = self._create_asset(
+            "REPORT-QTY-001",
+            self.child,
+            barcode="BC-REPORT-QTY",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=5,
+        )
+        self.session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED, Asset.AssetType.QUANTITY],
+        )
+        import_inventory_scan_text(
+            "\n".join(
+                [
+                    self.session.number,
+                    self.child.code,
+                    "BC-REPORT-QTY",
+                    "BC-REPORT-QTY",
+                    self.root.code,
+                    "BC-REPORT-WRONG",
+                    "UNKNOWN-REPORT-001",
+                ]
+            )
+        )
+        InventorySessionManualConfirmation.objects.create(
+            session=self.session,
+            asset=self.manual_asset,
+            confirmed_by=self.user,
+        )
+
+    def _create_asset(self, inventory_number, location, barcode, asset_type=Asset.AssetType.FIXED, **overrides):
+        defaults = {
+            "name": f"Asset {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": asset_type,
+            "barcode": barcode,
+            "location": location.path,
+            "location_fk": location,
+            "status": Asset.Status.IN_STOCK,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _report_url(self, session=None):
+        if session is None:
+            session = self.session
+        return reverse("inventory:session-report", kwargs={"pk": session.pk})
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        response = self.client.get(self._report_url())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+
+    def test_user_in_scope_sees_report(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.session.number)
+
+    def test_user_outside_scope_gets_404(self):
+        self.client.force_login(self.out_of_scope_user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_active_report_is_available_and_shows_working_note(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Raport roboczy")
+
+    def test_closed_report_is_available_and_shows_final_note(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Raport końcowy")
+
+    def test_report_problem_sections_include_expected_items(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._report_url())
+
+        self.assertContains(response, "BRAK ODCZYTU")
+        self.assertContains(response, self.no_read_asset.inventory_number)
+        self.assertContains(response, "INNA LOKALIZACJA")
+        self.assertContains(response, self.wrong_location_asset.inventory_number)
+        self.assertContains(response, "RÓŻNICE ILOŚCIOWE")
+        self.assertContains(response, self.quantity_asset.inventory_number)
+        self.assertContains(response, "NIEZNANE KODY")
+        self.assertContains(response, "UNKNOWN-REPORT-001")
+        self.assertContains(response, "POZYCJE POTWIERDZONE RĘCZNIE")
+        self.assertContains(response, self.manual_asset.inventory_number)
+
+
 class ImportInventoryScanTextTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="inventory-import-user", password="test-pass-123")

@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block title %}Raport {{ session.number }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .inventory-report-page {
+            display: grid;
+            gap: 14px;
+            width: calc(100vw - 32px);
+            max-width: none;
+            margin-left: calc(50% - 50vw + 16px);
+            margin-right: calc(50% - 50vw + 16px);
+        }
+
+        .inventory-report-header {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: start;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .inventory-report-title-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+
+        .inventory-report-backlink {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.86rem;
+        }
+
+        .inventory-report-backlink:hover,
+        .inventory-report-backlink:focus-visible {
+            text-decoration: underline;
+        }
+
+        .inventory-report-header h1 {
+            margin: 0;
+            font-size: 1.35rem;
+            line-height: 1.1;
+        }
+
+        .inventory-report-status {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .inventory-report-note {
+            margin: 0 0 8px;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .inventory-report-meta,
+        .inventory-report-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+            margin: 0;
+        }
+
+        .inventory-report-meta div,
+        .inventory-report-summary div {
+            display: flex;
+            gap: 5px;
+            min-width: 0;
+            font-size: 0.84rem;
+        }
+
+        .inventory-report-meta dt,
+        .inventory-report-summary dt {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .inventory-report-meta dd,
+        .inventory-report-summary dd {
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .inventory-report-section {
+            display: grid;
+            gap: 7px;
+        }
+
+        .inventory-report-section h2 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .inventory-report-table-wrap {
+            overflow-x: auto;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: #ffffff;
+        }
+
+        .inventory-report-table {
+            width: max-content;
+            min-width: 900px;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: #ffffff;
+        }
+
+        .inventory-report-table th,
+        .inventory-report-table td {
+            padding: 5px 7px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            text-align: left;
+            vertical-align: middle;
+            white-space: nowrap;
+            font-size: 0.81rem;
+            line-height: 1.25;
+        }
+
+        .inventory-report-table th {
+            background: linear-gradient(180deg, #f4f6f8 0%, #eceff3 100%);
+            color: #475467;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.69rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+
+        .inventory-report-mono {
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .inventory-report-empty {
+            padding: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="inventory-report-page">
+        <header class="inventory-report-header">
+            <div>
+                <div class="inventory-report-title-row">
+                    <a class="inventory-report-backlink" href="{% url 'inventory:session-detail' session.pk %}">Wróć do sesji</a>
+                    <h1>Raport {{ session.number }}</h1>
+                    <span class="inventory-report-status">{{ session_status_display_pl }}</span>
+                </div>
+                {% if is_session_closed %}
+                    <p class="inventory-report-note">Raport końcowy — sesja zamknięta.</p>
+                {% else %}
+                    <p class="inventory-report-note">Raport roboczy — sesja nadal aktywna, dane mogą się zmieniać.</p>
+                {% endif %}
+                <dl class="inventory-report-meta">
+                    <div>
+                        <dt>Start</dt>
+                        <dd>{{ session.started_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Zamknięcie</dt>
+                        <dd>{{ session.closed_at|date:"Y-m-d H:i"|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Utworzył</dt>
+                        <dd>{{ session.created_by|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Lokalizacje root</dt>
+                        <dd>{{ root_locations_display|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Zakres rodzaju</dt>
+                        <dd>{{ asset_type_scope_display|default:"-" }}</dd>
+                    </div>
+                </dl>
+            </div>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Sesja</a>
+        </header>
+
+        <section class="inventory-report-section" aria-labelledby="inventory-report-summary-title">
+            <h2 id="inventory-report-summary-title">Podsumowanie</h2>
+            <dl class="inventory-report-summary">
+                <div>
+                    <dt>Zgodne</dt>
+                    <dd>{{ matching_count }}</dd>
+                </div>
+                <div>
+                    <dt>Brak odczytu</dt>
+                    <dd>{{ no_read_count }}</dd>
+                </div>
+                <div>
+                    <dt>Inna lokalizacja</dt>
+                    <dd>{{ wrong_location_count }}</dd>
+                </div>
+                <div>
+                    <dt>Różnice ilościowe</dt>
+                    <dd>{{ quantity_difference_count }}</dd>
+                </div>
+                <div>
+                    <dt>Ręczne potwierdzenia</dt>
+                    <dd>{{ manual_confirmation_count }}</dd>
+                </div>
+                <div>
+                    <dt>Nieznane kody</dt>
+                    <dd>{{ unknown_code_count }}</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="inventory-report-section" aria-labelledby="inventory-report-no-read-title">
+            <h2 id="inventory-report-no-read-title">BRAK ODCZYTU</h2>
+            {% if no_read_items %}
+                <div class="inventory-report-table-wrap">
+                    <table class="inventory-report-table">
+                        <thead>
+                            <tr>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Rodzaj</th>
+                                <th>Lokalizacja startowa</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Ilość ewidencyjna</th>
+                                <th>Różnica</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in no_read_items %}
+                                <tr>
+                                    <td class="inventory-report-mono">{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.record_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.difference_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-report-empty">Brak pozycji w tej sekcji.</div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-report-section" aria-labelledby="inventory-report-wrong-location-title">
+            <h2 id="inventory-report-wrong-location-title">INNA LOKALIZACJA</h2>
+            {% if wrong_location_items %}
+                <div class="inventory-report-table-wrap">
+                    <table class="inventory-report-table">
+                        <thead>
+                            <tr>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Lokalizacja startowa</th>
+                                <th>Lokalizacja odczytu</th>
+                                <th>Ostatni odczyt</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Ilość ewidencyjna</th>
+                                <th>Różnica</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in wrong_location_items %}
+                                <tr>
+                                    <td class="inventory-report-mono">{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td>{{ item.scanned_location_display }}</td>
+                                    <td class="inventory-report-mono">{% if item.last_seen_at %}{{ item.last_seen_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                                    <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.record_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.difference_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-report-empty">Brak pozycji w tej sekcji.</div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-report-section" aria-labelledby="inventory-report-quantity-difference-title">
+            <h2 id="inventory-report-quantity-difference-title">RÓŻNICE ILOŚCIOWE</h2>
+            {% if quantity_difference_items %}
+                <div class="inventory-report-table-wrap">
+                    <table class="inventory-report-table">
+                        <thead>
+                            <tr>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Rodzaj</th>
+                                <th>Odczyt</th>
+                                <th>Ręczne</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Ilość ewidencyjna</th>
+                                <th>Różnica</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in quantity_difference_items %}
+                                <tr>
+                                    <td class="inventory-report-mono">{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
+                                    <td class="inventory-report-mono">{{ item.read_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.manual_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.record_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.difference_display }}</td>
+                                    <td>{{ item.row_status_label }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-report-empty">Brak pozycji w tej sekcji.</div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-report-section" aria-labelledby="inventory-report-unknown-title">
+            <h2 id="inventory-report-unknown-title">NIEZNANE KODY</h2>
+            {% if unknown_code_items %}
+                <div class="inventory-report-table-wrap">
+                    <table class="inventory-report-table">
+                        <thead>
+                            <tr>
+                                <th>Kod</th>
+                                <th>Lokalizacja odczytu</th>
+                                <th>Ostatni odczyt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in unknown_code_items %}
+                                <tr>
+                                    <td class="inventory-report-mono">{{ item.code }}</td>
+                                    <td>{{ item.scanned_location_display }}</td>
+                                    <td class="inventory-report-mono">{{ item.last_seen_at|date:"Y-m-d H:i" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-report-empty">Brak pozycji w tej sekcji.</div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-report-section" aria-labelledby="inventory-report-manual-confirmation-title">
+            <h2 id="inventory-report-manual-confirmation-title">POZYCJE POTWIERDZONE RĘCZNIE</h2>
+            {% if manual_confirmation_items %}
+                <div class="inventory-report-table-wrap">
+                    <table class="inventory-report-table">
+                        <thead>
+                            <tr>
+                                <th>Nr inw.</th>
+                                <th>Nazwa</th>
+                                <th>Lokalizacja startowa</th>
+                                <th>Ilość faktyczna</th>
+                                <th>Ilość ewidencyjna</th>
+                                <th>Różnica</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in manual_confirmation_items %}
+                                <tr>
+                                    <td class="inventory-report-mono">{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.snapshot.location_path|default:"-" }}</td>
+                                    <td class="inventory-report-mono">{{ item.actual_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.record_quantity }}</td>
+                                    <td class="inventory-report-mono">{{ item.difference_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-report-empty">Brak pozycji w tej sekcji.</div>
+            {% endif %}
+        </section>
+    </section>
+{% endblock %}

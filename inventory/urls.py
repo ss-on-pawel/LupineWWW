@@ -4,6 +4,7 @@ from .views import (
     InventorySessionCloseView,
     InventorySessionDetailView,
     InventorySessionListView,
+    InventorySessionReportView,
     InventorySessionStartView,
     manual_confirmation_api,
     manual_quantity_api,
@@ -20,5 +21,6 @@ urlpatterns = [
     path("inventory/", InventorySessionListView.as_view(), name="session-list"),
     path("inventory/start/", InventorySessionStartView.as_view(), name="session-start"),
     path("inventory/<int:pk>/", InventorySessionDetailView.as_view(), name="session-detail"),
+    path("inventory/<int:pk>/report/", InventorySessionReportView.as_view(), name="session-report"),
     path("inventory/<int:pk>/close/", InventorySessionCloseView.as_view(), name="session-close"),
 ]

@@ -130,6 +130,54 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.object
+        analysis = _build_inventory_session_analysis(session)
+
+        context.update(analysis)
+        context["page_title"] = session.number
+        return context
+
+
+class InventorySessionReportView(LoginRequiredMixin, DetailView):
+    model = InventorySession
+    template_name = "inventory/session_report.html"
+    context_object_name = "session"
+
+    def get_queryset(self):
+        return get_visible_inventory_sessions(self.request.user).prefetch_related("snapshot_items")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        session = self.object
+        analysis = _build_inventory_session_analysis(session)
+        inventory_work_items = analysis["inventory_work_items"]
+
+        context.update(analysis)
+        context["page_title"] = f"Raport {session.number}"
+        context["no_read_items"] = [
+            item for item in inventory_work_items
+            if item["row_status"] == "no_read"
+        ]
+        context["wrong_location_items"] = [
+            item for item in inventory_work_items
+            if item["row_status"] == "wrong_location"
+        ]
+        context["quantity_difference_items"] = [
+            item for item in inventory_work_items
+            if item["is_quantity_based"] and item["difference"] != 0
+        ]
+        context["unknown_code_items"] = [
+            item for item in analysis["observed_items"]
+            if item.status == InventoryObservedItem.Status.UNKNOWN_CODE
+        ]
+        context["manual_confirmation_items"] = [
+            item for item in inventory_work_items
+            if item["manual_confirmed"]
+        ]
+        return context
+
+
+def _build_inventory_session_analysis(session):
+        context = {}
         asset_type_labels = dict(Asset.AssetType.choices)
         observed_items = list(
             InventoryObservedItem.objects

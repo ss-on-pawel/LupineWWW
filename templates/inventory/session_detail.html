@@ -64,6 +64,14 @@
             color: var(--muted);
         }
 
+        .inventory-header-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
         .inventory-meta,
         .inventory-metrics {
             display: flex;
@@ -473,12 +481,15 @@
                 </dl>
             </div>
 
-            {% if session.status == "active" %}
-                <form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
-                    {% csrf_token %}
-                    <button class="ui-btn ui-btn--danger" type="submit">Zamknij inwentaryzację</button>
-                </form>
-            {% endif %}
+            <div class="inventory-header-actions">
+                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
+                {% if session.status == "active" %}
+                    <form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
+                        {% csrf_token %}
+                        <button class="ui-btn ui-btn--danger" type="submit">Zamknij inwentaryzację</button>
+                    </form>
+                {% endif %}
+            </div>
         </header>
 
         {% if is_session_closed %}
