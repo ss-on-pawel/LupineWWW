@@ -234,6 +234,10 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
             asset_type_labels.get(asset_type, asset_type)
             for asset_type in session.asset_type_scope
         )
+        context["is_session_closed"] = session.status == InventorySession.Status.CLOSED
+        context["session_status_display_pl"] = (
+            "Zamknięta" if context["is_session_closed"] else "Aktywna"
+        )
         inventory_summary = _get_inventory_summary(
             inventory_work_items=inventory_work_items,
             observed_items=observed_items,
@@ -348,10 +352,16 @@ def _get_inventory_summary(*, inventory_work_items, observed_items):
     }
 
 
+def _closed_inventory_session_response():
+    return JsonResponse({"ok": False, "error": "Sesja jest zamknięta."}, status=409)
+
+
 @login_required
 @require_POST
 def manual_quantity_api(request, session_id):
     session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=session_id)
+    if session.status == InventorySession.Status.CLOSED:
+        return _closed_inventory_session_response()
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -420,6 +430,8 @@ def manual_quantity_api(request, session_id):
 @require_POST
 def manual_confirmation_api(request, session_id):
     session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=session_id)
+    if session.status == InventorySession.Status.CLOSED:
+        return _closed_inventory_session_response()
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -520,6 +532,12 @@ def scan_file_import_api(request):
         return JsonResponse(
             {"status": "error", "message": "Brak dostępu do tej sesji inwentaryzacji."},
             status=403,
+        )
+
+    if session.status == InventorySession.Status.CLOSED:
+        return JsonResponse(
+            {"ok": False, "status": "error", "error": "Sesja jest zamknięta.", "message": "Sesja jest zamknięta."},
+            status=409,
         )
 
     try:

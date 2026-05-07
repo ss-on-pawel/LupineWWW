@@ -401,7 +401,7 @@
                 <div class="inventory-title-row">
                     <a class="inventory-backlink" href="{% url 'inventory:session-list' %}">Inwentaryzacje</a>
                     <h1>{{ session.number }}</h1>
-                    <span class="inventory-status">{{ session.get_status_display }}</span>
+                    <span class="inventory-status">{{ session_status_display_pl }}</span>
                 </div>
 
                 <dl class="inventory-meta">
@@ -417,6 +417,12 @@
                         <dt>Start</dt>
                         <dd>{{ session.started_at|date:"Y-m-d H:i" }}</dd>
                     </div>
+                    {% if is_session_closed %}
+                    <div>
+                        <dt>Zamknięcie</dt>
+                        <dd>{{ session.closed_at|date:"Y-m-d H:i"|default:"-" }}</dd>
+                    </div>
+                    {% endif %}
                 </dl>
 
                 <dl class="inventory-metrics" aria-label="Postęp inwentaryzacji">
@@ -475,6 +481,10 @@
             {% endif %}
         </header>
 
+        {% if is_session_closed %}
+            <div class="inventory-empty">Sesja zamknięta — edycja i import odczytów są zablokowane.</div>
+        {% endif %}
+
         <section class="inventory-layout-table" aria-labelledby="inventory-work-title">
             <div class="inventory-table-tools">
                 <div class="inventory-table-tools-left">
@@ -491,7 +501,7 @@
             </div>
             {% if inventory_work_items %}
                 <div class="inventory-table-wrap">
-                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}">
+                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}">
                         <thead>
                             <tr>
                                 <th class="inventory-col-number">Numer inwentarzowy</th>
@@ -528,12 +538,12 @@
                                         {% if item.is_quantity_based %}
                                             <span class="inventory-disabled-mark">-</span>
                                         {% else %}
-                                            <input class="inventory-confirmation-checkbox" type="checkbox" aria-label="Potwierdź {{ item.snapshot.inventory_number }}" data-role="inventory-manual-confirmation" {% if item.manual_confirmed %}checked{% endif %}>
+                                            <input class="inventory-confirmation-checkbox" type="checkbox" aria-label="Potwierdź {{ item.snapshot.inventory_number }}" data-role="inventory-manual-confirmation" {% if item.manual_confirmed %}checked{% endif %} {% if is_session_closed %}disabled{% endif %}>
                                         {% endif %}
                                     </td>
                                     <td class="inventory-col-manual inventory-mono">
                                         {% if item.is_quantity_based %}
-                                            <input class="inventory-quantity-input" type="number" min="0" step="1" value="{{ item.manual_quantity }}" inputmode="numeric" aria-label="Ilość ręczna dla {{ item.snapshot.inventory_number }}" data-role="inventory-manual-quantity">
+                                            <input class="inventory-quantity-input" type="number" min="0" step="1" value="{{ item.manual_quantity }}" inputmode="numeric" aria-label="Ilość ręczna dla {{ item.snapshot.inventory_number }}" data-role="inventory-manual-quantity" {% if is_session_closed %}disabled{% endif %}>
                                         {% else %}
                                             <span class="inventory-disabled-mark">—</span>
                                         {% endif %}
@@ -622,6 +632,7 @@
             const workTable = document.querySelector("[data-manual-quantity-url]");
             const manualQuantityUrl = workTable ? workTable.dataset.manualQuantityUrl : "";
             const manualConfirmationUrl = workTable ? workTable.dataset.manualConfirmationUrl : "";
+            const isSessionClosed = workTable ? workTable.dataset.sessionClosed === "true" : false;
 
             function getCookie(name) {
                 const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -797,7 +808,7 @@
             }
 
             function saveManualQuantity(row, input) {
-                if (!manualQuantityUrl || !row.dataset.assetId) {
+                if (isSessionClosed || !manualQuantityUrl || !row.dataset.assetId) {
                     return;
                 }
                 const rawQuantity = input.value === "" ? 0 : input.value;
@@ -837,7 +848,7 @@
             }
 
             function saveManualConfirmation(row, input) {
-                if (!manualConfirmationUrl || !row.dataset.assetId) {
+                if (isSessionClosed || !manualConfirmationUrl || !row.dataset.assetId) {
                     return;
                 }
                 fetch(manualConfirmationUrl, {

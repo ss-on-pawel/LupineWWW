@@ -532,12 +532,13 @@ class InventorySessionCloseViewTests(TestCase):
         self.out_of_scope_user = User.objects.create_user(username="inventory-close-out", password="test-pass-123")
         self.out_of_scope_user.profile.allowed_locations.add(self.other_root)
         self._create_asset("CLOSE-001", self.child)
+        self._create_asset("CLOSE-QTY-001", self.child, asset_type=Asset.AssetType.QUANTITY)
 
-    def _create_asset(self, inventory_number, location):
+    def _create_asset(self, inventory_number, location, asset_type=Asset.AssetType.FIXED):
         return Asset.objects.create(
             name=f"Asset {inventory_number}",
             inventory_number=inventory_number,
-            asset_type=Asset.AssetType.FIXED,
+            asset_type=asset_type,
             barcode=f"BC-{inventory_number}",
             location=location.path,
             location_fk=location,
@@ -548,7 +549,7 @@ class InventorySessionCloseViewTests(TestCase):
         return start_inventory_session(
             created_by=self.admin_user,
             root_locations=[self.root],
-            asset_types=[Asset.AssetType.FIXED],
+            asset_types=[Asset.AssetType.FIXED, Asset.AssetType.QUANTITY],
         )
 
     def test_anonymous_post_is_redirected_to_login(self):
@@ -569,6 +570,8 @@ class InventorySessionCloseViewTests(TestCase):
         session.refresh_from_db()
         self.assertEqual(session.status, InventorySession.Status.CLOSED)
         self.assertIsNotNone(session.closed_at)
+        if hasattr(session, "closed_by"):
+            self.assertEqual(session.closed_by, self.scoped_user)
 
     def test_user_outside_scope_cannot_close_session(self):
         session = self._start_session()
@@ -605,6 +608,7 @@ class InventorySessionCloseViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Zamknij inwentaryzację")
         self.assertContains(response, reverse("inventory:session-close", kwargs={"pk": session.pk}))
+        self.assertContains(response, "Aktywna")
 
     def test_close_button_is_hidden_for_closed_session(self):
         session = self._start_session()
@@ -618,6 +622,10 @@ class InventorySessionCloseViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Zamknij inwentaryzację")
         self.assertNotContains(response, reverse("inventory:session-close", kwargs={"pk": session.pk}))
+        self.assertContains(response, "Zamknięta")
+        self.assertContains(response, "Sesja zamknięta")
+        self.assertContains(response, "disabled")
+        self.assertContains(response, 'data-session-closed="true"')
 
 
 class ImportInventoryScanTextTests(TestCase):
@@ -1577,6 +1585,18 @@ class InventoryManualQuantityApiTests(TestCase):
             5,
         )
 
+    def test_closed_session_rejects_quantity_save(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+
+        response = self._post({"asset_id": self.quantity_asset.id, "quantity": 5})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["ok"], False)
+        self.assertEqual(response.json()["error"], "Sesja jest zamknięta.")
+        self.assertFalse(InventorySessionManualQuantity.objects.exists())
+
     def test_second_post_updates_existing_quantity(self):
         self._post({"asset_id": self.quantity_asset.id, "quantity": 5})
 
@@ -1704,6 +1724,18 @@ class InventoryManualConfirmationApiTests(TestCase):
             asset=self.fixed_asset,
         )
         self.assertEqual(confirmation.confirmed_by, self.user)
+
+    def test_closed_session_rejects_manual_confirmation(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+
+        response = self._post({"asset_id": self.fixed_asset.id, "confirmed": True})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["ok"], False)
+        self.assertEqual(response.json()["error"], "Sesja jest zamknięta.")
+        self.assertFalse(InventorySessionManualConfirmation.objects.exists())
 
     def test_second_confirmed_true_updates_existing_record(self):
         self._post({"asset_id": self.fixed_asset.id, "confirmed": True})
@@ -2013,14 +2045,16 @@ class ScanFileImportApiTests(TestCase):
         self.assertEqual(response.json()["status"], "error")
         self.assertEqual(InventoryScanBatch.objects.count(), 0)
 
-    def test_closed_session_returns_400(self):
+    def test_closed_session_returns_409(self):
         self.session.status = InventorySession.Status.CLOSED
         self.session.closed_at = timezone.now()
         self.session.save(update_fields=["status", "closed_at", "updated_at"])
 
         response = self._post_text(f"{self.session.number}\nBC-API-ASSET", user=self.user)
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["ok"], False)
+        self.assertEqual(response.json()["error"], "Sesja jest zamknięta.")
         self.assertEqual(response.json()["status"], "error")
         self.assertEqual(InventoryScanBatch.objects.count(), 0)
 
