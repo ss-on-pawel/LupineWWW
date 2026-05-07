@@ -189,3 +189,35 @@ class InventorySessionManualQuantity(models.Model):
 
     def __str__(self) -> str:
         return f"{self.session.number}: {self.asset_id} = {self.quantity}"
+
+
+class InventorySessionManualConfirmation(models.Model):
+    session = models.ForeignKey(
+        InventorySession,
+        on_delete=models.CASCADE,
+        related_name="manual_confirmations",
+    )
+    asset = models.ForeignKey(
+        "assets.Asset",
+        on_delete=models.CASCADE,
+        related_name="inventory_manual_confirmations",
+    )
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inventory_manual_confirmations",
+    )
+    confirmed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "asset"],
+                name="inv_manual_conf_unique_session_asset",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.session.number}: {self.asset_id} confirmed"

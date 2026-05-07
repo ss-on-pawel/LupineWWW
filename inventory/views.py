@@ -24,6 +24,7 @@ from .models import (
     InventoryObservedItem,
     InventoryScanBatch,
     InventorySession,
+    InventorySessionManualConfirmation,
     InventorySessionManualQuantity,
 )
 from .services import import_inventory_scan_text, start_inventory_session
@@ -159,6 +160,11 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
             item.asset_id: item.quantity
             for item in InventorySessionManualQuantity.objects.filter(session=session)
         }
+        manually_confirmed_asset_ids = set(
+            InventorySessionManualConfirmation.objects
+            .filter(session=session)
+            .values_list("asset_id", flat=True)
+        )
         snapshot_items = list(session.snapshot_items.select_related("asset").all())
         inventory_work_items = []
         for snapshot_item in snapshot_items:
@@ -182,21 +188,43 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
             manual_quantity = manual_quantities_by_asset_id.get(snapshot_item.asset_id_snapshot, 0)
             if not is_quantity_based:
                 manual_quantity = 0
-            inventory_work_items.append(
+            manual_confirmed = (
+                not is_quantity_based
+                and snapshot_item.asset_id_snapshot in manually_confirmed_asset_ids
+            )
+            actual_quantity = _get_inventory_actual_quantity(
+                read_quantity=read_quantity,
+                manual_quantity=manual_quantity,
+                manual_confirmed=manual_confirmed,
+                is_quantity_based=is_quantity_based,
+            )
+            record_quantity = snapshot_item.asset.record_quantity if snapshot_item.asset_id else 1
+            difference = actual_quantity - record_quantity
+            work_item = {
+                "snapshot": snapshot_item,
+                "observed": observed_item,
+                "display_status": display_status,
+                "scanned_location_display": scanned_location_display,
+                "last_seen_at": last_seen_at,
+                "is_quantity_based": is_quantity_based,
+                "read_quantity": read_quantity,
+                "manual_quantity": manual_quantity,
+                "manual_confirmed": manual_confirmed,
+                "actual_quantity": actual_quantity,
+                "record_quantity": record_quantity,
+                "difference": difference,
+                "difference_display": _format_inventory_difference(difference),
+                "scan_code_display": scan_code_display,
+            }
+            row_status = _get_inventory_row_status(work_item)
+            work_item.update(
                 {
-                    "snapshot": snapshot_item,
-                    "observed": observed_item,
-                    "display_status": display_status,
-                    "scanned_location_display": scanned_location_display,
-                    "last_seen_at": last_seen_at,
-                    "is_quantity_based": is_quantity_based,
-                    "read_quantity": read_quantity,
-                    "manual_quantity": manual_quantity,
-                    "actual_quantity": read_quantity + manual_quantity,
-                    "record_quantity": snapshot_item.asset.record_quantity if snapshot_item.asset_id else 1,
-                    "scan_code_display": scan_code_display,
+                    "row_status": row_status["code"],
+                    "row_status_label": row_status["label"],
+                    "row_status_variant": row_status["variant"],
                 }
             )
+            inventory_work_items.append(work_item)
 
         context["page_title"] = session.number
         context["root_locations_display"] = ", ".join(
@@ -206,17 +234,18 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
             asset_type_labels.get(asset_type, asset_type)
             for asset_type in session.asset_type_scope
         )
-        context["snapshot_items"] = snapshot_items
-        context["snapshot_total"] = session.snapshot_items_count
-        context["observed_assets_count"] = sum(1 for item in observed_items if item.asset_id is not None)
-        context["found_ok_count"] = sum(1 for item in observed_items if item.status == InventoryObservedItem.Status.FOUND_OK)
-        context["found_other_location_count"] = sum(
-            1 for item in observed_items if item.status == InventoryObservedItem.Status.FOUND_OTHER_LOCATION
+        inventory_summary = _get_inventory_summary(
+            inventory_work_items=inventory_work_items,
+            observed_items=observed_items,
         )
+        context["snapshot_items"] = snapshot_items
+        context.update(inventory_summary)
+        context["observed_assets_count"] = inventory_summary["read_count"]
+        context["found_ok_count"] = inventory_summary["matching_count"]
+        context["found_other_location_count"] = inventory_summary["wrong_location_count"]
         context["found_out_of_scope_count"] = sum(
             1 for item in observed_items if item.status == InventoryObservedItem.Status.FOUND_OUT_OF_SCOPE
         )
-        context["unknown_code_count"] = sum(1 for item in observed_items if item.status == InventoryObservedItem.Status.UNKNOWN_CODE)
         context["observed_items"] = observed_items
         context["inventory_work_items"] = inventory_work_items
         context["problem_items"] = [
@@ -267,6 +296,56 @@ def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_ba
         if code
     }
     return sum(scanned_code_counts.get(code, 0) for code in scan_codes)
+
+
+def _get_inventory_actual_quantity(*, read_quantity, manual_quantity, manual_confirmed, is_quantity_based):
+    if is_quantity_based:
+        return read_quantity + manual_quantity
+    return 1 if read_quantity == 1 or manual_confirmed else 0
+
+
+def _format_inventory_difference(difference):
+    return f"+{difference}" if difference > 0 else str(difference)
+
+
+def _get_inventory_row_status(work_item):
+    observed_item = work_item.get("observed")
+    if (
+        observed_item is not None
+        and observed_item.status == InventoryObservedItem.Status.FOUND_OTHER_LOCATION
+    ):
+        return {"code": "wrong_location", "label": "Inna lokalizacja", "variant": "warning"}
+    if work_item["actual_quantity"] == 0:
+        return {"code": "no_read", "label": "Brak odczytu", "variant": "neutral"}
+    if work_item["difference"] < 0:
+        return {"code": "shortage", "label": "Niedobór", "variant": "problem"}
+    if work_item["difference"] > 0:
+        return {"code": "surplus", "label": "Nadwyżka", "variant": "warning"}
+    return {"code": "matching", "label": "Zgodne", "variant": "ok"}
+
+
+def _get_inventory_summary(*, inventory_work_items, observed_items):
+    return {
+        "snapshot_total": len(inventory_work_items),
+        "read_count": sum(1 for item in inventory_work_items if item["actual_quantity"] > 0),
+        "matching_count": sum(1 for item in inventory_work_items if item["difference"] == 0),
+        "shortage_count": sum(1 for item in inventory_work_items if item["difference"] < 0),
+        "surplus_count": sum(1 for item in inventory_work_items if item["difference"] > 0),
+        "no_read_count": sum(1 for item in inventory_work_items if item["actual_quantity"] == 0),
+        "wrong_location_count": sum(
+            1
+            for item in inventory_work_items
+            if item["observed"] is not None
+            and item["observed"].status == InventoryObservedItem.Status.FOUND_OTHER_LOCATION
+        ),
+        "unknown_code_count": sum(
+            1 for item in observed_items if item.status == InventoryObservedItem.Status.UNKNOWN_CODE
+        ),
+        "manual_confirmation_count": sum(1 for item in inventory_work_items if item["manual_confirmed"]),
+        "quantity_difference_count": sum(
+            1 for item in inventory_work_items if item["is_quantity_based"] and item["difference"] != 0
+        ),
+    }
 
 
 @login_required
@@ -327,7 +406,76 @@ def manual_quantity_api(request, session_id):
             "ok": True,
             "asset_id": asset_id,
             "manual_quantity": manual_quantity.quantity,
-            "actual_quantity": read_quantity + manual_quantity.quantity,
+            "actual_quantity": _get_inventory_actual_quantity(
+                read_quantity=read_quantity,
+                manual_quantity=manual_quantity.quantity,
+                manual_confirmed=False,
+                is_quantity_based=True,
+            ),
+        }
+    )
+
+
+@login_required
+@require_POST
+def manual_confirmation_api(request, session_id):
+    session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=session_id)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+
+    asset_id = _parse_positive_int(payload.get("asset_id"), default=0)
+    if asset_id <= 0:
+        return JsonResponse({"ok": False, "error": "asset_id is required."}, status=400)
+
+    if "confirmed" not in payload or not isinstance(payload.get("confirmed"), bool):
+        return JsonResponse({"ok": False, "error": "confirmed must be a boolean."}, status=400)
+    confirmed = payload["confirmed"]
+
+    snapshot_item = get_object_or_404(
+        session.snapshot_items.select_related("asset"),
+        asset_id_snapshot=asset_id,
+    )
+    if snapshot_item.asset_id is None:
+        return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
+
+    is_quantity_based = _is_snapshot_item_quantity_based(snapshot_item)
+    if is_quantity_based:
+        return JsonResponse({"ok": False, "error": "Manual confirmation is only available for regular assets."}, status=400)
+
+    if confirmed:
+        InventorySessionManualConfirmation.objects.update_or_create(
+            session=session,
+            asset=snapshot_item.asset,
+            defaults={"confirmed_by": request.user},
+        )
+    else:
+        InventorySessionManualConfirmation.objects.filter(
+            session=session,
+            asset=snapshot_item.asset,
+        ).delete()
+
+    observed_item = InventoryObservedItem.objects.filter(session=session, asset_id=asset_id).first()
+    read_quantity = _get_inventory_read_quantity(
+        snapshot_item=snapshot_item,
+        observed_item=observed_item,
+        is_quantity_based=False,
+        scanned_code_counts=_get_scanned_code_counts(session),
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "asset_id": asset_id,
+            "manual_confirmed": confirmed,
+            "actual_quantity": _get_inventory_actual_quantity(
+                read_quantity=read_quantity,
+                manual_quantity=0,
+                manual_confirmed=confirmed,
+                is_quantity_based=False,
+            ),
         }
     )
 

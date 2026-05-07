@@ -168,7 +168,7 @@
         }
 
         .inventory-work-table {
-            min-width: 1320px;
+            min-width: 1408px;
         }
 
         .inventory-table th,
@@ -256,12 +256,18 @@
 
         .inventory-col-read,
         .inventory-col-manual,
+        .inventory-col-confirm,
         .inventory-col-actual,
-        .inventory-col-record {
+        .inventory-col-record,
+        .inventory-col-difference {
             width: 88px;
             min-width: 78px;
             max-width: 96px;
             text-align: right;
+        }
+
+        .inventory-col-confirm {
+            text-align: center;
         }
 
         .inventory-quantity-input {
@@ -275,6 +281,13 @@
             font-size: 0.78rem;
             line-height: 1;
             text-align: right;
+        }
+
+        .inventory-confirmation-checkbox {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            vertical-align: middle;
         }
 
         .inventory-disabled-mark {
@@ -409,27 +422,47 @@
                 <dl class="inventory-metrics" aria-label="Postęp inwentaryzacji">
                     <div>
                         <dt>Pozycje snapshotu</dt>
-                        <dd>{{ snapshot_total }}</dd>
+                        <dd data-summary-value="snapshot_total">{{ snapshot_total }}</dd>
                     </div>
                     <div>
                         <dt>Odczytano</dt>
-                        <dd>{{ observed_assets_count }} / {{ snapshot_total }}</dd>
+                        <dd><span data-summary-value="read_count">{{ read_count }}</span> / <span data-summary-value="snapshot_total">{{ snapshot_total }}</span></dd>
                     </div>
                     <div>
                         <dt>Zgodne</dt>
-                        <dd>{{ found_ok_count }}</dd>
+                        <dd data-summary-value="matching_count">{{ matching_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Niedobory</dt>
+                        <dd data-summary-value="shortage_count">{{ shortage_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Nadwyżki</dt>
+                        <dd data-summary-value="surplus_count">{{ surplus_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Brak odczytu</dt>
+                        <dd data-summary-value="no_read_count">{{ no_read_count }}</dd>
                     </div>
                     <div>
                         <dt>Inna lokalizacja</dt>
-                        <dd>{{ found_other_location_count }}</dd>
+                        <dd data-summary-value="wrong_location_count">{{ wrong_location_count }}</dd>
                     </div>
                     <div>
                         <dt>Poza zakresem</dt>
-                        <dd>{{ found_out_of_scope_count }}</dd>
+                        <dd data-summary-value="found_out_of_scope_count">{{ found_out_of_scope_count }}</dd>
                     </div>
                     <div>
                         <dt>Nieznane kody</dt>
-                        <dd>{{ unknown_code_count }}</dd>
+                        <dd data-summary-value="unknown_code_count">{{ unknown_code_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Potwierdzone ręcznie</dt>
+                        <dd data-summary-value="manual_confirmation_count">{{ manual_confirmation_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Ilościówki z różnicą</dt>
+                        <dd data-summary-value="quantity_difference_count">{{ quantity_difference_count }}</dd>
                     </div>
                 </dl>
             </div>
@@ -448,15 +481,17 @@
                     <h2 id="inventory-work-title" class="inventory-table-tools-title">Składniki inwentaryzacji</h2>
                 </div>
                 <div class="inventory-table-tools-cluster" aria-label="Podsumowanie tabeli">
-                    <span class="inventory-table-tool-stat">Pozycje <strong>{{ snapshot_total }}</strong></span>
-                    <span class="inventory-table-tool-stat">Odczytano <strong>{{ observed_assets_count }} / {{ snapshot_total }}</strong></span>
-                    <span class="inventory-table-tool-stat">Zgodne <strong>{{ found_ok_count }}</strong></span>
-                    <span class="inventory-table-tool-stat">Problemy <strong>{{ found_other_location_count|add:found_out_of_scope_count|add:unknown_code_count }}</strong></span>
+                    <span class="inventory-table-tool-stat">Pozycje <strong data-summary-value="snapshot_total">{{ snapshot_total }}</strong></span>
+                    <span class="inventory-table-tool-stat">Odczytano <strong><span data-summary-value="read_count">{{ read_count }}</span> / <span data-summary-value="snapshot_total">{{ snapshot_total }}</span></strong></span>
+                    <span class="inventory-table-tool-stat">Zgodne <strong data-summary-value="matching_count">{{ matching_count }}</strong></span>
+                    <span class="inventory-table-tool-stat">Niedobory <strong data-summary-value="shortage_count">{{ shortage_count }}</strong></span>
+                    <span class="inventory-table-tool-stat">Nadwyżki <strong data-summary-value="surplus_count">{{ surplus_count }}</strong></span>
+                    <span class="inventory-table-tool-stat">Problemy <strong data-summary-value="problem_count">{{ wrong_location_count|add:found_out_of_scope_count|add:unknown_code_count }}</strong></span>
                 </div>
             </div>
             {% if inventory_work_items %}
                 <div class="inventory-table-wrap">
-                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}">
+                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}">
                         <thead>
                             <tr>
                                 <th class="inventory-col-number">Numer inwentarzowy</th>
@@ -468,35 +503,34 @@
                                 <th class="inventory-col-last-seen">Ostatni odczyt</th>
                                 <th class="inventory-col-read">Odczyt</th>
                                 <th class="inventory-col-barcode">Kod kreskowy</th>
+                                <th class="inventory-col-confirm">Potwierdź</th>
                                 <th class="inventory-col-manual">Ręczne</th>
                                 <th class="inventory-col-actual">Ilość faktyczna</th>
                                 <th class="inventory-col-record">Ilość ewidencyjna</th>
+                                <th class="inventory-col-difference">R&Oacute;&#379;NICA</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in inventory_work_items %}
-                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-is-quantity-based="{% if item.is_quantity_based %}true{% else %}false{% endif %}">
+                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-record-quantity="{{ item.record_quantity }}" data-observed-status="{{ item.observed.status|default:'' }}" data-is-quantity-based="{% if item.is_quantity_based %}true{% else %}false{% endif %}">
                                     <td class="inventory-col-number inventory-mono">{{ item.snapshot.inventory_number }}</td>
                                     <td class="inventory-col-name">{{ item.snapshot.name }}</td>
                                     <td class="inventory-col-type">{{ item.snapshot.asset_type_display|default:"-" }}</td>
                                     <td class="inventory-col-start-location" title="{{ item.snapshot.location_path|default:'-' }}">{{ item.snapshot.location_path|default:"-" }}</td>
                                     <td class="inventory-col-status">
-                                        {% if not item.observed %}
-                                            <span class="inventory-status-pill">Brak odczytu</span>
-                                        {% elif item.observed.status == "found_ok" %}
-                                            <span class="inventory-status-pill inventory-status-pill--ok">{{ item.display_status }}</span>
-                                        {% elif item.observed.status == "found_other_location" %}
-                                            <span class="inventory-status-pill inventory-status-pill--warning">{{ item.display_status }}</span>
-                                        {% elif item.observed.status == "found_out_of_scope" %}
-                                            <span class="inventory-status-pill inventory-status-pill--problem">{{ item.display_status }}</span>
-                                        {% else %}
-                                            <span class="inventory-status-pill">{{ item.display_status }}</span>
-                                        {% endif %}
+                                        <span class="inventory-status-pill{% if item.row_status_variant != 'neutral' %} inventory-status-pill--{{ item.row_status_variant }}{% endif %}" data-role="inventory-row-status" data-status-code="{{ item.row_status }}" data-status-variant="{{ item.row_status_variant }}">{{ item.row_status_label }}</span>
                                     </td>
                                     <td class="inventory-col-scan-location" title="{{ item.scanned_location_display }}">{{ item.scanned_location_display }}</td>
                                     <td class="inventory-col-last-seen inventory-mono">{% if item.last_seen_at %}{{ item.last_seen_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
                                     <td class="inventory-col-read inventory-mono">{{ item.read_quantity }}</td>
                                     <td class="inventory-col-barcode inventory-mono">{{ item.scan_code_display|default:"-" }}</td>
+                                    <td class="inventory-col-confirm inventory-mono">
+                                        {% if item.is_quantity_based %}
+                                            <span class="inventory-disabled-mark">-</span>
+                                        {% else %}
+                                            <input class="inventory-confirmation-checkbox" type="checkbox" aria-label="Potwierdź {{ item.snapshot.inventory_number }}" data-role="inventory-manual-confirmation" {% if item.manual_confirmed %}checked{% endif %}>
+                                        {% endif %}
+                                    </td>
                                     <td class="inventory-col-manual inventory-mono">
                                         {% if item.is_quantity_based %}
                                             <input class="inventory-quantity-input" type="number" min="0" step="1" value="{{ item.manual_quantity }}" inputmode="numeric" aria-label="Ilość ręczna dla {{ item.snapshot.inventory_number }}" data-role="inventory-manual-quantity">
@@ -506,6 +540,7 @@
                                     </td>
                                     <td class="inventory-col-actual inventory-mono" data-role="inventory-actual-quantity">{{ item.actual_quantity }}</td>
                                     <td class="inventory-col-record inventory-mono">{{ item.record_quantity }}</td>
+                                    <td class="inventory-col-difference inventory-mono" data-role="inventory-difference">{{ item.difference_display }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -586,6 +621,7 @@
         (function () {
             const workTable = document.querySelector("[data-manual-quantity-url]");
             const manualQuantityUrl = workTable ? workTable.dataset.manualQuantityUrl : "";
+            const manualConfirmationUrl = workTable ? workTable.dataset.manualConfirmationUrl : "";
 
             function getCookie(name) {
                 const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -606,15 +642,158 @@
                 return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
             }
 
+            function parseSignedQuantity(value) {
+                if (value === undefined || value === null || value === "") {
+                    return 0;
+                }
+                const parsed = Number.parseInt(String(value).replace("+", ""), 10);
+                return Number.isFinite(parsed) ? parsed : 0;
+            }
+
+            function formatDifference(value) {
+                return value > 0 ? "+" + String(value) : String(value);
+            }
+
+            function updateDifference(row, actualQuantity) {
+                const differenceCell = row.querySelector('[data-role="inventory-difference"]');
+                if (!differenceCell) {
+                    return;
+                }
+                const recordQuantity = parseQuantity(row.dataset.recordQuantity);
+                const difference = actualQuantity - recordQuantity;
+                differenceCell.textContent = formatDifference(difference);
+                return difference;
+            }
+
+            function getInventoryRowStatus(row) {
+                const actualCell = row.querySelector('[data-role="inventory-actual-quantity"]');
+                const differenceCell = row.querySelector('[data-role="inventory-difference"]');
+                const actualQuantity = actualCell ? parseQuantity(actualCell.textContent) : 0;
+                const difference = differenceCell ? parseSignedQuantity(differenceCell.textContent) : 0;
+
+                if (row.dataset.observedStatus === "found_other_location") {
+                    return {code: "wrong_location", label: "Inna lokalizacja", variant: "warning"};
+                }
+                if (actualQuantity === 0) {
+                    return {code: "no_read", label: "Brak odczytu", variant: "neutral"};
+                }
+                if (difference < 0) {
+                    return {code: "shortage", label: "Niedobór", variant: "problem"};
+                }
+                if (difference > 0) {
+                    return {code: "surplus", label: "Nadwyżka", variant: "warning"};
+                }
+                return {code: "matching", label: "Zgodne", variant: "ok"};
+            }
+
+            function updateInventoryRowStatus(row) {
+                const statusPill = row.querySelector('[data-role="inventory-row-status"]');
+                if (!statusPill) {
+                    return;
+                }
+                const status = getInventoryRowStatus(row);
+                statusPill.textContent = status.label;
+                statusPill.dataset.statusCode = status.code;
+                statusPill.dataset.statusVariant = status.variant;
+                statusPill.classList.remove(
+                    "inventory-status-pill--ok",
+                    "inventory-status-pill--warning",
+                    "inventory-status-pill--problem"
+                );
+                if (status.variant !== "neutral") {
+                    statusPill.classList.add("inventory-status-pill--" + status.variant);
+                }
+            }
+
+            function setSummaryValue(name, value) {
+                document.querySelectorAll('[data-summary-value="' + name + '"]').forEach(function (element) {
+                    element.textContent = String(value);
+                });
+            }
+
+            function getCurrentSummaryValue(name) {
+                const element = document.querySelector('[data-summary-value="' + name + '"]');
+                return element ? parseQuantity(element.textContent) : 0;
+            }
+
+            function updateInventorySummary() {
+                const summary = {
+                    snapshot_total: 0,
+                    read_count: 0,
+                    matching_count: 0,
+                    shortage_count: 0,
+                    surplus_count: 0,
+                    no_read_count: 0,
+                    wrong_location_count: 0,
+                    manual_confirmation_count: 0,
+                    quantity_difference_count: 0
+                };
+
+                document.querySelectorAll("[data-inventory-work-row]").forEach(function (row) {
+                    const actualCell = row.querySelector('[data-role="inventory-actual-quantity"]');
+                    const differenceCell = row.querySelector('[data-role="inventory-difference"]');
+                    const confirmationInput = row.querySelector('[data-role="inventory-manual-confirmation"]');
+                    const actualQuantity = actualCell ? parseQuantity(actualCell.textContent) : 0;
+                    const difference = differenceCell ? parseSignedQuantity(differenceCell.textContent) : 0;
+
+                    summary.snapshot_total += 1;
+                    if (actualQuantity > 0) {
+                        summary.read_count += 1;
+                    }
+                    if (actualQuantity === 0) {
+                        summary.no_read_count += 1;
+                    }
+                    if (difference === 0) {
+                        summary.matching_count += 1;
+                    } else if (difference < 0) {
+                        summary.shortage_count += 1;
+                    } else {
+                        summary.surplus_count += 1;
+                    }
+                    if (row.dataset.observedStatus === "found_other_location") {
+                        summary.wrong_location_count += 1;
+                    }
+                    if (confirmationInput && confirmationInput.checked) {
+                        summary.manual_confirmation_count += 1;
+                    }
+                    if (row.dataset.isQuantityBased === "true" && difference !== 0) {
+                        summary.quantity_difference_count += 1;
+                    }
+                });
+
+                Object.keys(summary).forEach(function (name) {
+                    setSummaryValue(name, summary[name]);
+                });
+                setSummaryValue(
+                    "problem_count",
+                    summary.wrong_location_count
+                        + getCurrentSummaryValue("found_out_of_scope_count")
+                        + getCurrentSummaryValue("unknown_code_count")
+                );
+            }
+
             function updateActualQuantity(row) {
                 const readQuantity = parseQuantity(row.dataset.readQuantity);
                 const manualInput = row.querySelector('[data-role="inventory-manual-quantity"]');
+                const confirmationInput = row.querySelector('[data-role="inventory-manual-confirmation"]');
                 const actualCell = row.querySelector('[data-role="inventory-actual-quantity"]');
                 if (!actualCell) {
                     return;
                 }
+                if (row.dataset.isQuantityBased !== "true") {
+                    const actualQuantity = readQuantity === 1 || (confirmationInput && confirmationInput.checked) ? 1 : 0;
+                    actualCell.textContent = String(actualQuantity);
+                    updateDifference(row, actualQuantity);
+                    updateInventoryRowStatus(row);
+                    updateInventorySummary();
+                    return;
+                }
                 const manualQuantity = manualInput ? parseQuantity(manualInput.value) : 0;
-                actualCell.textContent = String(readQuantity + manualQuantity);
+                const actualQuantity = readQuantity + manualQuantity;
+                actualCell.textContent = String(actualQuantity);
+                updateDifference(row, actualQuantity);
+                updateInventoryRowStatus(row);
+                updateInventorySummary();
             }
 
             function saveManualQuantity(row, input) {
@@ -646,6 +825,9 @@
                         if (actualCell) {
                             actualCell.textContent = String(payload.actual_quantity);
                         }
+                        updateDifference(row, parseQuantity(payload.actual_quantity));
+                        updateInventoryRowStatus(row);
+                        updateInventorySummary();
                         input.dataset.saveState = "saved";
                     })
                     .catch(function (error) {
@@ -654,19 +836,68 @@
                     });
             }
 
-            document.querySelectorAll("[data-inventory-work-row]").forEach(function (row) {
-                const manualInput = row.querySelector('[data-role="inventory-manual-quantity"]');
-                if (!manualInput) {
+            function saveManualConfirmation(row, input) {
+                if (!manualConfirmationUrl || !row.dataset.assetId) {
                     return;
                 }
-                manualInput.addEventListener("input", function () {
-                    updateActualQuantity(row);
-                });
-                manualInput.addEventListener("change", function () {
-                    saveManualQuantity(row, manualInput);
-                });
+                fetch(manualConfirmationUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie("csrftoken")
+                    },
+                    body: JSON.stringify({
+                        asset_id: Number.parseInt(row.dataset.assetId, 10),
+                        confirmed: input.checked
+                    })
+                })
+                    .then(function (response) {
+                        return response.json().then(function (payload) {
+                            if (!response.ok || !payload.ok) {
+                                throw payload;
+                            }
+                            return payload;
+                        });
+                    })
+                    .then(function (payload) {
+                        const actualCell = row.querySelector('[data-role="inventory-actual-quantity"]');
+                        input.checked = Boolean(payload.manual_confirmed);
+                        if (actualCell) {
+                            actualCell.textContent = String(payload.actual_quantity);
+                        }
+                        updateDifference(row, parseQuantity(payload.actual_quantity));
+                        updateInventoryRowStatus(row);
+                        updateInventorySummary();
+                        input.dataset.saveState = "saved";
+                    })
+                    .catch(function (error) {
+                        input.checked = !input.checked;
+                        updateActualQuantity(row);
+                        input.dataset.saveState = "error";
+                        console.error("Nie zapisano potwierdzenia.", error);
+                    });
+            }
+
+            document.querySelectorAll("[data-inventory-work-row]").forEach(function (row) {
+                const manualInput = row.querySelector('[data-role="inventory-manual-quantity"]');
+                const confirmationInput = row.querySelector('[data-role="inventory-manual-confirmation"]');
+                if (manualInput) {
+                    manualInput.addEventListener("input", function () {
+                        updateActualQuantity(row);
+                    });
+                    manualInput.addEventListener("change", function () {
+                        saveManualQuantity(row, manualInput);
+                    });
+                }
+                if (confirmationInput) {
+                    confirmationInput.addEventListener("change", function () {
+                        updateActualQuantity(row);
+                        saveManualConfirmation(row, confirmationInput);
+                    });
+                }
                 updateActualQuantity(row);
             });
+            updateInventorySummary();
         })();
     </script>
 {% endblock %}
