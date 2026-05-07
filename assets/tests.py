@@ -13,10 +13,12 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import UserProfile
 from users.models import User
 from locations.models import Location
+from inventory.models import InventorySession
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
@@ -3049,6 +3051,74 @@ class AssetListApiTests(TestCase):
         row = response.json()["results"][0]
         self.assertEqual(row["inventory_number"], "RQ-API-001")
         self.assertEqual(row["record_quantity"], 37)
+        self.assertEqual(row["current_quantity"], 37)
+
+    def test_api_returns_last_inventory_result_fields(self):
+        session = InventorySession.objects.create(
+            number="INV-API-0001",
+            created_by=self.admin_user,
+        )
+        applied_at = timezone.now()
+        asset = Asset.objects.create(
+            name="Last Inventory API Asset",
+            inventory_number="LI-API-001",
+            record_quantity=8,
+            last_inventory_quantity=5,
+            last_inventory_session=session,
+            last_inventory_at=applied_at,
+            status=Asset.Status.IN_STOCK,
+            location="Last Inventory Lab",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["record_quantity"], 8)
+        self.assertEqual(row["current_quantity"], 5)
+        self.assertEqual(row["last_inventory_quantity"], 5)
+        self.assertEqual(row["last_inventory_session_id"], session.id)
+        self.assertEqual(row["last_inventory_session_number"], "INV-API-0001")
+        self.assertEqual(row["last_inventory_at"], applied_at.isoformat())
+        self.assertEqual(row["last_inventory_at_display"], applied_at.strftime("%Y-%m-%d %H:%M"))
+
+    def test_api_returns_zero_last_inventory_quantity_as_zero(self):
+        asset = Asset.objects.create(
+            name="Zero Last Inventory API Asset",
+            inventory_number="LI-ZERO-API-001",
+            record_quantity=3,
+            last_inventory_quantity=0,
+            status=Asset.Status.IN_STOCK,
+            location="Last Inventory Lab",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["record_quantity"], 3)
+        self.assertEqual(row["current_quantity"], 0)
+        self.assertEqual(row["last_inventory_quantity"], 0)
+
+    def test_api_handles_asset_without_applied_inventory_result(self):
+        asset = Asset.objects.create(
+            name="No Last Inventory API Asset",
+            inventory_number="LI-NONE-API-001",
+            status=Asset.Status.IN_STOCK,
+            location="Last Inventory Lab",
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["record_quantity"], 1)
+        self.assertEqual(row["current_quantity"], 1)
+        self.assertIsNone(row["last_inventory_quantity"])
+        self.assertEqual(row["last_inventory_at"], "")
+        self.assertEqual(row["last_inventory_at_display"], "")
+        self.assertIsNone(row["last_inventory_session_id"])
+        self.assertEqual(row["last_inventory_session_number"], "")
 
     def test_api_displays_custom_dictionary_asset_type_name(self):
         AssetTypeDictionary.objects.create(

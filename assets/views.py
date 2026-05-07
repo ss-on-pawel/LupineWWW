@@ -596,7 +596,7 @@ def asset_list_api(request):
     ordering = request.GET.get("ordering", "-updated_at").strip() or "-updated_at"
 
     queryset = (
-        Asset.objects.select_related("responsible_person", "current_user", "asset_type_ref")
+        Asset.objects.select_related("responsible_person", "current_user", "asset_type_ref", "last_inventory_session")
         .only(
             "id",
             "inventory_number",
@@ -624,6 +624,10 @@ def asset_list_api(request):
             "status",
             "technical_condition",
             "last_inventory_date",
+            "last_inventory_quantity",
+            "last_inventory_session",
+            "last_inventory_session__number",
+            "last_inventory_at",
             "next_review_date",
             "warranty_until",
             "insurance_until",
@@ -708,6 +712,11 @@ def asset_list_api(request):
             "asset_type": asset.asset_type,
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "record_quantity": asset.record_quantity,
+            "current_quantity": (
+                asset.last_inventory_quantity
+                if asset.last_inventory_quantity is not None
+                else asset.record_quantity
+            ),
             "category": asset.category,
             "manufacturer": asset.manufacturer,
             "model": asset.model,
@@ -731,6 +740,15 @@ def asset_list_api(request):
             "technical_condition": asset.technical_condition,
             "technical_condition_display": asset.get_technical_condition_display(),
             "last_inventory_date": asset.last_inventory_date.isoformat() if asset.last_inventory_date else "",
+            "last_inventory_quantity": asset.last_inventory_quantity,
+            "last_inventory_at": asset.last_inventory_at.isoformat() if asset.last_inventory_at else "",
+            "last_inventory_at_display": (
+                asset.last_inventory_at.strftime("%Y-%m-%d %H:%M") if asset.last_inventory_at else ""
+            ),
+            "last_inventory_session_id": asset.last_inventory_session_id,
+            "last_inventory_session_number": (
+                asset.last_inventory_session.number if asset.last_inventory_session_id else ""
+            ),
             "next_review_date": asset.next_review_date.isoformat() if asset.next_review_date else "",
             "warranty_until": asset.warranty_until.isoformat() if asset.warranty_until else "",
             "insurance_until": asset.insurance_until.isoformat() if asset.insurance_until else "",
@@ -871,6 +889,10 @@ def _resolve_asset_ordering(raw_ordering):
         "commissioning_date": "commissioning_date",
         "purchase_value": "purchase_value",
         "value": "purchase_value",
+        "record_quantity": "record_quantity",
+        "last_inventory_quantity": "last_inventory_quantity",
+        "last_inventory_at": "last_inventory_at",
+        "last_inventory_session_number": "last_inventory_session__number",
         "invoice_number": "invoice_number",
         "external_id": "external_id",
         "cost_center": "cost_center",

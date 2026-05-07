@@ -2195,6 +2195,7 @@
                 "purchase_date",
                 "commissioning_date",
                 "last_inventory_date",
+                "last_inventory_at",
                 "next_review_date",
                 "warranty_until",
                 "insurance_until"
@@ -2215,10 +2216,10 @@
                 { key: "category", label: "Kategoria", visible: true, sortable: true, sticky: false, className: "" },
                 { key: "updated_at", label: "Data modyfikacji", visible: true, sortable: true, sticky: false, className: "" },
                 { key: "purchase_value", label: "Wartość", visible: true, sortable: true, sticky: false, className: "cell-value" },
+                { key: "current_quantity", label: "Ilość", visible: true, sortable: false, sticky: false, className: "cell-value" },
                 { key: "asset_type", label: "Rodzaj", visible: true, sortable: true, sticky: false, className: "" },
                 { key: "manufacturer", label: "Producent", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "model", label: "Model", visible: false, sortable: true, sticky: false, className: "" },
-                { key: "serial_number", label: "Nr seryjny", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "barcode", label: "Kod kreskowy", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "department", label: "Dział", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "organizational_unit", label: "Jednostka org.", visible: false, sortable: true, sticky: false, className: "" },
@@ -2232,9 +2233,12 @@
                 { key: "external_id", label: "ID zewnętrzne", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "cost_center", label: "MPK / koszt", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "last_inventory_date", label: "Ost. inwentaryzacja", visible: false, sortable: true, sticky: false, className: "" },
+                { key: "last_inventory_at", label: "Data inwent.", visible: false, sortable: true, sticky: false, className: "" },
+                { key: "last_inventory_session_number", label: "Sesja inwent.", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "next_review_date", label: "Nast. przegląd", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "warranty_until", label: "Gwarancja do", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "insurance_until", label: "Ubezpieczenie do", visible: false, sortable: true, sticky: false, className: "" },
+                { key: "serial_number", label: "Nr seryjny", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "is_active", label: "Aktywny", visible: false, sortable: true, sticky: false, className: "" }
             ];
             const inventoryModeColumns = [
@@ -3189,7 +3193,7 @@ let searchDebounceId = null;
             function loadColumns() {
                 try {
                     const stored = JSON.parse(window.localStorage.getItem(storageKeyColumns));
-                    if (!Array.isArray(stored) || stored.length !== defaultColumns.length) {
+                    if (!Array.isArray(stored)) {
                         return defaultColumns.slice();
                     }
 
@@ -3208,10 +3212,27 @@ let searchDebounceId = null;
                         });
                     }).filter(Boolean);
 
-                    if (restoredColumns.length !== defaultColumns.length) {
-                        window.localStorage.removeItem(storageKeyColumns);
-                        return defaultColumns.slice();
+                    const restoredKeys = {};
+                    restoredColumns.forEach(function (column) {
+                        restoredKeys[column.key] = true;
+                    });
+                    if (!restoredKeys.current_quantity) {
+                        const quantityColumn = Object.assign({}, baseByKey.current_quantity);
+                        const insertAfterIndex = restoredColumns.findIndex(function (column) {
+                            return column.key === "purchase_value";
+                        });
+                        if (insertAfterIndex >= 0) {
+                            restoredColumns.splice(insertAfterIndex + 1, 0, quantityColumn);
+                        } else {
+                            restoredColumns.push(quantityColumn);
+                        }
+                        restoredKeys.current_quantity = true;
                     }
+                    defaultColumns.forEach(function (column) {
+                        if (!restoredKeys[column.key]) {
+                            restoredColumns.push(Object.assign({}, column));
+                        }
+                    });
 
                     return restoredColumns;
                 } catch (error) {
@@ -3952,7 +3973,8 @@ let searchDebounceId = null;
                     return row[displayColumns[columnKey]] || "-";
                 }
 
-                return row[columnKey] || "-";
+                const value = row[columnKey];
+                return value === null || value === undefined || value === "" ? "-" : value;
             }
 
             function getSortIndicator(columnKey) {
