@@ -23,6 +23,14 @@ class InventorySession(models.Model):
     asset_type_scope = models.JSONField(default=list)
     started_at = models.DateTimeField(default=timezone.now)
     closed_at = models.DateTimeField(null=True, blank=True)
+    applied_to_assets_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    applied_to_assets_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="applied_inventory_sessions",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
