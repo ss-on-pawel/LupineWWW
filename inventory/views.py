@@ -425,6 +425,8 @@ def apply_inventory_session_to_assets(request, pk):
             asset = work_item["snapshot"].asset
             if asset is None:
                 continue
+            if not asset.is_active:
+                continue
             old_current_quantity = (
                 asset.last_inventory_quantity
                 if asset.last_inventory_quantity is not None

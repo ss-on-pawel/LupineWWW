@@ -279,6 +279,8 @@ def approve_asset_change_request(change_request, reviewer):
 
         if locked_request.operation == AssetChangeRequest.Operation.UPDATE:
             asset = _get_locked_asset_for_update_approval(locked_request)
+            if not asset.is_active:
+                raise ValidationError("Archived assets cannot be updated.")
             if not reviewer_is_global:
                 _validate_reviewer_update_scope(reviewer, asset)
 

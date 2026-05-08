@@ -36,7 +36,7 @@ def start_inventory_session(*, created_by, root_locations, asset_types):
     assets = (
         Asset.objects
         .select_related("location_fk")
-        .filter(location_fk_id__in=location_ids, asset_type__in=asset_type_values)
+        .filter(location_fk_id__in=location_ids, asset_type__in=asset_type_values, is_active=True)
         .order_by("id")
     )
 
@@ -141,10 +141,10 @@ def _get_location_by_code(code: str):
 
 
 def _get_asset_by_scan_code(code: str):
-    asset = Asset.objects.filter(barcode=code).order_by("id").first()
+    asset = Asset.objects.filter(barcode=code, is_active=True).order_by("id").first()
     if asset is not None:
         return asset
-    return Asset.objects.filter(inventory_number=code).order_by("id").first()
+    return Asset.objects.filter(inventory_number=code, is_active=True).order_by("id").first()
 
 
 def _resolve_observed_status(session: InventorySession, asset: Asset, current_location: Location | None) -> str:

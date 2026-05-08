@@ -361,6 +361,7 @@ class AssetHistoryEntry(models.Model):
         UPDATED = "updated", "Updated"
         MOVED = "moved", "Moved"
         INVENTORY_APPLIED = "inventory_applied", "Inventory applied"
+        WITHDRAWN = "withdrawn", "Withdrawn"
 
     asset = models.ForeignKey(
         Asset,

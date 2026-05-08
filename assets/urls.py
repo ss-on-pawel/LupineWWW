@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     AssetChangeRequestListView,
     AssetChangeRequestDetailView,
+    AssetArchiveListView,
     AssetCreateView,
     AssetListView,
     AssetUpdateView,
@@ -14,6 +15,7 @@ from .views import (
     asset_detail,
     asset_export_csv_api,
     asset_list_api,
+    asset_withdraw,
 )
 
 
@@ -24,6 +26,7 @@ urlpatterns = [
     path("api/assets/export/", asset_export_csv_api, name="api-export"),
     path("api/assets/bulk-move/", asset_bulk_move_api, name="api-bulk-move"),
     path("", AssetListView.as_view(), name="list"),
+    path("assets/archive/", AssetArchiveListView.as_view(), name="archive"),
     path("assets/changes/", AssetChangeRequestListView.as_view(), name="change-list"),
     path("assets/changes/bulk-approve/", asset_change_bulk_approve, name="bulk-approve"),
     path("assets/changes/bulk-reject/", asset_change_bulk_reject, name="bulk-reject"),
@@ -32,5 +35,6 @@ urlpatterns = [
     path("assets/changes/<int:pk>/reject/", asset_change_reject, name="change-reject"),
     path("assets/add/", AssetCreateView.as_view(), name="create"),
     path("assets/<int:pk>/edit/", AssetUpdateView.as_view(), name="update"),
+    path("assets/<int:id>/withdraw/", asset_withdraw, name="asset-withdraw"),
     path("assets/<int:id>/", asset_detail, name="detail"),
 ]

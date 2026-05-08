@@ -94,6 +94,29 @@
             flex-wrap: nowrap;
             align-items: center;
         }
+        .asset-withdraw-form {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .asset-withdraw-form select {
+            min-height: 38px;
+            padding: 0 10px;
+            border: var(--asset-line);
+            border-radius: 8px;
+            background: #fff;
+            color: #111927;
+        }
+        .asset-archive-notice {
+            margin-top: 20px;
+            padding: 14px 16px;
+            border: 1px solid #f3c86b;
+            border-radius: 8px;
+            background: #fff7e0;
+            color: #6b4e00;
+            font-weight: 700;
+        }
         .asset-summary {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -320,8 +343,22 @@
             <div class="asset-actions">
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
+                {% if asset.is_active %}
+                    <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
+                        {% csrf_token %}
+                        <select name="status" aria-label="Status wycofania">
+                            {% for value, label in withdraw_status_options %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
+                    </form>
+                {% endif %}
             </div>
         </div>
+        {% if not asset.is_active %}
+            <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>
+        {% endif %}
 
         <div class="asset-summary">
             <div class="summary-item">

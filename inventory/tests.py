@@ -103,6 +103,25 @@ class StartInventorySessionTests(TestCase):
         self.assertEqual(session.snapshot_items.count(), 1)
         self.assertEqual(session.snapshot_items.get().asset_id_snapshot, fixed_asset.id)
 
+    def test_snapshot_excludes_archived_assets(self):
+        active_asset = self._create_asset("ACTIVE-SNAP-001", self.root)
+        archived_asset = self._create_asset(
+            "ARCHIVED-SNAP-001",
+            self.root,
+            is_active=False,
+            status=Asset.Status.LIQUIDATED,
+        )
+
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+        snapshot_asset_ids = set(session.snapshot_items.values_list("asset_id_snapshot", flat=True))
+        self.assertIn(active_asset.id, snapshot_asset_ids)
+        self.assertNotIn(archived_asset.id, snapshot_asset_ids)
+
     def test_snapshot_does_not_change_after_asset_update(self):
         asset = self._create_asset("SNAP-001", self.root, name="Original name", barcode="BC-ORIGINAL")
 
@@ -848,6 +867,22 @@ class InventorySessionApplyToAssetsViewTests(TestCase):
 
         self.client.post(self._url(session))
 
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_apply_inventory_skips_asset_archived_after_snapshot(self):
+        asset = self._create_asset("APPLY-ARCHIVED-001", record_quantity=5)
+        session = self._start_session()
+        Asset.objects.filter(pk=asset.pk).update(is_active=False, status=Asset.Status.LIQUIDATED)
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertIsNone(asset.last_inventory_quantity)
+        self.assertIsNone(asset.last_inventory_session)
+        self.assertIsNone(asset.last_inventory_at)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_apply_inventory_creates_history_for_multiple_assets(self):
@@ -1633,6 +1668,21 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertEqual(response.context["read_count"], 2)
         self.assertEqual(response.context["wrong_location_count"], 1)
         self.assertEqual(response.context["unknown_code_count"], 1)
+
+    def test_scan_recognition_ignores_archived_assets(self):
+        archived_asset = self._create_asset(
+            "PROGRESS-ARCHIVED-001",
+            self.child,
+            barcode="BC-PROGRESS-ARCHIVED",
+            is_active=False,
+            status=Asset.Status.LIQUIDATED,
+        )
+
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\n{archived_asset.barcode}")
+
+        observed = InventoryObservedItem.objects.get(code=archived_asset.barcode)
+        self.assertIsNone(observed.asset)
+        self.assertEqual(observed.status, InventoryObservedItem.Status.UNKNOWN_CODE)
 
     def test_work_table_shows_snapshot_item_without_scan_as_missing(self):
         response = self._detail_response()

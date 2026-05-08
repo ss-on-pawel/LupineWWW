@@ -30,6 +30,13 @@ from .services import (
 from locations.models import Location
 
 
+ASSET_WITHDRAW_STATUSES = {
+    Asset.Status.LIQUIDATED,
+    Asset.Status.SOLD,
+    Asset.Status.LOST,
+}
+
+
 def _format_csv_date(value):
     return value.isoformat() if value else ""
 
@@ -397,6 +404,12 @@ def get_asset_change_list_summary(change_request):
 
 class AssetListView(LoginRequiredMixin, TemplateView):
     template_name = "assets/asset_list.html"
+    asset_list_mode = "active"
+    page_title = "Ewidencja środków"
+    api_url = reverse_lazy("assets:api-list")
+    mode_description = ""
+    mode_switch_label = "Archiwum"
+    mode_switch_url_name = "assets:archive"
 
     def _get_asset_change_decision_summary(self):
         user = self.request.user
@@ -431,7 +444,7 @@ class AssetListView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "Ewidencja majątku"
+        context["page_title"] = self.page_title
         context["status_options"] = Asset.Status.choices
         context["location_options"] = list(
             Asset.objects.exclude(location="")
@@ -441,7 +454,22 @@ class AssetListView(LoginRequiredMixin, TemplateView):
         )
         context["filter_schema"] = get_asset_filter_ui_schema()
         context["asset_change_decision_summary"] = self._get_asset_change_decision_summary()
+        context["asset_list_mode"] = self.asset_list_mode
+        context["asset_list_description"] = self.mode_description
+        context["asset_api_url"] = self.api_url
+        context["asset_export_url"] = reverse("assets:api-export")
+        context["asset_mode_switch_label"] = self.mode_switch_label
+        context["asset_mode_switch_url"] = reverse(self.mode_switch_url_name)
         return context
+
+
+class AssetArchiveListView(AssetListView):
+    asset_list_mode = "archive"
+    page_title = "Archiwum środków"
+    api_url = "/api/assets/?asset_scope=archive"
+    mode_description = "Widok środków wycofanych z aktywnej ewidencji."
+    mode_switch_label = "Aktywna Ewidencja"
+    mode_switch_url_name = "assets:list"
 
 
 class AssetChangeRequestListView(LoginRequiredMixin, ListView):
@@ -688,6 +716,7 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        queryset = queryset.filter(is_active=True)
         accessible_location_ids = get_accessible_location_ids(self.request.user)
         if accessible_location_ids is None:
             return queryset
@@ -764,9 +793,48 @@ def asset_detail(request, id):
             "asset": asset,
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "history_entries": history_entries,
+            "withdraw_status_options": [
+                (Asset.Status.LIQUIDATED, dict(Asset.Status.choices)[Asset.Status.LIQUIDATED]),
+                (Asset.Status.SOLD, dict(Asset.Status.choices)[Asset.Status.SOLD]),
+                (Asset.Status.LOST, dict(Asset.Status.choices)[Asset.Status.LOST]),
+            ],
             "page_title": "Karta środka",
         },
     )
+
+
+@login_required
+@require_POST
+def asset_withdraw(request, id):
+    asset = get_object_or_404(Asset.objects.select_related("location_fk"), pk=id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    if not asset.is_active:
+        return HttpResponse("Asset is already archived.", status=400)
+
+    status = request.POST.get("status", "").strip()
+    if status not in ASSET_WITHDRAW_STATUSES:
+        return HttpResponse("Invalid withdraw status.", status=400)
+
+    status_label = dict(Asset.Status.choices)[status]
+    asset.status = status
+    asset.is_active = False
+    asset.updated_at = timezone.now()
+    asset.save(update_fields=["status", "is_active", "updated_at"])
+
+    record_asset_history(
+        asset=asset,
+        operator=request.user,
+        event_type=AssetHistoryEntry.EventType.WITHDRAWN,
+        description="Wycofano środek z aktywnej ewidencji",
+        old_value="Aktywna Ewidencja",
+        new_value=f"Archiwum - {status_label}",
+        field_name="is_active",
+    )
+    messages.success(request, "Środek został wycofany z aktywnej Ewidencji.")
+    return redirect("assets:detail", id=asset.pk)
 
 
 def _format_asset_type_display(asset, asset_type_names_by_code=None):
@@ -787,6 +855,9 @@ def build_asset_list_queryset(request):
     status = request.GET.get("status", "").strip()
     location = request.GET.get("location", "").strip()
     ordering = request.GET.get("ordering", "-updated_at").strip() or "-updated_at"
+    asset_scope = request.GET.get("asset_scope", "active").strip()
+    if asset_scope not in {"active", "archive"}:
+        asset_scope = "active"
 
     queryset = (
         Asset.objects.select_related("responsible_person", "current_user", "asset_type_ref", "last_inventory_session")
@@ -854,6 +925,7 @@ def build_asset_list_queryset(request):
 
     parsed_filters = parse_asset_filters(request.GET)
     queryset = apply_asset_filters(queryset, parsed_filters)
+    queryset = queryset.filter(is_active=(asset_scope == "active"))
 
     pending_update_requests = AssetChangeRequest.objects.filter(
         operation=AssetChangeRequest.Operation.UPDATE,
@@ -888,6 +960,7 @@ def build_asset_list_queryset(request):
         "status": status,
         "location": location,
         "ordering": ordering_field,
+        "asset_scope": asset_scope,
     }
 
 
@@ -1085,6 +1158,9 @@ def asset_bulk_move_api(request):
             return JsonResponse({"success": False, "error": "One or more assets are outside your allowed scope."}, status=403)
     else:
         movable_assets = Asset.objects.filter(id__in=unique_asset_ids)
+
+    if movable_assets.filter(is_active=False).exists():
+        return JsonResponse({"success": False, "error": "Archived assets cannot be moved."}, status=400)
 
     movable_asset_snapshots = list(movable_assets.select_related("location_fk"))
     history_entries = []

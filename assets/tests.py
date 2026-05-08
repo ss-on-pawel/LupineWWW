@@ -1099,6 +1099,31 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         self.assertEqual(change_request.reviewed_by, reviewer)
         self.assertIsNotNone(change_request.reviewed_at)
 
+    def test_approval_update_archived_asset_is_blocked(self):
+        location, _ = self._create_location_tree()
+        requester = User.objects.create_user(username="approve-update-archived-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="approve-update-archived-reviewer",
+            email="approve-update-archived-reviewer@example.com",
+            password="test-pass-123",
+        )
+        asset = self._create_asset(
+            inventory_number="APPROVE-UPDATE-ARCHIVED-001",
+            location_obj=location,
+            is_active=False,
+            status=Asset.Status.LIQUIDATED,
+        )
+        change_request = self._update_request(requester, asset)
+
+        with self.assertRaises(ValidationError):
+            approve_asset_change_request(change_request, reviewer)
+
+        asset.refresh_from_db()
+        change_request.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.name, "Original Asset")
+        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
     def test_approval_update_creates_field_history_with_reviewer_and_source(self):
         location, _ = self._create_location_tree()
         requester = User.objects.create_user(username="approve-update-history-requester", password="test-pass-123")
@@ -3078,6 +3103,14 @@ class AssetListApiTests(TestCase):
             purchase_value=Decimal("2500"),
             purchase_date=date(2023, 3, 10),
         )
+        cls.inactive_asset = Asset.objects.create(
+            name="Inactive Asset",
+            inventory_number="ARCHIVE-API-001",
+            status=Asset.Status.LIQUIDATED,
+            location="Archive",
+            category="IT",
+            is_active=False,
+        )
 
     def setUp(self):
         self.client.force_login(self.admin_user)
@@ -3136,6 +3169,41 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(payload["pagination"]["total_items"], 1)
         self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
+
+    def test_api_defaults_to_active_scope(self):
+        response = self.client.get(reverse("assets:api-list"), {"search": "ARCHIVE-API-001"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["pagination"]["total_items"], 0)
+
+    def test_api_active_scope_returns_only_active_assets(self):
+        response = self.client.get(reverse("assets:api-list"), {"asset_scope": "active", "page_size": 200})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["results"])
+        self.assertTrue(all(row["is_active"] for row in response.json()["results"]))
+
+    def test_api_archive_scope_returns_only_inactive_assets(self):
+        response = self.client.get(reverse("assets:api-list"), {"asset_scope": "archive"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["pagination"]["total_items"], 1)
+        self.assertEqual(payload["results"][0]["inventory_number"], "ARCHIVE-API-001")
+        self.assertFalse(payload["results"][0]["is_active"])
+
+    def test_is_active_filter_does_not_break_active_scope(self):
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {
+                "asset_scope": "active",
+                "filter__is_active__equals": "false",
+                "page_size": 200,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["pagination"]["total_items"], 0)
 
     def test_api_filters_by_asset_type_equals(self):
         fixed_asset = Asset.objects.create(
@@ -3455,6 +3523,15 @@ class AssetExportCsvApiTests(TestCase):
             category="Office",
             purchase_value=Decimal("500.00"),
         )
+        Asset.objects.create(
+            name="Archived Export",
+            inventory_number="EXP-ARCHIVE-001",
+            asset_type=Asset.AssetType.FIXED,
+            status=Asset.Status.LIQUIDATED,
+            location_fk=cls.root_location,
+            category="IT",
+            is_active=False,
+        )
 
     def setUp(self):
         self.client.force_login(self.admin_user)
@@ -3481,6 +3558,28 @@ class AssetExportCsvApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         rows = self._csv_rows(response)
         self.assertEqual([row[0] for row in rows[1:]], ["EXP-001", "EXP-002"])
+
+    def test_export_defaults_to_active_scope(self):
+        response = self._export({"columns": "inventory_number", "ordering": "inventory_number"})
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        inventory_numbers = [row[0] for row in rows[1:]]
+        self.assertIn("EXP-001", inventory_numbers)
+        self.assertNotIn("EXP-ARCHIVE-001", inventory_numbers)
+
+    def test_export_archive_scope_exports_inactive_assets(self):
+        response = self._export(
+            {
+                "asset_scope": "archive",
+                "columns": "inventory_number,status",
+                "ordering": "inventory_number",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual(rows, [["Nr inwentarzowy", "Status"], ["EXP-ARCHIVE-001", "Zlikwidowany"]])
 
     def test_export_respects_search(self):
         response = self._export({"columns": "inventory_number,name", "search": "Monitor"})
@@ -3949,6 +4048,32 @@ class AssetBulkMoveApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
+    def test_bulk_move_rejects_archived_asset(self):
+        asset = Asset.objects.create(
+            name="Bulk Archived",
+            inventory_number="BULK-ARCHIVED-001",
+            status=Asset.Status.LIQUIDATED,
+            location=self.root_location.path,
+            location_fk=self.root_location,
+            category="IT",
+            is_active=False,
+        )
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [asset.id],
+                "target_location_id": self.target_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        asset.refresh_from_db()
+        self.assertEqual(asset.location_fk, self.root_location)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
     def test_bulk_move_creates_history_for_each_moved_asset(self):
         response = self.client.post(
             reverse("assets:api-bulk-move"),
@@ -4348,6 +4473,26 @@ class AssetListViewTests(TestCase):
         self.assertContains(response, "Eksport CSV")
         self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
 
+    def test_archive_view_renders_with_archive_api_url(self):
+        Asset.objects.create(
+            name="Archived Monitor",
+            inventory_number="MON-ARCHIVE-001",
+            status=Asset.Status.LIQUIDATED,
+            location="Warehouse",
+            category="IT",
+            is_active=False,
+        )
+        user = User.objects.create_user(username="archive-viewer", password="test-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:archive"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Archiwum środków")
+        self.assertContains(response, "Widok środków wycofanych z aktywnej ewidencji.")
+        self.assertContains(response, 'data-api-url="/api/assets/?asset_scope=archive"')
+        self.assertContains(response, reverse("assets:list"))
+
     def test_list_view_shows_approved_change_summary_for_regular_user(self):
         user = User.objects.create_user(username="viewer-approved-summary", password="test-pass-123")
         self._create_change_request(user, AssetChangeRequest.Status.APPROVED, "SUMMARY-APPROVED-1")
@@ -4486,6 +4631,29 @@ class AssetDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Detail Laptop")
         self.assertContains(response, "DETAIL-001")
+
+    def test_scoped_user_can_view_archived_asset_detail(self):
+        location = Location.objects.create(name="Archived Detail Warehouse")
+        asset = Asset.objects.create(
+            name="Archived Detail Laptop",
+            inventory_number="DETAIL-ARCHIVE-001",
+            status=Asset.Status.LIQUIDATED,
+            location=location.path,
+            location_fk=location,
+            category="IT",
+            is_active=False,
+        )
+        user = User.objects.create_user(username="detail-archive-viewer", password="test-pass-123")
+        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.save(update_fields=["role"])
+        user.profile.allowed_locations.add(location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Archived Detail Laptop")
+        self.assertContains(response, "DETAIL-ARCHIVE-001")
 
     def test_detail_view_returns_404_for_asset_outside_user_scope(self):
         root_location = Location.objects.create(name="Warszawa")
@@ -4725,6 +4893,120 @@ class AssetDetailViewTests(TestCase):
         self.assertContains(response, "System")
 
 
+class AssetWithdrawViewTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Withdraw Location")
+        self.other_location = Location.objects.create(name="Withdraw Other")
+        self.user = User.objects.create_user(username="withdraw-user", password="test-pass-123")
+        self.user.profile.role = UserProfile.Role.MANAGER
+        self.user.profile.save(update_fields=["role"])
+        self.user.profile.allowed_locations.add(self.location)
+        self.client.force_login(self.user)
+
+    def _create_asset(self, inventory_number="WITHDRAW-001", **overrides):
+        defaults = {
+            "name": "Withdraw Asset",
+            "inventory_number": inventory_number,
+            "status": Asset.Status.IN_STOCK,
+            "location": self.location.path,
+            "location_fk": self.location,
+            "category": "IT",
+            "is_active": True,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _withdraw(self, asset, status=Asset.Status.LIQUIDATED):
+        return self.client.post(reverse("assets:asset-withdraw", kwargs={"id": asset.id}), {"status": status})
+
+    def test_withdraw_sets_inactive_and_status(self):
+        asset = self._create_asset("WITHDRAW-STATUS-001")
+
+        response = self._withdraw(asset, Asset.Status.SOLD)
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.SOLD)
+
+    def test_withdraw_creates_business_history_entry(self):
+        asset = self._create_asset("WITHDRAW-HISTORY-001")
+
+        self._withdraw(asset, Asset.Status.LIQUIDATED)
+
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.WITHDRAWN)
+        self.assertEqual(entry.description, "Wycofano środek z aktywnej ewidencji")
+        self.assertEqual(entry.field_name, "is_active")
+        self.assertEqual(entry.old_value, "Aktywna Ewidencja")
+        self.assertEqual(entry.new_value, "Archiwum - Zlikwidowany")
+        self.assertEqual(entry.operator, self.user)
+
+    def test_withdraw_moves_asset_from_active_list_to_archive(self):
+        asset = self._create_asset("WITHDRAW-LISTS-001")
+
+        self._withdraw(asset, Asset.Status.LOST)
+
+        active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+        archive_response = self.client.get(
+            reverse("assets:api-list"),
+            {"asset_scope": "archive", "search": asset.inventory_number},
+        )
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(active_response.json()["pagination"]["total_items"], 0)
+        self.assertEqual(archive_response.status_code, 200)
+        self.assertEqual(archive_response.json()["pagination"]["total_items"], 1)
+        self.assertEqual(archive_response.json()["results"][0]["inventory_number"], asset.inventory_number)
+
+    def test_withdrawn_asset_detail_still_works_and_shows_archive_notice(self):
+        asset = self._create_asset("WITHDRAW-DETAIL-001")
+        self._withdraw(asset, Asset.Status.LIQUIDATED)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Withdraw Asset")
+        self.assertContains(response, "Środek znajduje się w Archiwum")
+
+    def test_cannot_withdraw_already_archived_asset(self):
+        asset = self._create_asset("WITHDRAW-ARCHIVED-001", is_active=False, status=Asset.Status.SOLD)
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED)
+
+        self.assertEqual(response.status_code, 400)
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.SOLD)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_withdraw_rejects_invalid_status(self):
+        asset = self._create_asset("WITHDRAW-INVALID-001")
+
+        response = self._withdraw(asset, Asset.Status.IN_USE)
+
+        self.assertEqual(response.status_code, 400)
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_withdraw_respects_location_scope(self):
+        asset = self._create_asset(
+            "WITHDRAW-SCOPE-001",
+            location=self.other_location.path,
+            location_fk=self.other_location,
+        )
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED)
+
+        self.assertEqual(response.status_code, 404)
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+
 class AssetUpdateViewTests(TestCase):
     def _messages(self, response):
         return [str(message) for message in get_messages(response.wsgi_request)]
@@ -4961,6 +5243,29 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(asset.location_fk, allowed_location)
         self.assertEqual(asset.status, Asset.Status.IN_USE)
         self.assertFalse(AssetChangeRequest.objects.exists())
+
+    def test_archived_asset_edit_is_blocked(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(
+            inventory_number="UPDATE-ARCHIVED-001",
+            location_obj=allowed_location,
+            is_active=False,
+            status=Asset.Status.LIQUIDATED,
+        )
+        user = self._manager_with_location("update-archived", allowed_location)
+        self.client.force_login(user)
+
+        get_response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
+        post_response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="Should Not Save"),
+        )
+
+        asset.refresh_from_db()
+        self.assertEqual(get_response.status_code, 404)
+        self.assertEqual(post_response.status_code, 404)
+        self.assertEqual(asset.name, "Update Asset")
+        self.assertFalse(asset.is_active)
 
     def test_update_without_approval_creates_history_for_changed_field(self):
         allowed_location, _ = self._create_location_tree()
