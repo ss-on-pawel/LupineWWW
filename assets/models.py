@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Asset(models.Model):
@@ -352,3 +353,42 @@ class AssetChangeRequest(models.Model):
 
     def __str__(self) -> str:
         return f"{self.operation} request by {self.requested_by} ({self.status})"
+
+
+class AssetHistoryEntry(models.Model):
+    class EventType(models.TextChoices):
+        CREATED = "created", "Created"
+        UPDATED = "updated", "Updated"
+        MOVED = "moved", "Moved"
+        INVENTORY_APPLIED = "inventory_applied", "Inventory applied"
+
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="history_entries",
+        verbose_name="Środek",
+    )
+    occurred_at = models.DateTimeField(default=timezone.now, db_index=True, verbose_name="Czas")
+    operator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="asset_history_entries",
+        verbose_name="Operator",
+    )
+    event_type = models.CharField(max_length=50, choices=EventType.choices, verbose_name="Typ zdarzenia")
+    description = models.CharField(max_length=255, verbose_name="Opis")
+    old_value = models.TextField(blank=True, verbose_name="Poprzednia wartość")
+    new_value = models.TextField(blank=True, verbose_name="Nowa wartość")
+    field_name = models.CharField(max_length=100, blank=True, verbose_name="Pole")
+    source_object_type = models.CharField(max_length=100, blank=True, verbose_name="Typ źródła")
+    source_object_id = models.PositiveBigIntegerField(null=True, blank=True, verbose_name="ID źródła")
+
+    class Meta:
+        ordering = ["-occurred_at", "-id"]
+        verbose_name = "Wpis historii środka"
+        verbose_name_plural = "Wpisy historii środków"
+
+    def __str__(self) -> str:
+        return f"{self.asset_id}: {self.description}"

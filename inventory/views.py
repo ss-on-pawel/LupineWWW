@@ -17,7 +17,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from accounts.utils import get_accessible_location_ids
-from assets.models import Asset, AssetTypeDictionary
+from assets.models import Asset, AssetHistoryEntry, AssetTypeDictionary
 from locations.models import Location
 
 from .forms import DEFAULT_ASSET_TYPES, InventorySessionStartForm, SimpleInventorySessionStartForm
@@ -420,10 +420,32 @@ def apply_inventory_session_to_assets(request, pk):
         now = timezone.now()
         analysis = _build_inventory_session_analysis(session)
         assets_to_update = []
+        history_entries = []
         for work_item in analysis["inventory_work_items"]:
             asset = work_item["snapshot"].asset
             if asset is None:
                 continue
+            old_current_quantity = (
+                asset.last_inventory_quantity
+                if asset.last_inventory_quantity is not None
+                else asset.record_quantity
+            )
+            new_current_quantity = work_item["actual_quantity"]
+            if old_current_quantity != new_current_quantity:
+                history_entries.append(
+                    AssetHistoryEntry(
+                        asset=asset,
+                        occurred_at=now,
+                        operator=request.user,
+                        event_type=AssetHistoryEntry.EventType.INVENTORY_APPLIED,
+                        description="Naniesiono wynik inwentaryzacji",
+                        old_value=str(old_current_quantity),
+                        new_value=str(new_current_quantity),
+                        field_name="current_quantity",
+                        source_object_type="InventorySession",
+                        source_object_id=session.pk,
+                    )
+                )
             asset.last_inventory_quantity = work_item["actual_quantity"]
             asset.last_inventory_session = session
             asset.last_inventory_at = now
@@ -440,6 +462,7 @@ def apply_inventory_session_to_assets(request, pk):
             ],
             batch_size=500,
         )
+        AssetHistoryEntry.objects.bulk_create(history_entries)
 
         session.applied_to_assets_at = now
         session.applied_to_assets_by = request.user

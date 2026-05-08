@@ -17,10 +17,13 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
 from .forms import AssetForm, AssetTypeDictionaryForm
-from .models import Asset, AssetChangeRequest, AssetTypeDictionary
+from .models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
+    capture_asset_history_values,
     reject_asset_change_request,
+    record_asset_field_changes,
+    record_asset_history,
     serialize_asset_form_payload,
     user_requires_asset_change_approval,
 )
@@ -662,7 +665,14 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
             return redirect(self.success_url)
 
         messages.success(self.request, "Składnik majątku został zapisany.")
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        record_asset_history(
+            asset=self.object,
+            operator=self.request.user,
+            event_type="created",
+            description="Utworzono środek",
+        )
+        return response
 
 
 class AssetUpdateView(LoginRequiredMixin, UpdateView):
@@ -720,7 +730,19 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
             return redirect(self.get_success_url())
 
         messages.success(self.request, "Składnik majątku został zaktualizowany.")
-        return super().form_valid(form)
+        before_asset = (
+            self.get_queryset()
+            .select_related("asset_type_ref", "location_fk", "responsible_person", "current_user")
+            .get(pk=self.object.pk)
+        )
+        before_values = capture_asset_history_values(before_asset)
+        response = super().form_valid(form)
+        record_asset_field_changes(
+            asset=self.object,
+            operator=self.request.user,
+            before_values=before_values,
+        )
+        return response
 
     def get_success_url(self):
         return reverse("assets:detail", kwargs={"id": self.object.pk})
@@ -734,12 +756,14 @@ def asset_detail(request, id):
         raise Http404
 
     asset_type_names_by_code = dict(AssetTypeDictionary.objects.values_list("code", "name"))
+    history_entries = asset.history_entries.select_related("operator").order_by("-occurred_at", "-id")[:50]
     return render(
         request,
         "assets/asset_detail.html",
         {
             "asset": asset,
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
+            "history_entries": history_entries,
             "page_title": "Karta środka",
         },
     )
@@ -1062,10 +1086,29 @@ def asset_bulk_move_api(request):
     else:
         movable_assets = Asset.objects.filter(id__in=unique_asset_ids)
 
+    movable_asset_snapshots = list(movable_assets.select_related("location_fk"))
+    history_entries = []
+    for asset in movable_asset_snapshots:
+        old_location_path = asset.location_fk.path if asset.location_fk else ""
+        if old_location_path == target_location.path:
+            continue
+        history_entries.append(
+            AssetHistoryEntry(
+                asset=asset,
+                operator=request.user,
+                event_type=AssetHistoryEntry.EventType.MOVED,
+                description="Przeniesiono środek",
+                old_value=old_location_path,
+                new_value=target_location.path,
+                field_name="location_fk",
+            )
+        )
+
     updated_count = movable_assets.update(
         location=target_location.path,
         location_fk=target_location,
     )
+    AssetHistoryEntry.objects.bulk_create(history_entries)
 
     return JsonResponse(
         {

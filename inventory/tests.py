@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
-from assets.models import Asset, AssetChangeRequest, AssetTypeDictionary
+from assets.models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
 from locations.models import Location
 from users.models import User
 
@@ -801,6 +801,75 @@ class InventorySessionApplyToAssetsViewTests(TestCase):
         self.assertIsNotNone(asset.last_inventory_at)
         self.assertIsNotNone(session.applied_to_assets_at)
         self.assertEqual(session.applied_to_assets_by, self.user)
+
+    def test_apply_inventory_creates_history_for_quantity_change(self):
+        asset = self._create_asset("APPLY-HISTORY-001", record_quantity=4)
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\n{asset.barcode}")
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        response = self.client.post(self._url(session))
+
+        self.assertRedirects(response, reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.INVENTORY_APPLIED)
+        self.assertEqual(entry.description, "Naniesiono wynik inwentaryzacji")
+        self.assertEqual(entry.operator, self.user)
+        self.assertEqual(entry.source_object_type, "InventorySession")
+        self.assertEqual(entry.source_object_id, session.pk)
+        self.assertEqual(entry.field_name, "current_quantity")
+        self.assertEqual(entry.old_value, "4")
+        self.assertEqual(entry.new_value, "1")
+
+    def test_apply_inventory_uses_previous_last_inventory_quantity_as_old_quantity(self):
+        asset = self._create_asset(
+            "APPLY-HISTORY-OLD-LAST-001",
+            record_quantity=10,
+            last_inventory_quantity=3,
+        )
+        session = self._start_session()
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.field_name, "current_quantity")
+        self.assertEqual(entry.old_value, "3")
+        self.assertEqual(entry.new_value, "0")
+
+    def test_apply_inventory_does_not_create_history_when_quantity_is_unchanged(self):
+        asset = self._create_asset("APPLY-HISTORY-UNCHANGED-001", record_quantity=1)
+        session = self._start_session()
+        import_inventory_scan_text(f"{session.number}\n{self.child.code}\n{asset.barcode}")
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_apply_inventory_creates_history_for_multiple_assets(self):
+        first_asset = self._create_asset("APPLY-HISTORY-MULTI-001", record_quantity=5)
+        second_asset = self._create_asset("APPLY-HISTORY-MULTI-002", record_quantity=6)
+        session = self._start_session()
+        self._close_session(session)
+        self.client.force_login(self.user)
+
+        self.client.post(self._url(session))
+
+        entries = AssetHistoryEntry.objects.filter(
+            asset__in=[first_asset, second_asset],
+            event_type=AssetHistoryEntry.EventType.INVENTORY_APPLIED,
+        )
+        self.assertEqual(entries.count(), 2)
+        self.assertFalse(
+            AssetHistoryEntry.objects.filter(
+                asset__in=[first_asset, second_asset],
+                field_name__in=["record_quantity", "last_inventory_quantity"],
+            ).exists()
+        )
 
     def test_second_post_is_idempotent_and_does_not_update_assets_again(self):
         asset = self._create_asset("APPLY-IDEMP-001")

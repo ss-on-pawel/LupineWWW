@@ -23,7 +23,7 @@ from inventory.models import InventorySession
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
-from .models import Asset, AssetChangeRequest, AssetTypeDictionary
+from .models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
@@ -786,6 +786,27 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         self.assertIsNotNone(change_request.reviewed_at)
         self.assertEqual(change_request.asset, asset)
 
+    def test_approval_create_creates_history_entry_with_reviewer_and_source(self):
+        requester = User.objects.create_user(username="approve-create-history-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="approve-create-history-reviewer",
+            email="approve-create-history-reviewer@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_request(
+            requester,
+            payload=self._create_payload(inventory_number="APPROVE-CREATE-HISTORY-001"),
+        )
+
+        asset = approve_asset_change_request(change_request, reviewer)
+
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.CREATED)
+        self.assertEqual(entry.description, "Utworzono środek po zatwierdzeniu zmiany")
+        self.assertEqual(entry.operator, reviewer)
+        self.assertEqual(entry.source_object_type, "AssetChangeRequest")
+        self.assertEqual(entry.source_object_id, change_request.id)
+
     def test_admin_role_without_approver_flag_cannot_approve_pending_create(self):
         requester = User.objects.create_user(username="approve-create-admin-requester", password="test-pass-123")
         reviewer = User.objects.create_user(username="approve-create-admin", password="test-pass-123")
@@ -1077,6 +1098,69 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
         self.assertEqual(change_request.reviewed_by, reviewer)
         self.assertIsNotNone(change_request.reviewed_at)
+
+    def test_approval_update_creates_field_history_with_reviewer_and_source(self):
+        location, _ = self._create_location_tree()
+        requester = User.objects.create_user(username="approve-update-history-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="approve-update-history-reviewer",
+            email="approve-update-history-reviewer@example.com",
+            password="test-pass-123",
+        )
+        asset = self._create_asset(inventory_number="APPROVE-UPDATE-HISTORY-001", location_obj=location)
+        proposed = self._current_payload(asset)
+        proposed["name"] = "Approval History Name"
+        change_request = self._update_request(
+            requester,
+            asset,
+            payload={"current": self._current_payload(asset), "proposed": proposed},
+        )
+
+        approve_asset_change_request(change_request, reviewer)
+
+        entries = list(AssetHistoryEntry.objects.filter(asset=asset))
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.UPDATED)
+        self.assertEqual(entry.description, "Zmieniono nazwę")
+        self.assertEqual(entry.field_name, "name")
+        self.assertEqual(entry.old_value, "Original Asset")
+        self.assertEqual(entry.new_value, "Approval History Name")
+        self.assertEqual(entry.operator, reviewer)
+        self.assertEqual(entry.source_object_type, "AssetChangeRequest")
+        self.assertEqual(entry.source_object_id, change_request.id)
+        self.assertNotIn("zatwierdzono", entry.description.lower())
+
+    def test_approval_update_does_not_log_unmapped_or_quantity_audit_fields(self):
+        location, _ = self._create_location_tree()
+        requester = User.objects.create_user(username="approve-update-unmapped-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="approve-update-unmapped-reviewer",
+            email="approve-update-unmapped-reviewer@example.com",
+            password="test-pass-123",
+        )
+        asset = self._create_asset(inventory_number="APPROVE-UPDATE-UNMAPPED-001", location_obj=location)
+        proposed = self._current_payload(asset)
+        proposed["description"] = "Opis techniczny bez historii"
+        proposed["record_quantity"] = 7
+        proposed["last_inventory_quantity"] = 3
+        change_request = self._update_request(
+            requester,
+            asset,
+            payload={"current": self._current_payload(asset), "proposed": proposed},
+        )
+
+        updated_asset = approve_asset_change_request(change_request, reviewer)
+
+        self.assertEqual(updated_asset.description, "Opis techniczny bez historii")
+        self.assertEqual(updated_asset.record_quantity, 7)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+        self.assertFalse(
+            AssetHistoryEntry.objects.filter(
+                asset=asset,
+                field_name__in=["record_quantity", "last_inventory_quantity"],
+            ).exists()
+        )
 
     def test_admin_role_without_approver_flag_cannot_approve_update(self):
         location, _ = self._create_location_tree()
@@ -3824,6 +3908,64 @@ class AssetBulkMoveApiTests(TestCase):
         self.assertEqual(self.asset_one.location_fk, self.target_location)
         self.assertEqual(self.asset_two.location_fk, self.target_location)
 
+    def test_bulk_move_creates_moved_history_entry(self):
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_one.id],
+                "target_location_id": self.target_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        entry = AssetHistoryEntry.objects.get(asset=self.asset_one)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.MOVED)
+        self.assertEqual(entry.description, "Przeniesiono środek")
+        self.assertEqual(entry.operator, self.admin_user)
+        self.assertEqual(entry.field_name, "location_fk")
+        self.assertEqual(entry.old_value, self.root_location.path)
+        self.assertEqual(entry.new_value, self.target_location.path)
+
+    def test_bulk_move_does_not_create_history_when_location_is_unchanged(self):
+        asset = Asset.objects.create(
+            name="Bulk Already There",
+            inventory_number="BULK-UNCHANGED-001",
+            status=Asset.Status.IN_STOCK,
+            location=self.target_location.path,
+            location_fk=self.target_location,
+            category="IT",
+        )
+
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [asset.id],
+                "target_location_id": self.target_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_bulk_move_creates_history_for_each_moved_asset(self):
+        response = self.client.post(
+            reverse("assets:api-bulk-move"),
+            data={
+                "asset_ids": [self.asset_one.id, self.asset_two.id],
+                "target_location_id": self.target_location.id,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        entries = AssetHistoryEntry.objects.filter(
+            asset__in=[self.asset_one, self.asset_two],
+            event_type=AssetHistoryEntry.EventType.MOVED,
+        )
+        self.assertEqual(entries.count(), 2)
+
     def test_bulk_move_rejects_empty_asset_ids(self):
         response = self.client.post(
             reverse("assets:api-bulk-move"),
@@ -3953,6 +4095,9 @@ class AssetBulkMoveApiAccessTests(TestCase):
         self.asset_in_scope.refresh_from_db()
         self.assertEqual(self.asset_in_scope.location, self.grandchild_location.path)
         self.assertEqual(self.asset_in_scope.location_fk, self.grandchild_location)
+        entry = AssetHistoryEntry.objects.get(asset=self.asset_in_scope)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.MOVED)
+        self.assertEqual(entry.operator, self.manager_user)
 
     def test_user_cannot_move_asset_outside_scope(self):
         self.client.force_login(self.manager_user)
@@ -3970,6 +4115,7 @@ class AssetBulkMoveApiAccessTests(TestCase):
         self.assertEqual(response.json()["success"], False)
         self.asset_out_of_scope.refresh_from_db()
         self.assertEqual(self.asset_out_of_scope.location_fk, self.other_child_location)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=self.asset_out_of_scope).exists())
 
     def test_user_cannot_move_asset_to_location_outside_scope(self):
         self.client.force_login(self.manager_user)
@@ -4442,6 +4588,142 @@ class AssetDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("assets:update", kwargs={"pk": asset.id}))
 
+    def test_detail_view_shows_asset_history_section(self):
+        asset = Asset.objects.create(
+            name="History Detail",
+            inventory_number="DETAIL-HISTORY-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        user = User.objects.create_superuser(
+            username="detail-history-superuser",
+            email="detail-history-superuser@example.com",
+            password="test-pass-123",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Historia środka")
+
+    def test_detail_view_renders_history_entry_values_and_operator(self):
+        asset = Asset.objects.create(
+            name="History Values Detail",
+            inventory_number="DETAIL-HISTORY-VALUES-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        operator = User.objects.create_user(
+            username="history-operator",
+            first_name="Anna",
+            last_name="Kowalska",
+            password="test-pass-123",
+        )
+        viewer = User.objects.create_superuser(
+            username="detail-history-values-superuser",
+            email="detail-history-values-superuser@example.com",
+            password="test-pass-123",
+        )
+        AssetHistoryEntry.objects.create(
+            asset=asset,
+            operator=operator,
+            event_type=AssetHistoryEntry.EventType.UPDATED,
+            description="Zmieniono status",
+            old_value="Na stanie",
+            new_value="W użyciu",
+            field_name="status",
+        )
+        self.client.force_login(viewer)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Zmieniono status")
+        self.assertContains(response, "Anna Kowalska")
+        self.assertContains(response, "W użyciu")
+        self.assertContains(response, "Na stanie")
+
+    def test_detail_view_without_history_shows_empty_state(self):
+        asset = Asset.objects.create(
+            name="No History Detail",
+            inventory_number="DETAIL-HISTORY-EMPTY-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        user = User.objects.create_superuser(
+            username="detail-history-empty-superuser",
+            email="detail-history-empty-superuser@example.com",
+            password="test-pass-123",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Brak historii środka.")
+
+    def test_detail_history_respects_asset_detail_scope(self):
+        allowed_location = Location.objects.create(name="Detail History Allowed")
+        outside_location = Location.objects.create(name="Detail History Outside")
+        asset = Asset.objects.create(
+            name="Out Of Scope History Detail",
+            inventory_number="DETAIL-HISTORY-SCOPE-001",
+            status=Asset.Status.IN_STOCK,
+            location=outside_location.path,
+            location_fk=outside_location,
+            category="IT",
+        )
+        AssetHistoryEntry.objects.create(
+            asset=asset,
+            event_type=AssetHistoryEntry.EventType.UPDATED,
+            description="Zmieniono nazwę",
+            old_value="Old",
+            new_value="New",
+            field_name="name",
+        )
+        user = User.objects.create_user(username="detail-history-scoped-user", password="test-pass-123")
+        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.save(update_fields=["role"])
+        user.profile.allowed_locations.add(allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_detail_view_renders_system_for_history_without_operator(self):
+        asset = Asset.objects.create(
+            name="System History Detail",
+            inventory_number="DETAIL-HISTORY-SYSTEM-001",
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        viewer = User.objects.create_superuser(
+            username="detail-history-system-superuser",
+            email="detail-history-system-superuser@example.com",
+            password="test-pass-123",
+        )
+        AssetHistoryEntry.objects.create(
+            asset=asset,
+            operator=None,
+            event_type=AssetHistoryEntry.EventType.UPDATED,
+            description="Zmieniono nazwę",
+            old_value="Stara nazwa",
+            new_value="Nowa nazwa",
+            field_name="name",
+        )
+        self.client.force_login(viewer)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "System")
+
 
 class AssetUpdateViewTests(TestCase):
     def _messages(self, response):
@@ -4503,6 +4785,38 @@ class AssetUpdateViewTests(TestCase):
         }
         payload.update(overrides)
         return payload
+
+    def _unchanged_update_payload(self, asset):
+        return {
+            "name": asset.name,
+            "inventory_number": asset.inventory_number,
+            "asset_type": asset.asset_type,
+            "category": asset.category,
+            "manufacturer": asset.manufacturer,
+            "model": asset.model,
+            "serial_number": asset.serial_number,
+            "barcode": asset.barcode,
+            "description": asset.description,
+            "purchase_date": asset.purchase_date.isoformat() if asset.purchase_date else "",
+            "commissioning_date": asset.commissioning_date.isoformat() if asset.commissioning_date else "",
+            "purchase_value": str(asset.purchase_value) if asset.purchase_value is not None else "",
+            "invoice_number": asset.invoice_number,
+            "external_id": asset.external_id,
+            "cost_center": asset.cost_center,
+            "organizational_unit": asset.organizational_unit,
+            "department": asset.department,
+            "location_fk": str(asset.location_fk_id) if asset.location_fk_id else "",
+            "room": asset.room,
+            "responsible_person": str(asset.responsible_person_id) if asset.responsible_person_id else "",
+            "current_user": str(asset.current_user_id) if asset.current_user_id else "",
+            "status": asset.status,
+            "technical_condition": asset.technical_condition,
+            "last_inventory_date": asset.last_inventory_date.isoformat() if asset.last_inventory_date else "",
+            "next_review_date": asset.next_review_date.isoformat() if asset.next_review_date else "",
+            "warranty_until": asset.warranty_until.isoformat() if asset.warranty_until else "",
+            "insurance_until": asset.insurance_until.isoformat() if asset.insurance_until else "",
+            "is_active": "on" if asset.is_active else "",
+        }
 
     def _manager_with_location(self, username, location):
         user = User.objects.create_user(username=username, password="test-pass-123")
@@ -4647,6 +4961,91 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(asset.location_fk, allowed_location)
         self.assertEqual(asset.status, Asset.Status.IN_USE)
         self.assertFalse(AssetChangeRequest.objects.exists())
+
+    def test_update_without_approval_creates_history_for_changed_field(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location, name="Original Name")
+        user = self._manager_with_location("update-history", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="History Name"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        entry = AssetHistoryEntry.objects.get(asset=asset, field_name="name")
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.UPDATED)
+        self.assertEqual(entry.description, "Zmieniono nazwę")
+        self.assertEqual(entry.old_value, "Original Name")
+        self.assertEqual(entry.new_value, "History Name")
+        self.assertEqual(entry.operator, user)
+        self.assertEqual(entry.source_object_type, "")
+        self.assertIsNone(entry.source_object_id)
+
+    def test_update_history_only_changed_business_fields(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location, name="Only Changed Original")
+        user = self._manager_with_location("update-history-only-changed", allowed_location)
+        self.client.force_login(user)
+
+        payload = self._unchanged_update_payload(asset)
+        payload["description"] = "Technical description change only"
+        payload["record_quantity"] = "99"
+        response = self.client.post(reverse("assets:update", kwargs={"pk": asset.pk}), data=payload)
+
+        asset.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(asset.description, "Technical description change only")
+        self.assertEqual(asset.record_quantity, 99)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_update_history_formats_location_status_bool_and_decimal(self):
+        allowed_location, _ = self._create_location_tree()
+        child_location = Location.objects.create(name="Sala historii", parent=allowed_location)
+        asset = self._create_asset(
+            location_obj=allowed_location,
+            status=Asset.Status.IN_STOCK,
+            is_active=True,
+            purchase_value=Decimal("10.50"),
+        )
+        user = self._manager_with_location("update-history-format", allowed_location)
+        self.client.force_login(user)
+
+        payload = self._unchanged_update_payload(asset)
+        payload["location_fk"] = str(child_location.id)
+        payload["status"] = Asset.Status.LIQUIDATED
+        payload["purchase_value"] = "20.75"
+        payload.pop("is_active")
+        response = self.client.post(reverse("assets:update", kwargs={"pk": asset.pk}), data=payload)
+
+        self.assertEqual(response.status_code, 302)
+        entries = {
+            entry.field_name: entry
+            for entry in AssetHistoryEntry.objects.filter(asset=asset)
+        }
+        self.assertEqual(entries["location_fk"].old_value, allowed_location.path)
+        self.assertEqual(entries["location_fk"].new_value, child_location.path)
+        self.assertEqual(entries["status"].old_value, "Na stanie")
+        self.assertEqual(entries["status"].new_value, "Zlikwidowany")
+        self.assertEqual(entries["is_active"].old_value, "Tak")
+        self.assertEqual(entries["is_active"].new_value, "Nie")
+        self.assertEqual(entries["purchase_value"].old_value, "10.50")
+        self.assertEqual(entries["purchase_value"].new_value, "20.75")
+
+    def test_update_without_changes_creates_no_history_entries(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location)
+        user = self._manager_with_location("update-history-no-change", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._unchanged_update_payload(asset),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_user_requiring_approval_queues_update_without_saving_asset(self):
         allowed_location, _ = self._create_location_tree()
@@ -4948,6 +5347,27 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(asset.technical_condition, Asset.TechnicalCondition.GOOD)
         self.assertIsNotNone(asset.location_fk)
         self.assertEqual(asset.location, asset.location_fk.path)
+
+    def test_create_without_approval_creates_history_entry(self):
+        user = User.objects.create_user(username="asset-history-creator", password="test-pass-123")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:create"),
+            data=self._valid_asset_payload(inventory_number="CREATE-HISTORY-001"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        asset = Asset.objects.get(inventory_number="CREATE-HISTORY-001")
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.CREATED)
+        self.assertEqual(entry.description, "Utworzono środek")
+        self.assertEqual(entry.old_value, "")
+        self.assertEqual(entry.new_value, "")
+        self.assertEqual(entry.field_name, "")
+        self.assertEqual(entry.operator, user)
+        self.assertEqual(entry.source_object_type, "")
+        self.assertIsNone(entry.source_object_id)
 
     def test_invalid_create_form_does_not_create_asset(self):
         user = User.objects.create_user(username="asset-invalid", password="test-pass-123")
