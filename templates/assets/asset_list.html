@@ -1628,6 +1628,7 @@
     <section
         class="asset-list-shell"
         data-api-url="{% url 'assets:api-list' %}"
+        data-export-url="{% url 'assets:api-export' %}"
         data-detail-url-template="{% url 'assets:detail' 0 %}"
         data-mode="standard"
     >
@@ -1719,6 +1720,9 @@
                             <div id="asset-active-sort">Sortowanie: Data modyfikacji ↓</div>
                             <div id="asset-results-summary">Ładowanie danych...</div>
                         </div>
+                        <button id="asset-export-csv" type="button" class="ui-btn ui-btn--secondary">
+                            Eksport CSV
+                        </button>
                         <div class="asset-list-columns">
                             <button id="asset-columns-toggle" type="button" class="ui-btn ui-btn--secondary" aria-expanded="false" aria-controls="asset-columns-panel">
                                 Kolumny
@@ -2181,6 +2185,7 @@
             const storageKeyWorkMode = "asset-list-work-mode-v1";
             const storageKeyRejectedDismissed = "asset-rejected-dismissed-v1";
             const apiUrl = shell.dataset.apiUrl;
+            const exportUrl = shell.dataset.exportUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
             const detailTemplate = shell.dataset.detailUrlTemplate;
@@ -2293,6 +2298,7 @@
                 columnsContainer: shell.querySelector(".asset-list-table-tools"),
                 columnsTrigger: shell.querySelector(".asset-list-columns"),
                 columnsToggle: document.getElementById("asset-columns-toggle"),
+                exportCsvButton: document.getElementById("asset-export-csv"),
                 columnsPanel: document.getElementById("asset-columns-panel"),
                 columnsOptions: document.getElementById("asset-columns-options"),
                 inventoryBanner: document.getElementById("asset-inventory-banner"),
@@ -2426,6 +2432,10 @@ let searchDebounceId = null;
 
                 elements.columnsPanel.addEventListener("click", function (event) {
                     event.stopPropagation();
+                });
+
+                elements.exportCsvButton.addEventListener("click", function () {
+                    window.location.assign(buildExportUrl());
                 });
 
                 document.addEventListener("click", function (event) {
@@ -3914,6 +3924,23 @@ let searchDebounceId = null;
                     params.set(key, value);
                 });
                 return apiUrl + "?" + params.toString();
+            }
+
+            function buildExportUrl() {
+                const params = new URLSearchParams(new URL(buildApiUrl(), window.location.origin).search);
+                params.delete("page");
+                params.delete("page_size");
+                params.set("columns", getExportColumnKeys().join(","));
+                return exportUrl + "?" + params.toString();
+            }
+
+            function getExportColumnKeys() {
+                const blockedColumns = new Set(["select", "terminal", "odczyt", "reczne", "ilosc_faktyczna"]);
+                return getVisibleColumns().map(function (column) {
+                    return column.key;
+                }).filter(function (key) {
+                    return !blockedColumns.has(key);
+                });
             }
 
             function buildDetailUrl(id) {

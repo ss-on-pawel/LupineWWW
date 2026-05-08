@@ -1,3 +1,4 @@
+import csv
 import json
 import importlib
 
@@ -3003,6 +3004,7 @@ class AssetListApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
 
+        self.assertSetEqual(set(payload.keys()), {"results", "pagination", "filters"})
         self.assertEqual(len(payload["results"]), 50)
         self.assertEqual(payload["pagination"]["page"], 1)
         self.assertEqual(payload["pagination"]["page_size"], 50)
@@ -3320,6 +3322,175 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(payload["pagination"]["total_items"], 1)
         self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
+
+
+class AssetExportCsvApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root_location = Location.objects.create(name="Eksport Warszawa")
+        cls.child_location = Location.objects.create(name="Magazyn", parent=cls.root_location)
+        cls.other_location = Location.objects.create(name="Eksport Krakow")
+        cls.admin_user = User.objects.create_superuser(
+            username="export-admin",
+            email="export-admin@example.com",
+            password="test-pass-123",
+        )
+        cls.manager_user = User.objects.create_user(username="export-manager", password="test-pass-123")
+        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.save(update_fields=["role"])
+        cls.manager_user.profile.allowed_locations.add(cls.root_location)
+
+        Asset.objects.create(
+            name="Za\u017c\u00f3\u0142\u0107 laptop",
+            inventory_number="EXP-001",
+            asset_type=Asset.AssetType.FIXED,
+            status=Asset.Status.IN_USE,
+            location_fk=cls.root_location,
+            category="IT",
+            purchase_value=Decimal("1234.50"),
+            record_quantity=7,
+            last_inventory_quantity=3,
+            purchase_date=date(2024, 5, 1),
+        )
+        Asset.objects.create(
+            name="Export Monitor",
+            inventory_number="EXP-002",
+            asset_type=Asset.AssetType.LOW_VALUE,
+            status=Asset.Status.RESERVED,
+            location_fk=cls.child_location,
+            category="IT",
+            purchase_value=Decimal("2500.00"),
+            record_quantity=4,
+        )
+        Asset.objects.create(
+            name="Outside Export",
+            inventory_number="EXP-003",
+            asset_type=Asset.AssetType.FIXED,
+            status=Asset.Status.IN_STOCK,
+            location_fk=cls.other_location,
+            category="Office",
+            purchase_value=Decimal("500.00"),
+        )
+
+    def setUp(self):
+        self.client.force_login(self.admin_user)
+
+    def _export(self, params=None):
+        return self.client.get(reverse("assets:api-export"), params or {})
+
+    def _csv_rows(self, response):
+        text = response.content.decode("utf-8-sig")
+        return list(csv.reader(StringIO(text), delimiter=";"))
+
+    def test_export_requires_login(self):
+        self.client.logout()
+
+        response = self._export({"columns": "inventory_number"})
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_export_respects_user_location_scope(self):
+        self.client.force_login(self.manager_user)
+
+        response = self._export({"columns": "inventory_number,name", "ordering": "inventory_number"})
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual([row[0] for row in rows[1:]], ["EXP-001", "EXP-002"])
+
+    def test_export_respects_search(self):
+        response = self._export({"columns": "inventory_number,name", "search": "Monitor"})
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual(rows, [["Nr inwentarzowy", "Nazwa"], ["EXP-002", "Export Monitor"]])
+
+    def test_export_respects_dynamic_filters(self):
+        response = self._export(
+            {
+                "columns": "inventory_number,status",
+                "filter__status__equals": Asset.Status.RESERVED,
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual(rows, [["Nr inwentarzowy", "Status"], ["EXP-002", "Zarezerwowany"]])
+
+    def test_export_respects_ordering(self):
+        response = self._export({"columns": "inventory_number", "ordering": "-purchase_value"})
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual([row[0] for row in rows[1:]], ["EXP-002", "EXP-001", "EXP-003"])
+
+    def test_export_respects_columns_and_order(self):
+        response = self._export({"columns": "name,inventory_number,purchase_value", "search": "EXP-001"})
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual(rows[0], ["Nazwa", "Nr inwentarzowy", "Wartość"])
+        self.assertEqual(rows[1], ["Za\u017c\u00f3\u0142\u0107 laptop", "EXP-001", "1234.50"])
+
+    def test_export_ignores_blocked_columns(self):
+        response = self._export(
+            {
+                "columns": "select,inventory_number,record_quantity,last_inventory_quantity,terminal,odczyt,reczne,ilosc_faktyczna,name",
+                "search": "EXP-001",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual(rows[0], ["Nr inwentarzowy", "Nazwa"])
+        self.assertEqual(rows[1], ["EXP-001", "Za\u017c\u00f3\u0142\u0107 laptop"])
+
+    def test_export_current_quantity_matches_asset_list_logic(self):
+        response = self._export({"columns": "inventory_number,current_quantity", "ordering": "inventory_number"})
+
+        self.assertEqual(response.status_code, 200)
+        rows = self._csv_rows(response)
+        self.assertEqual(rows[0], ["Nr inwentarzowy", "Ilość"])
+        self.assertEqual(rows[1], ["EXP-001", "3"])
+        self.assertEqual(rows[2], ["EXP-002", "4"])
+
+    def test_export_csv_contains_polish_characters(self):
+        response = self._export({"columns": "name", "search": "EXP-001"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Za\u017c\u00f3\u0142\u0107", response.content.decode("utf-8-sig"))
+
+    def test_export_content_type_is_csv_utf8(self):
+        response = self._export({"columns": "inventory_number"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+        self.assertRegex(
+            response["Content-Disposition"],
+            r'attachment; filename="assets-export-\d{4}-\d{2}-\d{2}\.csv"',
+        )
+
+    def test_export_without_columns_returns_400(self):
+        response = self._export()
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_export_with_only_blocked_columns_returns_400(self):
+        response = self._export(
+            {"columns": "select,record_quantity,last_inventory_quantity,terminal,odczyt,reczne,ilosc_faktyczna"}
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+
+class AssetListApiExtendedTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="api-extended-admin",
+            email="api-extended-admin@example.com",
+            password="test-pass-123",
+        )
+        self.client.force_login(self.admin_user)
 
     def test_api_exposes_extended_system_columns(self):
         user = User.objects.create_user(username="operator", first_name="Jan", last_name="Kowalski")
@@ -4026,6 +4197,9 @@ class AssetListViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-api-url="/api/assets/"')
+        self.assertContains(response, 'data-export-url="/api/assets/export/"')
+        self.assertContains(response, 'id="asset-export-csv"')
+        self.assertContains(response, "Eksport CSV")
         self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
 
     def test_list_view_shows_approved_change_summary_for_regular_user(self):

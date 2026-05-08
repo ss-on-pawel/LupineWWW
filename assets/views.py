@@ -1,3 +1,4 @@
+import csv
 import json
 
 from accounts.utils import get_accessible_location_ids
@@ -7,10 +8,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.paginator import EmptyPage, Paginator
 from django.db.models import Exists, OuterRef, Q, Subquery
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
-from django.views.decorators.http import require_POST
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
@@ -23,6 +25,160 @@ from .services import (
     user_requires_asset_change_approval,
 )
 from locations.models import Location
+
+
+def _format_csv_date(value):
+    return value.isoformat() if value else ""
+
+
+def _format_csv_datetime(value):
+    if not value:
+        return ""
+    return timezone.localtime(value).strftime("%Y-%m-%d %H:%M")
+
+
+def _format_csv_decimal(value):
+    return str(value) if value is not None else ""
+
+
+def _format_csv_bool(value):
+    return "Tak" if value else "Nie"
+
+
+def _get_asset_current_quantity(asset):
+    if asset.last_inventory_quantity is not None:
+        return asset.last_inventory_quantity
+    return asset.record_quantity
+
+
+EXPORTABLE_ASSET_COLUMNS = {
+    "inventory_number": {
+        "label": "Nr inwentarzowy",
+        "value": lambda asset, context: asset.inventory_number,
+    },
+    "name": {
+        "label": "Nazwa",
+        "value": lambda asset, context: asset.name,
+    },
+    "status": {
+        "label": "Status",
+        "value": lambda asset, context: asset.get_status_display(),
+    },
+    "location": {
+        "label": "Lokalizacja",
+        "value": lambda asset, context: asset.location,
+    },
+    "category": {
+        "label": "Kategoria",
+        "value": lambda asset, context: asset.category,
+    },
+    "updated_at": {
+        "label": "Data modyfikacji",
+        "value": lambda asset, context: _format_csv_datetime(asset.updated_at),
+    },
+    "purchase_value": {
+        "label": "Wartość",
+        "value": lambda asset, context: _format_csv_decimal(asset.purchase_value),
+    },
+    "current_quantity": {
+        "label": "Ilość",
+        "value": lambda asset, context: _get_asset_current_quantity(asset),
+    },
+    "asset_type": {
+        "label": "Rodzaj",
+        "value": lambda asset, context: _format_asset_type_display(asset, context["asset_type_names_by_code"]),
+    },
+    "manufacturer": {
+        "label": "Producent",
+        "value": lambda asset, context: asset.manufacturer,
+    },
+    "model": {
+        "label": "Model",
+        "value": lambda asset, context: asset.model,
+    },
+    "barcode": {
+        "label": "Kod kreskowy",
+        "value": lambda asset, context: asset.barcode,
+    },
+    "department": {
+        "label": "Dział",
+        "value": lambda asset, context: asset.department,
+    },
+    "organizational_unit": {
+        "label": "Jednostka org.",
+        "value": lambda asset, context: asset.organizational_unit,
+    },
+    "room": {
+        "label": "Pomieszczenie",
+        "value": lambda asset, context: asset.room,
+    },
+    "responsible_person": {
+        "label": "Osoba odpowiedzialna",
+        "value": lambda asset, context: _format_person(asset.responsible_person),
+    },
+    "current_user": {
+        "label": "Aktualny użytkownik",
+        "value": lambda asset, context: _format_person(asset.current_user),
+    },
+    "technical_condition": {
+        "label": "Stan techniczny",
+        "value": lambda asset, context: asset.get_technical_condition_display(),
+    },
+    "purchase_date": {
+        "label": "Data zakupu",
+        "value": lambda asset, context: _format_csv_date(asset.purchase_date),
+    },
+    "commissioning_date": {
+        "label": "Przyjęcie do użycia",
+        "value": lambda asset, context: _format_csv_date(asset.commissioning_date),
+    },
+    "invoice_number": {
+        "label": "Nr faktury",
+        "value": lambda asset, context: asset.invoice_number,
+    },
+    "external_id": {
+        "label": "ID zewnętrzne",
+        "value": lambda asset, context: asset.external_id,
+    },
+    "cost_center": {
+        "label": "MPK / koszt",
+        "value": lambda asset, context: asset.cost_center,
+    },
+    "last_inventory_date": {
+        "label": "Ost. inwentaryzacja",
+        "value": lambda asset, context: _format_csv_date(asset.last_inventory_date),
+    },
+    "last_inventory_at": {
+        "label": "Data inwent.",
+        "value": lambda asset, context: _format_csv_datetime(asset.last_inventory_at),
+    },
+    "last_inventory_session_number": {
+        "label": "Sesja inwent.",
+        "value": lambda asset, context: (
+            asset.last_inventory_session.number if asset.last_inventory_session_id else ""
+        ),
+    },
+    "next_review_date": {
+        "label": "Nast. przegląd",
+        "value": lambda asset, context: _format_csv_date(asset.next_review_date),
+    },
+    "warranty_until": {
+        "label": "Gwarancja do",
+        "value": lambda asset, context: _format_csv_date(asset.warranty_until),
+    },
+    "insurance_until": {
+        "label": "Ubezpieczenie do",
+        "value": lambda asset, context: _format_csv_date(asset.insurance_until),
+    },
+    "serial_number": {
+        "label": "Nr seryjny",
+        "value": lambda asset, context: asset.serial_number,
+    },
+    "is_active": {
+        "label": "Aktywny",
+        "value": lambda asset, context: _format_csv_bool(asset.is_active),
+    },
+}
 
 
 def _user_can_review_asset_changes(user):
@@ -602,9 +758,7 @@ def _format_asset_type_display(asset, asset_type_names_by_code=None):
     return legacy_display or asset.asset_type
 
 
-def asset_list_api(request):
-    page = max(_parse_positive_int(request.GET.get("page"), default=1), 1)
-    page_size = min(max(_parse_positive_int(request.GET.get("page_size"), default=50), 1), 200)
+def build_asset_list_queryset(request):
     search = request.GET.get("search", "").strip()
     status = request.GET.get("status", "").strip()
     location = request.GET.get("location", "").strip()
@@ -705,6 +859,19 @@ def asset_list_api(request):
     ordering_field = _resolve_asset_ordering(ordering)
     queryset = queryset.order_by(ordering_field, "id")
 
+    return queryset, {
+        "search": search,
+        "status": status,
+        "location": location,
+        "ordering": ordering_field,
+    }
+
+
+def asset_list_api(request):
+    page = max(_parse_positive_int(request.GET.get("page"), default=1), 1)
+    page_size = min(max(_parse_positive_int(request.GET.get("page_size"), default=50), 1), 200)
+    queryset, active_filters = build_asset_list_queryset(request)
+
     paginator = Paginator(queryset, page_size)
 
     try:
@@ -786,14 +953,57 @@ def asset_list_api(request):
                 "has_next": page_obj.has_next(),
                 "has_previous": page_obj.has_previous(),
             },
-            "filters": {
-                "search": search,
-                "status": status,
-                "location": location,
-                "ordering": ordering_field,
-            },
+            "filters": active_filters,
         }
     )
+
+
+@login_required
+@require_GET
+def asset_export_csv_api(request):
+    selected_columns = _parse_export_columns(request.GET.get("columns", ""))
+    if not selected_columns:
+        return JsonResponse({"error": "No exportable columns selected."}, status=400)
+
+    queryset, _active_filters = build_asset_list_queryset(request)
+    today = timezone.localdate().isoformat()
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="assets-export-{today}.csv"'
+    response.write("\ufeff")
+
+    writer = csv.writer(response, delimiter=";")
+    writer.writerow([EXPORTABLE_ASSET_COLUMNS[column]["label"] for column in selected_columns])
+
+    context = {
+        "asset_type_names_by_code": dict(AssetTypeDictionary.objects.values_list("code", "name")),
+    }
+    for asset in queryset.iterator(chunk_size=500):
+        writer.writerow(
+            [
+                _normalize_csv_value(EXPORTABLE_ASSET_COLUMNS[column]["value"](asset, context))
+                for column in selected_columns
+            ]
+        )
+
+    return response
+
+
+def _parse_export_columns(raw_columns):
+    columns = []
+    seen = set()
+    for column in str(raw_columns).split(","):
+        column = column.strip()
+        if not column or column in seen or column not in EXPORTABLE_ASSET_COLUMNS:
+            continue
+        columns.append(column)
+        seen.add(column)
+    return columns
+
+
+def _normalize_csv_value(value):
+    if value is None:
+        return ""
+    return value
 
 
 def asset_bulk_move_api(request):

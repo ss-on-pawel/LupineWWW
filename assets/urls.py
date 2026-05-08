@@ -12,6 +12,7 @@ from .views import (
     asset_change_reject,
     asset_bulk_move_api,
     asset_detail,
+    asset_export_csv_api,
     asset_list_api,
 )
 
@@ -20,6 +21,7 @@ app_name = "assets"
 
 urlpatterns = [
     path("api/assets/", asset_list_api, name="api-list"),
+    path("api/assets/export/", asset_export_csv_api, name="api-export"),
     path("api/assets/bulk-move/", asset_bulk_move_api, name="api-bulk-move"),
     path("", AssetListView.as_view(), name="list"),
     path("assets/changes/", AssetChangeRequestListView.as_view(), name="change-list"),
