@@ -27,6 +27,7 @@ from .models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDicti
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
+    get_asset_withdraw_capabilities,
     reject_asset_change_request,
     serialize_asset_form_payload,
     user_requires_asset_change_approval,
@@ -252,6 +253,115 @@ class AssetRecordQuantityModelTests(TestCase):
         )
 
         self.assertEqual(asset.current_quantity, 0)
+
+
+class AssetWithdrawCapabilitiesTests(TestCase):
+    def _create_asset(self, inventory_number, **overrides):
+        defaults = {
+            "name": "Withdraw capabilities asset",
+            "inventory_number": inventory_number,
+            "asset_type": Asset.AssetType.FIXED,
+            "record_quantity": 1,
+            "is_active": True,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def test_regular_asset_with_quantity_one_can_only_be_fully_withdrawn(self):
+        asset = self._create_asset("WITHDRAW-CAP-FIXED-001")
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertTrue(capabilities["can_full_withdraw"])
+        self.assertFalse(capabilities["can_partial_withdraw"])
+        self.assertFalse(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 1)
+
+    def test_quantity_asset_with_quantity_one_can_only_be_fully_withdrawn(self):
+        asset = self._create_asset(
+            "WITHDRAW-CAP-QTY-ONE-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=1,
+        )
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertTrue(capabilities["can_full_withdraw"])
+        self.assertFalse(capabilities["can_partial_withdraw"])
+        self.assertTrue(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 1)
+
+    def test_quantity_asset_with_quantity_above_one_can_be_partially_withdrawn(self):
+        asset = self._create_asset(
+            "WITHDRAW-CAP-QTY-MANY-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=3,
+        )
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertTrue(capabilities["can_full_withdraw"])
+        self.assertTrue(capabilities["can_partial_withdraw"])
+        self.assertTrue(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 3)
+
+    def test_quantity_fallback_works_without_asset_type_ref(self):
+        asset = self._create_asset(
+            "WITHDRAW-CAP-QTY-FALLBACK-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=4,
+        )
+        Asset.objects.filter(pk=asset.pk).update(asset_type_ref=None)
+        asset.refresh_from_db()
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertTrue(capabilities["can_full_withdraw"])
+        self.assertTrue(capabilities["can_partial_withdraw"])
+        self.assertTrue(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 4)
+
+    def test_unknown_legacy_asset_type_is_not_quantity_based(self):
+        asset = self._create_asset("WITHDRAW-CAP-LEGACY-001", record_quantity=5)
+        Asset.objects.filter(pk=asset.pk).update(asset_type="legacy_unknown", asset_type_ref=None)
+        asset.refresh_from_db()
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertTrue(capabilities["can_full_withdraw"])
+        self.assertFalse(capabilities["can_partial_withdraw"])
+        self.assertFalse(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 5)
+
+    def test_inactive_asset_cannot_be_withdrawn(self):
+        asset = self._create_asset(
+            "WITHDRAW-CAP-INACTIVE-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=5,
+            is_active=False,
+        )
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertFalse(capabilities["can_full_withdraw"])
+        self.assertFalse(capabilities["can_partial_withdraw"])
+        self.assertTrue(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 5)
+
+    def test_zero_current_quantity_is_preserved(self):
+        asset = self._create_asset(
+            "WITHDRAW-CAP-ZERO-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=5,
+            last_inventory_quantity=0,
+        )
+
+        capabilities = get_asset_withdraw_capabilities(asset)
+
+        self.assertTrue(capabilities["can_full_withdraw"])
+        self.assertFalse(capabilities["can_partial_withdraw"])
+        self.assertTrue(capabilities["is_quantity_based"])
+        self.assertEqual(capabilities["current_quantity"], 0)
 
 
 class AssetLocationSyncModelTests(TestCase):

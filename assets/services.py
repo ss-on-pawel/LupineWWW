@@ -221,6 +221,32 @@ def user_requires_asset_change_approval(user) -> bool:
     return profile.asset_changes_require_approval
 
 
+def get_asset_withdraw_capabilities(asset):
+    from .models import AssetTypeDictionary
+
+    current_quantity = asset.current_quantity
+    if current_quantity is None:
+        current_quantity = 0
+
+    if asset.asset_type_ref_id:
+        is_quantity_based = asset.asset_type_ref.is_quantity_based
+    else:
+        is_quantity_based = AssetTypeDictionary.objects.filter(
+            code=asset.asset_type,
+            is_quantity_based=True,
+        ).exists()
+
+    can_full_withdraw = bool(asset.is_active)
+    can_partial_withdraw = can_full_withdraw and is_quantity_based and current_quantity > 1
+
+    return {
+        "can_full_withdraw": can_full_withdraw,
+        "can_partial_withdraw": can_partial_withdraw,
+        "is_quantity_based": is_quantity_based,
+        "current_quantity": current_quantity,
+    }
+
+
 def serialize_asset_form_payload(cleaned_data, *, exclude_system_managed=False):
     if exclude_system_managed:
         cleaned_data = _without_system_managed_asset_fields(cleaned_data)
