@@ -685,7 +685,7 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
                 operation=AssetChangeRequest.Operation.CREATE,
                 status=AssetChangeRequest.Status.PENDING,
                 asset=None,
-                payload=serialize_asset_form_payload(form.cleaned_data),
+                payload=serialize_asset_form_payload(form.cleaned_data, exclude_system_managed=True),
             )
             messages.success(self.request, "Zmiana została przekazana do akceptacji.")
             return redirect(self.success_url)
@@ -733,8 +733,8 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
                 for field_name in form.fields
             }
             payload = {
-                "current": serialize_asset_form_payload(current_payload),
-                "proposed": serialize_asset_form_payload(form.cleaned_data),
+                "current": serialize_asset_form_payload(current_payload, exclude_system_managed=True),
+                "proposed": serialize_asset_form_payload(form.cleaned_data, exclude_system_managed=True),
             }
             pending_request = AssetChangeRequest.objects.filter(
                 operation=AssetChangeRequest.Operation.UPDATE,

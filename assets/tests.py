@@ -687,6 +687,8 @@ class DeserializeAssetPayloadForFormTests(TestCase):
             "responsible_person": user.pk,
             "current_user": user.pk,
             "is_active": True,
+            "record_quantity": 9,
+            "last_inventory_date": "2026-05-01",
             "category": None,
             "manufacturer": "",
         }
@@ -697,7 +699,9 @@ class DeserializeAssetPayloadForFormTests(TestCase):
         self.assertEqual(form_data["purchase_date"], "2026-04-27")
         self.assertEqual(form_data["responsible_person"], user.pk)
         self.assertEqual(form_data["current_user"], user.pk)
-        self.assertIs(form_data["is_active"], True)
+        self.assertNotIn("is_active", form_data)
+        self.assertNotIn("record_quantity", form_data)
+        self.assertNotIn("last_inventory_date", form_data)
         self.assertIsNone(form_data["category"])
         self.assertEqual(form_data["manufacturer"], "")
 
@@ -999,6 +1003,29 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         self.assertNotEqual(asset.pk, 999)
         self.assertFalse(hasattr(asset, "malicious_field"))
 
+    def test_system_managed_fields_in_create_payload_are_ignored(self):
+        requester = User.objects.create_user(username="approve-create-system-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="approve-create-system-reviewer",
+            email="approve-create-system-reviewer@example.com",
+            password="test-pass-123",
+        )
+        change_request = self._create_request(
+            requester,
+            payload=self._create_payload(
+                inventory_number="APPROVE-CREATE-SYSTEM-001",
+                record_quantity=99,
+                is_active=False,
+                last_inventory_date="2026-05-01",
+            ),
+        )
+
+        asset = approve_asset_change_request(change_request, reviewer)
+
+        self.assertEqual(asset.record_quantity, 1)
+        self.assertTrue(asset.is_active)
+        self.assertIsNone(asset.last_inventory_date)
+
     def test_unsaved_change_request_fails_with_controlled_error(self):
         requester = User.objects.create_user(username="approve-create-unsaved-requester", password="test-pass-123")
         reviewer = User.objects.create_superuser(
@@ -1208,7 +1235,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         updated_asset = approve_asset_change_request(change_request, reviewer)
 
         self.assertEqual(updated_asset.description, "Opis techniczny bez historii")
-        self.assertEqual(updated_asset.record_quantity, 7)
+        self.assertEqual(updated_asset.record_quantity, 1)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
         self.assertFalse(
             AssetHistoryEntry.objects.filter(
@@ -1425,6 +1452,40 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         self.assertFalse(hasattr(updated_asset, "malicious_field"))
         change_request.refresh_from_db()
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
+
+    def test_system_managed_fields_in_update_payload_are_ignored(self):
+        location, _ = self._create_location_tree()
+        requester = User.objects.create_user(username="approve-update-system-requester", password="test-pass-123")
+        reviewer = User.objects.create_superuser(
+            username="approve-update-system-reviewer",
+            email="approve-update-system-reviewer@example.com",
+            password="test-pass-123",
+        )
+        asset = self._create_asset(
+            inventory_number="APPROVE-UPDATE-SYSTEM-001",
+            location_obj=location,
+            record_quantity=4,
+            is_active=True,
+            last_inventory_date=date(2026, 4, 1),
+        )
+        proposed = self._proposed_payload(
+            asset,
+            record_quantity=99,
+            is_active=False,
+            last_inventory_date="2026-05-01",
+        )
+        change_request = self._update_request(
+            requester,
+            asset,
+            payload={"current": self._current_payload(asset), "proposed": proposed},
+        )
+
+        updated_asset = approve_asset_change_request(change_request, reviewer)
+
+        self.assertEqual(updated_asset.name, "Approved Update")
+        self.assertEqual(updated_asset.record_quantity, 4)
+        self.assertTrue(updated_asset.is_active)
+        self.assertEqual(updated_asset.last_inventory_date, date(2026, 4, 1))
 
 
 class RejectAssetChangeRequestTests(TestCase):
@@ -5440,7 +5501,11 @@ class AssetUpdateViewTests(TestCase):
 
     def test_update_history_only_changed_business_fields(self):
         allowed_location, _ = self._create_location_tree()
-        asset = self._create_asset(location_obj=allowed_location, name="Only Changed Original")
+        asset = self._create_asset(
+            location_obj=allowed_location,
+            name="Only Changed Original",
+            record_quantity=3,
+        )
         user = self._manager_with_location("update-history-only-changed", allowed_location)
         self.client.force_login(user)
 
@@ -5452,7 +5517,7 @@ class AssetUpdateViewTests(TestCase):
         asset.refresh_from_db()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(asset.description, "Technical description change only")
-        self.assertEqual(asset.record_quantity, 99)
+        self.assertEqual(asset.record_quantity, 3)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_update_history_formats_location_status_bool_and_decimal(self):
@@ -5483,8 +5548,7 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(entries["location_fk"].new_value, child_location.path)
         self.assertEqual(entries["status"].old_value, "Na stanie")
         self.assertEqual(entries["status"].new_value, "Zlikwidowany")
-        self.assertEqual(entries["is_active"].old_value, "Tak")
-        self.assertEqual(entries["is_active"].new_value, "Nie")
+        self.assertNotIn("is_active", entries)
         self.assertEqual(entries["purchase_value"].old_value, "10.50")
         self.assertEqual(entries["purchase_value"].new_value, "20.75")
 
@@ -5535,6 +5599,12 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(change_request.payload["current"]["location_fk"], allowed_location.id)
         self.assertEqual(change_request.payload["proposed"]["name"], "Queued Update")
         self.assertEqual(change_request.payload["proposed"]["location_fk"], allowed_location.id)
+        self.assertNotIn("record_quantity", change_request.payload["current"])
+        self.assertNotIn("record_quantity", change_request.payload["proposed"])
+        self.assertNotIn("is_active", change_request.payload["current"])
+        self.assertNotIn("is_active", change_request.payload["proposed"])
+        self.assertNotIn("last_inventory_date", change_request.payload["current"])
+        self.assertNotIn("last_inventory_date", change_request.payload["proposed"])
         self.assertNotIn("malicious_field", change_request.payload["current"])
         self.assertNotIn("malicious_field", change_request.payload["proposed"])
         self.assertEqual(self._messages(response), ["Zmiana została przekazana do akceptacji."])
@@ -5660,6 +5730,34 @@ class AssetUpdateViewTests(TestCase):
         asset.refresh_from_db()
         self.assertEqual(response.status_code, 302)
         self.assertFalse(hasattr(asset, "malicious_field"))
+
+    def test_update_ignores_system_managed_post_fields(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(
+            inventory_number="UPDATE-SYSTEM-FIELDS-001",
+            location_obj=allowed_location,
+            record_quantity=5,
+            is_active=True,
+            last_inventory_date=date(2026, 4, 1),
+        )
+        user = self._manager_with_location("update-system-fields", allowed_location)
+        self.client.force_login(user)
+        payload = self._valid_update_payload(
+            asset,
+            name="Saved Business Update",
+            record_quantity="99",
+            last_inventory_date="2026-05-01",
+        )
+        payload.pop("is_active")
+
+        response = self.client.post(reverse("assets:update", kwargs={"pk": asset.pk}), data=payload)
+
+        asset.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(asset.name, "Saved Business Update")
+        self.assertEqual(asset.record_quantity, 5)
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.last_inventory_date, date(2026, 4, 1))
 
     def test_update_changes_location_through_location_fk_and_syncs_cache(self):
         allowed_location, _ = self._create_location_tree()
@@ -5803,6 +5901,24 @@ class AssetCreateViewTests(TestCase):
         self.assertIsNotNone(asset.location_fk)
         self.assertEqual(asset.location, asset.location_fk.path)
 
+    def test_create_ignores_system_managed_post_fields(self):
+        user = User.objects.create_user(username="asset-create-system-fields", password="test-pass-123")
+        self.client.force_login(user)
+
+        payload = self._valid_asset_payload(
+            inventory_number="CREATE-SYSTEM-FIELDS-001",
+            record_quantity="99",
+            last_inventory_date="2026-05-01",
+        )
+        payload.pop("is_active")
+        response = self.client.post(reverse("assets:create"), data=payload)
+
+        self.assertEqual(response.status_code, 302)
+        asset = Asset.objects.get(inventory_number="CREATE-SYSTEM-FIELDS-001")
+        self.assertEqual(asset.record_quantity, 1)
+        self.assertTrue(asset.is_active)
+        self.assertIsNone(asset.last_inventory_date)
+
     def test_create_without_approval_creates_history_entry(self):
         user = User.objects.create_user(username="asset-history-creator", password="test-pass-123")
         self.client.force_login(user)
@@ -5865,6 +5981,9 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(change_request.payload["status"], Asset.Status.IN_STOCK)
         self.assertEqual(change_request.payload["technical_condition"], Asset.TechnicalCondition.GOOD)
         self.assertIn("location_fk", change_request.payload)
+        self.assertNotIn("record_quantity", change_request.payload)
+        self.assertNotIn("is_active", change_request.payload)
+        self.assertNotIn("last_inventory_date", change_request.payload)
 
     def test_approval_payload_uses_cleaned_data_and_ignores_extra_post_fields(self):
         user = User.objects.create_user(username="asset-approval-payload", password="test-pass-123")

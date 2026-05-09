@@ -221,14 +221,16 @@ def user_requires_asset_change_approval(user) -> bool:
     return profile.asset_changes_require_approval
 
 
-def serialize_asset_form_payload(cleaned_data):
+def serialize_asset_form_payload(cleaned_data, *, exclude_system_managed=False):
+    if exclude_system_managed:
+        cleaned_data = _without_system_managed_asset_fields(cleaned_data)
     return {key: _serialize_payload_value(value) for key, value in cleaned_data.items()}
 
 
 def deserialize_asset_payload_for_form(payload):
-    from .forms import AssetForm
+    from .forms import AssetForm, SYSTEM_MANAGED_ASSET_FIELDS
 
-    allowed_fields = set(AssetForm.Meta.fields)
+    allowed_fields = set(AssetForm.Meta.fields) - SYSTEM_MANAGED_ASSET_FIELDS
     return {
         key: value
         for key, value in payload.items()
@@ -294,7 +296,10 @@ def approve_asset_change_request(change_request, reviewer):
                 field_name: getattr(asset, field_name)
                 for field_name in AssetForm.Meta.fields
             }
-            if serialize_asset_form_payload(actual_current) != _with_asset_payload_defaults(payload["current"]):
+            if serialize_asset_form_payload(
+                actual_current,
+                exclude_system_managed=True,
+            ) != _without_system_managed_asset_fields(payload["current"]):
                 raise ValidationError("Asset has changed since the request was created.")
 
             before_values = capture_asset_history_values(asset)
@@ -364,6 +369,19 @@ def _with_asset_payload_defaults(payload):
     payload = dict(payload)
     payload.setdefault("record_quantity", 1)
     return payload
+
+
+def _without_system_managed_asset_fields(payload):
+    if not isinstance(payload, dict):
+        return payload
+
+    from .forms import SYSTEM_MANAGED_ASSET_FIELDS
+
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in SYSTEM_MANAGED_ASSET_FIELDS
+    }
 
 
 def _validate_reviewer_update_scope(reviewer, asset):

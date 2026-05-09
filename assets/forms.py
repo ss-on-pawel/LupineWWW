@@ -6,6 +6,15 @@ from locations.models import Location
 from .models import Asset, AssetTypeDictionary
 
 
+SYSTEM_MANAGED_ASSET_FIELDS = frozenset(
+    {
+        "record_quantity",
+        "is_active",
+        "last_inventory_date",
+    }
+)
+
+
 class AssetForm(forms.ModelForm):
     asset_type = forms.ChoiceField(label="Rodzaj", required=False)
     location_fk = forms.ModelChoiceField(
@@ -95,6 +104,22 @@ class AssetForm(forms.ModelForm):
     def clean_record_quantity(self):
         value = self.cleaned_data.get("record_quantity")
         return 1 if value is None else value
+
+    def save(self, commit=True):
+        asset = super().save(commit=False)
+        if asset.pk:
+            current_asset = Asset.objects.only(*SYSTEM_MANAGED_ASSET_FIELDS).get(pk=asset.pk)
+            for field_name in SYSTEM_MANAGED_ASSET_FIELDS:
+                setattr(asset, field_name, getattr(current_asset, field_name))
+        else:
+            asset.record_quantity = 1
+            asset.is_active = True
+            asset.last_inventory_date = None
+
+        if commit:
+            asset.save()
+            self.save_m2m()
+        return asset
 
     def _get_validation_exclusions(self):
         exclude = super()._get_validation_exclusions()
