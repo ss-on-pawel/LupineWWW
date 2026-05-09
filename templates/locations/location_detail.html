@@ -5,132 +5,129 @@
 {% block extra_head %}
     <style>
         .location-detail-shell {
+            --location-line: 1px solid rgba(15, 23, 42, 0.1);
             display: grid;
             gap: 10px;
         }
-        .location-detail-breadcrumb {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
+        .location-object-header {
+            display: grid;
+            gap: 10px;
+            padding: 18px;
+            border: var(--location-line);
+            background: rgba(255, 255, 255, 0.88);
+        }
+        .location-detail-kicker,
+        .location-detail-section-label,
+        .location-detail-item-label {
+            margin: 0;
             color: var(--app-muted);
             font-family: var(--mono-font);
-            font-size: 0.76rem;
-            letter-spacing: 0.08em;
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
             text-transform: uppercase;
         }
-        .location-detail-breadcrumb span {
-            color: #344054;
+        .location-detail-title {
+            margin: 0;
+            color: #0f1720;
+            font-size: 1.75rem;
+            line-height: 1.12;
+            letter-spacing: 0;
         }
-        .location-detail-back {
+        .location-detail-path {
+            margin: 0;
+            color: var(--app-muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+        .location-meta-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .location-meta-pill {
             display: inline-flex;
             align-items: center;
-            width: fit-content;
-            min-height: 34px;
-            padding: 0 12px;
-            border: 1px solid rgba(15, 23, 42, 0.12);
-            font-size: 0.9rem;
-        }
-        .location-detail-back:hover,
-        .location-detail-back:focus-visible {
-            border-color: rgba(15, 23, 42, 0.2);
-            background: rgba(15, 23, 42, 0.04);
-        }
-        .location-detail-header {
-            display: grid;
-            gap: 8px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+            max-width: 100%;
+            min-height: 30px;
+            padding: 0 10px;
+            border: var(--location-line);
+            border-radius: 999px;
+            background: rgba(248, 250, 252, 0.84);
+            color: #314154;
+            font-family: var(--mono-font);
+            font-size: 0.76rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            overflow-wrap: anywhere;
         }
         .location-detail-actions {
             display: flex;
             align-items: center;
+            justify-content: flex-start;
             gap: 8px;
             flex-wrap: wrap;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
         .location-detail-delete-form {
             display: inline-flex;
             margin: 0;
         }
-        .location-detail-kicker,
-        .location-detail-section-label {
-            margin: 0;
-            color: var(--app-muted);
-            font-family: var(--mono-font);
-            font-size: 0.72rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-        }
-        .location-detail-title {
-            margin: 0;
-            font-size: clamp(2rem, 5vw, 3.1rem);
-            line-height: 0.96;
-            letter-spacing: -0.05em;
-        }
         .location-detail-card {
-            padding: 16px 18px;
-            border: 1px solid rgba(15, 23, 42, 0.1);
-            background:
-                linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px),
-                rgba(255, 255, 255, 0.9);
-            background-size: 28px 28px, 28px 28px, auto;
+            padding: 16px;
+            border: var(--location-line);
+            background: rgba(255, 255, 255, 0.88);
         }
         .location-detail-section-title {
-            margin: 4px 0 0;
-            font-size: 1.25rem;
-            line-height: 1.2;
-            letter-spacing: -0.03em;
+            margin: 6px 0 0;
+            font-size: 1.1rem;
+            line-height: 1.25;
+            letter-spacing: 0;
         }
         .location-detail-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0;
             margin-top: 12px;
-            border-top: 1px solid rgba(15, 23, 42, 0.1);
-            border-left: 1px solid rgba(15, 23, 42, 0.1);
+            border-top: var(--location-line);
+            border-left: var(--location-line);
             background: rgba(255, 255, 255, 0.72);
         }
         .location-detail-item {
-            min-height: 72px;
-            padding: 14px 16px;
-            border-right: 1px solid rgba(15, 23, 42, 0.1);
-            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+            min-height: 66px;
+            padding: 12px 14px;
+            border-right: var(--location-line);
+            border-bottom: var(--location-line);
         }
         .location-detail-item.is-wide {
             grid-column: 1 / -1;
         }
-        .location-detail-item-label {
-            margin: 0;
-            color: var(--app-muted);
-            font-family: var(--mono-font);
-            font-size: 0.72rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-        }
         .location-detail-item-value {
-            margin: 8px 0 0;
+            margin: 7px 0 0;
             color: #101828;
-            font-size: 1rem;
-            line-height: 1.5;
+            font-size: 0.96rem;
+            line-height: 1.45;
             font-weight: 600;
         }
         .location-detail-item-value.is-mono {
             font-family: var(--mono-font);
-            font-size: 0.94rem;
+            font-size: 0.9rem;
             font-weight: 500;
         }
         .location-assets-table-wrap {
             margin-top: 12px;
             overflow-x: auto;
+            border: var(--location-line);
         }
         .location-assets-table {
             width: 100%;
+            min-width: 760px;
             border-collapse: collapse;
+            font-size: 0.9rem;
         }
         .location-assets-table th,
         .location-assets-table td {
-            padding: 10px 14px;
+            padding: 9px 11px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.08);
             text-align: left;
             vertical-align: top;
@@ -142,14 +139,20 @@
             font-weight: 600;
             letter-spacing: 0.12em;
             text-transform: uppercase;
+            background: rgba(248, 250, 252, 0.92);
+            white-space: nowrap;
         }
         .location-assets-table tbody tr:last-child td {
             border-bottom: 0;
         }
+        .location-assets-table tbody tr:hover td {
+            background: rgba(248, 250, 252, 0.72);
+        }
         .location-assets-code {
             font-family: var(--mono-font);
             color: #344054;
-            font-size: 0.92rem;
+            font-size: 0.86rem;
+            white-space: nowrap;
         }
         .location-assets-name {
             color: #101828;
@@ -157,11 +160,6 @@
         }
         .location-assets-status {
             color: #344054;
-        }
-        .location-assets-actions {
-            color: #667085;
-            font-family: var(--mono-font);
-            font-size: 1rem;
         }
         .location-assets-empty {
             margin: 12px 0 0;
@@ -177,8 +175,8 @@
             }
         }
         @media (max-width: 700px) {
+            .location-object-header,
             .location-detail-card {
-                padding: 16px;
                 border-left: 0;
                 border-right: 0;
                 margin-left: -16px;
@@ -195,31 +193,30 @@
 
 {% block content %}
     <section class="location-detail-shell">
-        <a class="location-detail-back" href="{% url 'locations:list' %}">&larr; Powrót do lokalizacji</a>
-
-        <nav class="location-detail-breadcrumb" aria-label="Breadcrumb">
-            <span>Lokalizacje</span>
-            {% for item in breadcrumbs %}
-                <span>/</span><span>{{ item }}</span>
-            {% endfor %}
-        </nav>
-
-        <header class="location-detail-header">
-            <p class="location-detail-kicker">Szczegóły lokalizacji</p>
+        <header class="location-object-header">
+            <p class="location-detail-kicker">Lokalizacja</p>
             <h1 class="location-detail-title">{{ location.name }}</h1>
-            <div class="location-detail-actions">
-                <a class="ui-btn ui-btn--primary" href="{% url 'locations:create-child' location.id %}">Dodaj podlokalizację</a>
-                <a class="ui-btn ui-btn--secondary" href="{% url 'locations:update' location.id %}">Edytuj</a>
-                <form class="location-detail-delete-form" method="post" action="{% url 'locations:delete' location.id %}">
-                    {% csrf_token %}
-                    <button class="ui-btn ui-btn--danger" type="submit">Usuń</button>
-                </form>
+            <p class="location-detail-path">{{ location.path }}</p>
+            <div class="location-meta-row" aria-label="Metadane lokalizacji">
+                <span class="location-meta-pill">Kod: {{ location.code }}</span>
+                <span class="location-meta-pill">Nadrzędna: {{ location.parent_name|default:"-" }}</span>
+                <span class="location-meta-pill">Środki: {{ assigned_assets_count }}</span>
             </div>
         </header>
 
+        <div class="location-detail-actions" aria-label="Akcje lokalizacji">
+            <a class="ui-btn ui-btn--primary" href="{% url 'locations:update' location.id %}">Edytuj</a>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'locations:create-child' location.id %}">Dodaj podrzędną</a>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'locations:list' %}">Wróć do listy</a>
+            <form class="location-detail-delete-form" method="post" action="{% url 'locations:delete' location.id %}">
+                {% csrf_token %}
+                <button class="ui-btn ui-btn--danger" type="submit">Usuń</button>
+            </form>
+        </div>
+
         <section class="location-detail-card" aria-labelledby="location-info-title">
-            <p class="location-detail-section-label">Sekcja</p>
-            <h2 id="location-info-title" class="location-detail-section-title">Informacje o lokalizacji</h2>
+            <p class="location-detail-section-label">Dane</p>
+            <h2 id="location-info-title" class="location-detail-section-title">Dane lokalizacji</h2>
             <div class="location-detail-grid">
                 <div class="location-detail-item">
                     <p class="location-detail-item-label">Nazwa</p>
@@ -231,7 +228,7 @@
                 </div>
                 <div class="location-detail-item">
                     <p class="location-detail-item-label">Lokalizacja nadrzędna</p>
-                    <p class="location-detail-item-value">{{ location.parent_name }}</p>
+                    <p class="location-detail-item-value">{{ location.parent_name|default:"-" }}</p>
                 </div>
                 <div class="location-detail-item is-wide">
                     <p class="location-detail-item-label">Pełna ścieżka</p>
@@ -241,8 +238,8 @@
         </section>
 
         <section class="location-detail-card" aria-labelledby="location-content-title">
-            <p class="location-detail-section-label">Sekcja</p>
-            <h2 id="location-content-title" class="location-detail-section-title">Zawartość lokalizacji ({{ assigned_assets_count }})</h2>
+            <p class="location-detail-section-label">Zawartość</p>
+            <h2 id="location-content-title" class="location-detail-section-title">Środki w lokalizacji ({{ assigned_assets_count }})</h2>
             {% if assigned_assets %}
                 <div class="location-assets-table-wrap">
                     <table class="location-assets-table">
@@ -268,7 +265,7 @@
                                         <span class="location-assets-status">{{ asset.get_status_display }}</span>
                                     </td>
                                     <td data-label="Lokalizacja">
-                                        <span class="location-assets-status">{{ asset.location|default:"—" }}</span>
+                                        <span class="location-assets-status">{{ asset.location|default:"-" }}</span>
                                     </td>
                                     <td data-label="Akcje">
                                         <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' asset.id %}">Otwórz</a>
