@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Ewidencja majątku{% endblock %}
+{% block title %}{{ page_title|default:"Ewidencja majątku" }}{% endblock %}
 
 {% block extra_head %}
     <style>
@@ -424,6 +424,29 @@
             display: grid;
             gap: 0;
             min-width: 0;
+        }
+        .asset-list-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 10px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--line);
+        }
+        .asset-list-heading h1 {
+            margin: 0;
+            font-size: 1.35rem;
+            line-height: 1.2;
+            letter-spacing: 0;
+        }
+        .asset-list-heading p {
+            margin: 4px 0 0;
+            color: #475467;
+            font-size: 0.9rem;
+        }
+        .asset-list-mode-link {
+            flex: 0 0 auto;
         }
         .asset-layout-table {
             overflow-x: clip;
@@ -1627,9 +1650,10 @@
 {% block content %}
     <section
         class="asset-list-shell"
-        data-api-url="{% url 'assets:api-list' %}"
-        data-export-url="{% url 'assets:api-export' %}"
+        data-api-url="{{ asset_api_url }}"
+        data-export-url="{{ asset_export_url }}"
         data-detail-url-template="{% url 'assets:detail' 0 %}"
+        data-asset-list-mode="{{ asset_list_mode|default:'active' }}"
         data-mode="standard"
     >
         {% if asset_change_decision_summary %}
@@ -1651,7 +1675,19 @@
             </div>
         {% endif %}
         <div class="asset-layout-shell">
-            <div class="asset-layout-header"></div>
+            <div class="asset-layout-header">
+                <div class="asset-list-heading">
+                    <div>
+                        <h1>{{ page_title|default:"Ewidencja środków" }}</h1>
+                        {% if asset_list_description %}
+                            <p>{{ asset_list_description }}</p>
+                        {% endif %}
+                    </div>
+                    <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
+                        {{ asset_mode_switch_label }}
+                    </a>
+                </div>
+            </div>
             <div class="asset-layout-toolbar">
                 <div class="asset-layout-toolbar-actions">
                     <div id="asset-management-toolbar" class="asset-management-toolbar" hidden aria-label="Narzędzia zarządzania"></div>
@@ -3912,7 +3948,8 @@ let searchDebounceId = null;
             }
 
             function buildApiUrl() {
-                const params = new URLSearchParams();
+                const target = new URL(apiUrl, window.location.origin);
+                const params = new URLSearchParams(target.search);
                 params.set("page", String(state.page));
                 params.set("page_size", String(state.pageSize));
                 params.set("search", state.search);
@@ -3923,15 +3960,20 @@ let searchDebounceId = null;
                 serializedFilters.forEach(function (value, key) {
                     params.set(key, value);
                 });
-                return apiUrl + "?" + params.toString();
+                return target.pathname + "?" + params.toString();
             }
 
             function buildExportUrl() {
-                const params = new URLSearchParams(new URL(buildApiUrl(), window.location.origin).search);
+                const target = new URL(exportUrl, window.location.origin);
+                const params = new URLSearchParams(target.search);
+                const apiParams = new URLSearchParams(new URL(buildApiUrl(), window.location.origin).search);
+                apiParams.forEach(function (value, key) {
+                    params.set(key, value);
+                });
                 params.delete("page");
                 params.delete("page_size");
                 params.set("columns", getExportColumnKeys().join(","));
-                return exportUrl + "?" + params.toString();
+                return target.pathname + "?" + params.toString();
             }
 
             function getExportColumnKeys() {
