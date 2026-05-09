@@ -6,7 +6,7 @@
     <style>
         .inventory-report-page {
             display: grid;
-            gap: 14px;
+            gap: 10px;
             width: calc(100vw - 32px);
             max-width: none;
             margin-left: calc(50% - 50vw + 16px);
@@ -15,86 +15,154 @@
 
         .inventory-report-header {
             display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 12px;
-            align-items: start;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            gap: 7px;
+            padding: 14px 16px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
+        }
+
+        .inventory-report-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
         }
 
         .inventory-report-title-row {
             display: flex;
             flex-wrap: wrap;
             gap: 8px 12px;
-            align-items: baseline;
-            margin-bottom: 6px;
-        }
-
-        .inventory-report-backlink {
-            color: var(--muted);
-            text-decoration: none;
-            font-size: 0.86rem;
-        }
-
-        .inventory-report-backlink:hover,
-        .inventory-report-backlink:focus-visible {
-            text-decoration: underline;
+            align-items: center;
         }
 
         .inventory-report-header h1 {
             margin: 0;
-            font-size: 1.35rem;
-            line-height: 1.1;
+            font-size: 1.55rem;
+            line-height: 1.15;
+            letter-spacing: 0;
         }
 
-        .inventory-report-status {
-            font-size: 0.82rem;
+        .inventory-report-status-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0 10px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: #f8fafc;
+            color: #475467;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.74rem;
             font-weight: 700;
-            color: var(--muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .inventory-report-note {
-            margin: 0 0 8px;
-            color: var(--muted);
-            font-size: 0.9rem;
-        }
-
-        .inventory-report-meta,
-        .inventory-report-summary {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px 12px;
             margin: 0;
+            max-width: 760px;
+            color: var(--muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
         }
 
-        .inventory-report-meta div,
-        .inventory-report-summary div {
-            display: flex;
-            gap: 5px;
+        .inventory-report-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.1);
+            border-left: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .inventory-report-meta-item {
             min-width: 0;
-            font-size: 0.84rem;
+            min-height: 50px;
+            padding: 8px 10px;
+            border-right: 1px solid rgba(15, 23, 42, 0.1);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
         }
 
-        .inventory-report-meta dt,
-        .inventory-report-summary dt {
-            color: var(--muted);
-            font-weight: 600;
+        .inventory-report-meta-item.is-wide {
+            grid-column: span 2;
         }
 
-        .inventory-report-meta dd,
-        .inventory-report-summary dd {
+        .inventory-report-meta-label,
+        .inventory-report-kpi-label {
             margin: 0;
+            color: var(--muted);
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.69rem;
             font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .inventory-report-meta-value {
+            margin: 6px 0 0;
+            color: #101828;
+            font-size: 0.9rem;
+            line-height: 1.35;
+            font-weight: 700;
+        }
+
+        .inventory-report-actions {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 3px 0 5px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .inventory-report-kpi-bar {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 0;
+            overflow: hidden;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: #ffffff;
+        }
+
+        .inventory-report-kpi-item {
+            min-width: 0;
+            padding: 8px 10px;
+            border-right: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .inventory-report-kpi-item:last-child {
+            border-right: 0;
+        }
+
+        .inventory-report-kpi-value {
+            margin: 5px 0 0;
+            color: #101828;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.2;
         }
 
         .inventory-report-section {
             display: grid;
-            gap: 7px;
+            gap: 8px;
+            padding: 10px 12px 12px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.78);
         }
 
         .inventory-report-section h2 {
             margin: 0;
-            font-size: 1rem;
+            color: #344054;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            line-height: 1.2;
+            text-transform: uppercase;
         }
 
         .inventory-report-table-wrap {
@@ -140,10 +208,47 @@
 
         .inventory-report-empty {
             padding: 10px;
-            border: 1px solid var(--border);
-            background: var(--surface);
-            color: var(--muted);
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: #f8fafc;
+            color: #475467;
             font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        @media (max-width: 1100px) {
+            .inventory-report-kpi-bar {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .inventory-report-kpi-item:nth-child(3n) {
+                border-right: 0;
+            }
+
+            .inventory-report-kpi-item:nth-child(-n + 3) {
+                border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+            }
+        }
+
+        @media (max-width: 720px) {
+            .inventory-report-meta-grid,
+            .inventory-report-kpi-bar {
+                grid-template-columns: 1fr;
+            }
+
+            .inventory-report-meta-item.is-wide {
+                grid-column: auto;
+            }
+
+            .inventory-report-kpi-item,
+            .inventory-report-kpi-item:nth-child(3n),
+            .inventory-report-kpi-item:nth-child(-n + 3) {
+                border-right: 0;
+                border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+            }
+
+            .inventory-report-kpi-item:last-child {
+                border-bottom: 0;
+            }
         }
     </style>
 {% endblock %}
@@ -151,71 +256,85 @@
 {% block content %}
     <section class="inventory-report-page">
         <header class="inventory-report-header">
-            <div>
-                <div class="inventory-report-title-row">
-                    <a class="inventory-report-backlink" href="{% url 'inventory:session-detail' session.pk %}">Wróć do sesji</a>
-                    <h1>Raport {{ session.number }}</h1>
-                    <span class="inventory-report-status">{{ session_status_display_pl }}</span>
-                </div>
-                {% if is_session_closed %}
-                    <p class="inventory-report-note">Raport końcowy — sesja zamknięta.</p>
-                {% else %}
-                    <p class="inventory-report-note">Raport roboczy — sesja nadal aktywna, dane mogą się zmieniać.</p>
-                {% endif %}
-                <dl class="inventory-report-meta">
-                    <div>
-                        <dt>Start</dt>
-                        <dd>{{ session.started_at|date:"Y-m-d H:i" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Zamknięcie</dt>
-                        <dd>{{ session.closed_at|date:"Y-m-d H:i"|default:"-" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Utworzył</dt>
-                        <dd>{{ session.created_by|default:"-" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Lokalizacje root</dt>
-                        <dd>{{ root_locations_display|default:"-" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Zakres rodzaju</dt>
-                        <dd>{{ asset_type_scope_display|default:"-" }}</dd>
-                    </div>
-                </dl>
+            <p class="inventory-report-kicker">Inwentaryzacje</p>
+            <div class="inventory-report-title-row">
+                <h1>Raport {{ session.number }}</h1>
+                <span class="inventory-report-status-pill">{{ session_status_display_pl }}</span>
             </div>
-            <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Sesja</a>
+            {% if is_session_closed %}
+                <p class="inventory-report-note">Raport końcowy — sesja zamknięta.</p>
+            {% else %}
+                <p class="inventory-report-note">Raport roboczy — sesja nadal aktywna, dane mogą się zmieniać.</p>
+            {% endif %}
         </header>
+
+        <section class="inventory-report-meta-grid" aria-label="Metadane raportu">
+            <div class="inventory-report-meta-item">
+                <p class="inventory-report-meta-label">Sesja</p>
+                <p class="inventory-report-meta-value">{{ session.number }}</p>
+            </div>
+            <div class="inventory-report-meta-item is-wide">
+                <p class="inventory-report-meta-label">Lokalizacje root</p>
+                <p class="inventory-report-meta-value">{{ root_locations_display|default:"-" }}</p>
+            </div>
+            <div class="inventory-report-meta-item">
+                <p class="inventory-report-meta-label">Zakres rodzaju</p>
+                <p class="inventory-report-meta-value">{{ asset_type_scope_display|default:"-" }}</p>
+            </div>
+            <div class="inventory-report-meta-item">
+                <p class="inventory-report-meta-label">Start</p>
+                <p class="inventory-report-meta-value">{{ session.started_at|date:"Y-m-d H:i" }}</p>
+            </div>
+            {% if session.closed_at %}
+                <div class="inventory-report-meta-item">
+                    <p class="inventory-report-meta-label">Zamknięcie</p>
+                    <p class="inventory-report-meta-value">{{ session.closed_at|date:"Y-m-d H:i" }}</p>
+                </div>
+            {% endif %}
+            {% if session.created_by %}
+                <div class="inventory-report-meta-item">
+                    <p class="inventory-report-meta-label">Utworzył</p>
+                    <p class="inventory-report-meta-value">{{ session.created_by }}</p>
+                </div>
+            {% endif %}
+            <div class="inventory-report-meta-item">
+                <p class="inventory-report-meta-label">Status</p>
+                <p class="inventory-report-meta-value">{{ session_status_display_pl }}</p>
+            </div>
+        </section>
+
+        <section class="inventory-report-actions" aria-label="Akcje raportu">
+            <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Wróć do sesji</a>
+        </section>
 
         <section class="inventory-report-section" aria-labelledby="inventory-report-summary-title">
             <h2 id="inventory-report-summary-title">Podsumowanie</h2>
-            <dl class="inventory-report-summary">
-                <div>
-                    <dt>Zgodne</dt>
-                    <dd>{{ matching_count }}</dd>
+            <div class="inventory-report-kpi-bar" aria-label="Podsumowanie raportu">
+                <div class="inventory-report-kpi-item">
+                    <p class="inventory-report-kpi-label">Zgodne</p>
+                    <p class="inventory-report-kpi-value">{{ matching_count }}</p>
                 </div>
-                <div>
-                    <dt>Brak odczytu</dt>
-                    <dd>{{ no_read_count }}</dd>
+                <div class="inventory-report-kpi-item">
+                    <p class="inventory-report-kpi-label">Brak odczytu</p>
+                    <p class="inventory-report-kpi-value">{{ no_read_count }}</p>
                 </div>
-                <div>
-                    <dt>Inna lokalizacja</dt>
-                    <dd>{{ wrong_location_count }}</dd>
+                <div class="inventory-report-kpi-item">
+                    <p class="inventory-report-kpi-label">Inna lokalizacja</p>
+                    <p class="inventory-report-kpi-value">{{ wrong_location_count }}</p>
                 </div>
-                <div>
-                    <dt>Różnice ilościowe</dt>
-                    <dd>{{ quantity_difference_count }}</dd>
+                <div class="inventory-report-kpi-item">
+                    <p class="inventory-report-kpi-label">Różnice ilościowe</p>
+                    <p class="inventory-report-kpi-value">{{ quantity_difference_count }}</p>
                 </div>
-                <div>
-                    <dt>Ręczne potwierdzenia</dt>
-                    <dd>{{ manual_confirmation_count }}</dd>
+                <div class="inventory-report-kpi-item">
+                    <p class="inventory-report-kpi-label">Ręczne potwierdzenia</p>
+                    <p class="inventory-report-kpi-value">{{ manual_confirmation_count }}</p>
                 </div>
-                <div>
-                    <dt>Nieznane kody</dt>
-                    <dd>{{ unknown_code_count }}</dd>
+                <div class="inventory-report-kpi-item">
+                    <p class="inventory-report-kpi-label">Nieznane kody</p>
+                    <p class="inventory-report-kpi-value">{{ unknown_code_count }}</p>
                 </div>
-            </dl>
+            </div>
         </section>
 
         <section class="inventory-report-section" aria-labelledby="inventory-report-no-read-title">
