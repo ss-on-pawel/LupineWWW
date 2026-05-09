@@ -21,6 +21,7 @@ from .models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDicti
 from .services import (
     approve_asset_change_request,
     capture_asset_history_values,
+    get_asset_withdraw_capabilities,
     reject_asset_change_request,
     record_asset_field_changes,
     record_asset_history,
@@ -790,6 +791,7 @@ def asset_detail(request, id):
         {
             "asset": asset,
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
+            "withdraw_capabilities": get_asset_withdraw_capabilities(asset),
             "history_entries": history_entries,
             "withdraw_status_options": [
                 (Asset.Status.LIQUIDATED, dict(Asset.Status.choices)[Asset.Status.LIQUIDATED]),
@@ -804,7 +806,7 @@ def asset_detail(request, id):
 @login_required
 @require_POST
 def asset_withdraw(request, id):
-    asset = get_object_or_404(Asset.objects.select_related("location_fk"), pk=id)
+    asset = get_object_or_404(Asset.objects.select_related("asset_type_ref", "location_fk"), pk=id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
         raise Http404
@@ -816,7 +818,56 @@ def asset_withdraw(request, id):
     if status not in ASSET_WITHDRAW_STATUSES:
         return HttpResponse("Invalid withdraw status.", status=400)
 
+    capabilities = get_asset_withdraw_capabilities(asset)
+    current_quantity = capabilities["current_quantity"]
+    raw_withdraw_quantity = request.POST.get("withdraw_quantity", "").strip()
+    withdraw_quantity = current_quantity
+    if raw_withdraw_quantity:
+        try:
+            withdraw_quantity = int(raw_withdraw_quantity)
+        except ValueError:
+            messages.error(request, "IloĹ›Ä‡ do wycofania musi byÄ‡ liczbÄ… caĹ‚kowitÄ….")
+            return redirect("assets:detail", id=asset.pk)
+
+        if withdraw_quantity < 1:
+            messages.error(request, "IloĹ›Ä‡ do wycofania musi byÄ‡ wiÄ™ksza od zera.")
+            return redirect("assets:detail", id=asset.pk)
+        if withdraw_quantity > current_quantity:
+            messages.error(request, "IloĹ›Ä‡ do wycofania nie moĹĽe przekraczaÄ‡ aktualnej iloĹ›ci.")
+            return redirect("assets:detail", id=asset.pk)
+        if withdraw_quantity < current_quantity and not capabilities["can_partial_withdraw"]:
+            messages.error(request, "CzÄ™Ĺ›ciowe wycofanie jest dostÄ™pne tylko dla aktywnych Ĺ›rodkĂłw iloĹ›ciowych.")
+            return redirect("assets:detail", id=asset.pk)
+
     status_label = dict(Asset.Status.choices)[status]
+    remaining_quantity = current_quantity - withdraw_quantity
+    if remaining_quantity > 0:
+        now = timezone.now()
+        if asset.last_inventory_quantity is not None:
+            asset.last_inventory_quantity = remaining_quantity
+            update_fields = ["last_inventory_quantity", "updated_at"]
+        else:
+            asset.record_quantity = remaining_quantity
+            update_fields = ["record_quantity", "updated_at"]
+        asset.updated_at = now
+        asset.save(update_fields=update_fields)
+
+        record_asset_history(
+            asset=asset,
+            operator=request.user,
+            event_type=AssetHistoryEntry.EventType.UPDATED,
+            description=(
+                "Wycofano czÄ™Ĺ›Ä‡ iloĹ›ci Ĺ›rodka: "
+                f"przed {current_quantity}, wycofano {withdraw_quantity}, "
+                f"po {remaining_quantity}, powĂłd {status_label}"
+            ),
+            old_value=str(current_quantity),
+            new_value=str(remaining_quantity),
+            field_name="current_quantity",
+        )
+        messages.success(request, "CzÄ™Ĺ›Ä‡ iloĹ›ci Ĺ›rodka zostaĹ‚a wycofana.")
+        return redirect("assets:detail", id=asset.pk)
+
     asset.status = status
     asset.is_active = False
     asset.updated_at = timezone.now()

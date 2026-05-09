@@ -131,6 +131,27 @@
             outline-offset: 2px;
             border-color: #8aa3bd;
         }
+        .asset-withdraw-form label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 10px;
+            color: #475467;
+            font-size: 0.86rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .asset-withdraw-form input[type="number"] {
+            width: 84px;
+            min-height: 38px;
+            padding: 0 9px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            color: #111927;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
         .asset-withdraw-form .ui-btn {
             border-radius: 0 7px 7px 0;
         }
@@ -330,6 +351,12 @@
                             <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
+                    {% if withdraw_capabilities.can_partial_withdraw %}
+                        <label>
+                            IloĹ›Ä‡ do wycofania
+                            <input type="number" name="withdraw_quantity" min="1" max="{{ withdraw_capabilities.current_quantity }}" value="1">
+                        </label>
+                    {% endif %}
                     <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
                 </form>
             {% endif %}

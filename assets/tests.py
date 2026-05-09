@@ -5162,8 +5162,13 @@ class AssetWithdrawViewTests(TestCase):
         defaults.update(overrides)
         return Asset.objects.create(**defaults)
 
-    def _withdraw(self, asset, status=Asset.Status.LIQUIDATED):
-        return self.client.post(reverse("assets:asset-withdraw", kwargs={"id": asset.id}), {"status": status})
+    def _messages(self, response):
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
+    def _withdraw(self, asset, status=Asset.Status.LIQUIDATED, **overrides):
+        data = {"status": status}
+        data.update(overrides)
+        return self.client.post(reverse("assets:asset-withdraw", kwargs={"id": asset.id}), data)
 
     def test_withdraw_sets_inactive_and_status(self):
         asset = self._create_asset("WITHDRAW-STATUS-001")
@@ -5251,6 +5256,143 @@ class AssetWithdrawViewTests(TestCase):
         self.assertTrue(asset.is_active)
         self.assertEqual(asset.status, Asset.Status.IN_STOCK)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_regular_asset_rejects_partial_withdraw_quantity(self):
+        asset = self._create_asset("WITHDRAW-REGULAR-PARTIAL-001", record_quantity=10)
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="3")
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.current_quantity, 10)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+        self.assertEqual(
+            self._messages(response),
+            ["CzÄ™Ĺ›ciowe wycofanie jest dostÄ™pne tylko dla aktywnych Ĺ›rodkĂłw iloĹ›ciowych."],
+        )
+
+    def test_quantity_asset_can_be_partially_withdrawn_from_record_quantity(self):
+        asset = self._create_asset(
+            "WITHDRAW-QTY-PARTIAL-RECORD-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=10,
+        )
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="3")
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.record_quantity, 7)
+        self.assertIsNone(asset.last_inventory_quantity)
+        self.assertEqual(asset.current_quantity, 7)
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.UPDATED)
+        self.assertEqual(entry.field_name, "current_quantity")
+        self.assertEqual(entry.old_value, "10")
+        self.assertEqual(entry.new_value, "7")
+        self.assertEqual(entry.operator, self.user)
+        self.assertIn("wycofano 3", entry.description)
+
+        active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+        archive_response = self.client.get(
+            reverse("assets:api-list"),
+            {"asset_scope": "archive", "search": asset.inventory_number},
+        )
+        self.assertEqual(active_response.json()["pagination"]["total_items"], 1)
+        self.assertEqual(archive_response.json()["pagination"]["total_items"], 0)
+
+    def test_quantity_asset_full_withdraw_quantity_archives_asset(self):
+        asset = self._create_asset(
+            "WITHDRAW-QTY-FULL-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=10,
+        )
+
+        response = self._withdraw(asset, Asset.Status.SOLD, withdraw_quantity="10")
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.SOLD)
+        self.assertEqual(asset.current_quantity, 10)
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.WITHDRAWN)
+        self.assertEqual(entry.field_name, "is_active")
+
+    def test_withdraw_quantity_zero_is_rejected_without_changes(self):
+        asset = self._create_asset(
+            "WITHDRAW-QTY-ZERO-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=10,
+        )
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="0")
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.current_quantity, 10)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_withdraw_quantity_above_current_quantity_is_rejected_without_changes(self):
+        asset = self._create_asset(
+            "WITHDRAW-QTY-TOO-MANY-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=10,
+        )
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="11")
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.current_quantity, 10)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_partial_withdraw_updates_last_inventory_quantity_when_current_quantity_comes_from_inventory(self):
+        asset = self._create_asset(
+            "WITHDRAW-QTY-PARTIAL-INVENTORY-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=15,
+            last_inventory_quantity=10,
+        )
+
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="3")
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.record_quantity, 15)
+        self.assertEqual(asset.last_inventory_quantity, 7)
+        self.assertEqual(asset.current_quantity, 7)
+
+    def test_detail_shows_withdraw_quantity_input_for_quantity_asset_with_multiple_quantity(self):
+        asset = self._create_asset(
+            "WITHDRAW-UI-QTY-001",
+            asset_type=Asset.AssetType.QUANTITY,
+            record_quantity=5,
+        )
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="withdraw_quantity"')
+        self.assertContains(response, 'max="5"')
+
+    def test_detail_hides_withdraw_quantity_input_for_regular_asset(self):
+        asset = self._create_asset("WITHDRAW-UI-FIXED-001", record_quantity=5)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="withdraw_quantity"')
 
 
 class AssetUpdateViewTests(TestCase):
