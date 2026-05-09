@@ -98,18 +98,21 @@
             gap: 0;
             align-items: center;
             flex-wrap: nowrap;
-            padding: 3px;
             border: 1px solid rgba(185, 28, 28, 0.24);
             border-radius: 9px;
             background: rgba(255, 255, 255, 0.68);
+            overflow: hidden;
         }
         .asset-withdraw-form select {
-            min-height: 38px;
-            max-width: 190px;
+            flex: 0 0 180px;
+            box-sizing: border-box;
+            min-height: 40px;
+            width: 180px;
+            max-width: none;
             padding: 0 34px 0 12px;
-            border: 1px solid #cbd5e1;
-            border-right: 0;
-            border-radius: 7px 0 0 7px;
+            border: 0;
+            border-right: 1px solid #cbd5e1;
+            border-radius: 8px 0 0 8px;
             background:
                 linear-gradient(45deg, transparent 50%, #66758a 50%),
                 linear-gradient(135deg, #66758a 50%, transparent 50%),
@@ -135,7 +138,10 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 0 10px;
+            min-height: 40px;
+            padding: 0 12px;
+            border-right: 1px solid #cbd5e1;
+            background: rgba(248, 250, 252, 0.82);
             color: #475467;
             font-size: 0.86rem;
             font-weight: 700;
@@ -143,17 +149,19 @@
         }
         .asset-withdraw-form input[type="number"] {
             width: 84px;
-            min-height: 38px;
+            min-height: 30px;
             padding: 0 9px;
             border: 1px solid #cbd5e1;
-            border-radius: 7px;
+            border-radius: 4px;
             color: #111927;
             font: inherit;
             font-size: 0.9rem;
             font-weight: 700;
         }
         .asset-withdraw-form .ui-btn {
-            border-radius: 0 7px 7px 0;
+            align-self: stretch;
+            border-radius: 0 8px 8px 0;
+            margin: 0;
         }
         .asset-archive-notice {
             margin-top: 20px;
