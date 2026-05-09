@@ -4,20 +4,50 @@
 
 {% block extra_head %}
     <style>
+        .settings-form-page {
+            display: grid;
+            gap: 10px;
+        }
         .settings-form-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 14px;
+            display: grid;
+            gap: 6px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .settings-form-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
         }
         .settings-form-title {
             margin: 0;
-            font-size: 1.45rem;
+            font-size: 1.55rem;
+            line-height: 1.15;
             letter-spacing: 0;
         }
-        .settings-form {
+        .settings-form-description {
+            margin: 0;
+            max-width: 680px;
+            color: var(--app-muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+        .settings-form-shell {
             max-width: 760px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
+            padding: 16px;
+        }
+        .settings-form {
+            display: grid;
+            gap: 16px;
+        }
+        .settings-form-section {
+            display: grid;
+            gap: 14px;
         }
         .settings-check-row {
             display: flex;
@@ -25,62 +55,75 @@
             gap: 8px;
             min-height: 40px;
         }
+        .settings-form-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-top: 2px;
+        }
     </style>
 {% endblock %}
 
 {% block content %}
-    <header class="settings-form-header">
-        <h1 class="settings-form-title">{{ page_title }}</h1>
-        <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Wróć</a>
-    </header>
+    <section class="settings-form-page">
+        <header class="settings-form-header">
+            <p class="settings-form-kicker">Słowniki</p>
+            <h1 class="settings-form-title">{{ page_title }}</h1>
+            <p class="settings-form-description">Uzupełnij nazwę, kod oraz ustawienia widoczności i obsługi ilościowej rodzaju środka.</p>
+        </header>
 
-    <form class="settings-form" method="post">
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-            <ul class="errorlist">
-                {% for error in form.non_field_errors %}
-                    <li>{{ error }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
+        <section class="settings-form-shell">
+            <form class="settings-form" method="post">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <ul class="errorlist">
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
 
-        <div class="form-grid">
-            <div class="form-field">
-                {{ form.name.label_tag }}
-                {{ form.name }}
-                {{ form.name.errors }}
-            </div>
-            <div class="form-field">
-                {{ form.code.label_tag }}
-                {{ form.code }}
-                {{ form.code.errors }}
-            </div>
-            <div class="form-field">
-                {{ form.sort_order.label_tag }}
-                {{ form.sort_order }}
-                {{ form.sort_order.errors }}
-            </div>
-            <div class="form-field">
-                <label for="{{ form.is_quantity_based.id_for_label }}">Ilościowy</label>
-                <div class="settings-check-row">
-                    {{ form.is_quantity_based }}
-                    <span class="muted">Pozwala obsługiwać ilość większą niż 1.</span>
+                <div class="settings-form-section form-grid">
+                    <div class="form-field">
+                        {{ form.name.label_tag }}
+                        {{ form.name }}
+                        {{ form.name.errors }}
+                    </div>
+                    <div class="form-field">
+                        {{ form.code.label_tag }}
+                        {{ form.code }}
+                        {{ form.code.errors }}
+                    </div>
+                    <div class="form-field">
+                        {{ form.sort_order.label_tag }}
+                        {{ form.sort_order }}
+                        {{ form.sort_order.errors }}
+                    </div>
+                    <div class="form-field">
+                        <label for="{{ form.is_quantity_based.id_for_label }}">Ilościowy</label>
+                        <div class="settings-check-row">
+                            {{ form.is_quantity_based }}
+                            <span class="muted">Pozwala obsługiwać ilość większą niż 1.</span>
+                        </div>
+                        {{ form.is_quantity_based.errors }}
+                    </div>
+                    <div class="form-field">
+                        <label for="{{ form.is_active.id_for_label }}">Aktywny</label>
+                        <div class="settings-check-row">
+                            {{ form.is_active }}
+                            <span class="muted">Widoczny w formularzu środka.</span>
+                        </div>
+                        {{ form.is_active.errors }}
+                    </div>
                 </div>
-                {{ form.is_quantity_based.errors }}
-            </div>
-            <div class="form-field">
-                <label for="{{ form.is_active.id_for_label }}">Aktywny</label>
-                <div class="settings-check-row">
-                    {{ form.is_active }}
-                    <span class="muted">Widoczny w formularzu środka.</span>
-                </div>
-                {{ form.is_active.errors }}
-            </div>
-        </div>
 
-        <div class="actions">
-            <button class="ui-btn ui-btn--primary" type="submit">Zapisz</button>
-            <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Anuluj</a>
-        </div>
-    </form>
+                <div class="settings-form-actions">
+                    <button class="ui-btn ui-btn--primary" type="submit">Zapisz</button>
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Anuluj</a>
+                </div>
+            </form>
+        </section>
+    </section>
 {% endblock %}
