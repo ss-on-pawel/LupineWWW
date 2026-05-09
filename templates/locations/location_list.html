@@ -168,7 +168,7 @@
         </header>
 
         <div class="locations-workbar" aria-label="Narzędzia lokalizacji">
-            <a class="ui-btn ui-btn--primary" href="{% url 'locations:create' %}">Dodaj lokalizację</a>
+            <a class="ui-btn ui-btn--success" href="{% url 'locations:create' %}">Dodaj lokalizację</a>
             <form class="locations-search" method="get">
                 <input
                     type="search"
@@ -212,7 +212,7 @@
                                 <td data-label="Akcje">
                                     <div class="locations-row-actions">
                                         <a class="ui-btn ui-btn--secondary" href="{% url 'locations:detail' location.id %}">Otwórz</a>
-                                        <a class="ui-btn ui-btn--secondary" href="{% url 'locations:create-child' location.id %}">Dodaj podrzędną</a>
+                                        <a class="ui-btn ui-btn--success" href="{% url 'locations:create-child' location.id %}">Dodaj podrzędną</a>
                                     </div>
                                 </td>
                             </tr>

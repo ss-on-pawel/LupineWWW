@@ -206,7 +206,7 @@
 
         <div class="location-detail-actions" aria-label="Akcje lokalizacji">
             <a class="ui-btn ui-btn--primary" href="{% url 'locations:update' location.id %}">Edytuj</a>
-            <a class="ui-btn ui-btn--secondary" href="{% url 'locations:create-child' location.id %}">Dodaj podrzędną</a>
+            <a class="ui-btn ui-btn--success" href="{% url 'locations:create-child' location.id %}">Dodaj podrzędną</a>
             <a class="ui-btn ui-btn--secondary" href="{% url 'locations:list' %}">Wróć do listy</a>
             <form class="location-detail-delete-form" method="post" action="{% url 'locations:delete' location.id %}">
                 {% csrf_token %}

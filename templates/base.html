@@ -296,6 +296,12 @@
             background: rgba(255, 255, 255, 0.96);
             color: #101828;
         }
+        .ui-btn--success {
+            --ui-btn-accent: #15803d;
+            border-color: rgba(21, 128, 61, 0.22);
+            background: rgba(21, 128, 61, 0.06);
+            color: #166534;
+        }
         .ui-btn--danger {
             border-color: rgba(193, 18, 31, 0.22);
             background: rgba(193, 18, 31, 0.06);
@@ -314,6 +320,15 @@
             border-color: rgba(15, 23, 42, 0.26);
             background: rgba(226, 232, 240, 0.94);
             color: #0f172a;
+        }
+        .ui-btn--success:focus-visible {
+            outline-color: rgba(21, 128, 61, 0.42);
+        }
+        .ui-btn--success:hover:not(:disabled):not([aria-disabled="true"]),
+        .ui-btn--success:active:not(:disabled):not([aria-disabled="true"]) {
+            border-color: rgba(21, 128, 61, 0.26);
+            background: rgba(21, 128, 61, 0.1);
+            color: #14532d;
         }
         .ui-btn--danger:hover:not(:disabled):not([aria-disabled="true"]),
         .ui-btn--danger:active:not(:disabled):not([aria-disabled="true"]) {
