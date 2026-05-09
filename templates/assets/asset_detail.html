@@ -39,7 +39,6 @@
             border-bottom: var(--asset-line);
         }
         .asset-kicker,
-        .summary-label,
         .detail-label,
         .section-label {
             font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
@@ -55,10 +54,10 @@
         .asset-title {
             margin: 0;
             font-family: "Inter", "Segoe UI", Arial, sans-serif;
-            font-size: clamp(2.2rem, 4vw, 3.9rem);
-            line-height: 0.94;
-            font-weight: 800;
-            letter-spacing: -0.045em;
+            font-size: clamp(1.4rem, 2.2vw, 2.2rem);
+            line-height: 1.08;
+            font-weight: 760;
+            letter-spacing: -0.025em;
             color: #0f1720;
         }
         .asset-subtitle {
@@ -96,17 +95,44 @@
         }
         .asset-withdraw-form {
             display: flex;
-            gap: 8px;
+            gap: 0;
             align-items: center;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            padding: 3px;
+            border: 1px solid rgba(185, 28, 28, 0.24);
+            border-radius: 9px;
+            background: rgba(255, 255, 255, 0.68);
         }
         .asset-withdraw-form select {
             min-height: 38px;
-            padding: 0 10px;
-            border: var(--asset-line);
-            border-radius: 8px;
-            background: #fff;
+            max-width: 190px;
+            padding: 0 34px 0 12px;
+            border: 1px solid #cbd5e1;
+            border-right: 0;
+            border-radius: 7px 0 0 7px;
+            background:
+                linear-gradient(45deg, transparent 50%, #66758a 50%),
+                linear-gradient(135deg, #66758a 50%, transparent 50%),
+                linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.96));
+            background-position:
+                calc(100% - 18px) 16px,
+                calc(100% - 13px) 16px,
+                0 0;
+            background-size: 5px 5px, 5px 5px, auto;
+            background-repeat: no-repeat;
             color: #111927;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 700;
+            appearance: none;
+        }
+        .asset-withdraw-form select:focus {
+            outline: 2px solid rgba(15, 76, 129, 0.22);
+            outline-offset: 2px;
+            border-color: #8aa3bd;
+        }
+        .asset-withdraw-form .ui-btn {
+            border-radius: 0 7px 7px 0;
         }
         .asset-archive-notice {
             margin-top: 20px;
@@ -116,38 +142,6 @@
             background: #fff7e0;
             color: #6b4e00;
             font-weight: 700;
-        }
-        .asset-summary {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            align-items: stretch;
-            margin-top: 24px;
-            border-top: var(--asset-line);
-            border-bottom: var(--asset-line);
-        }
-        .summary-item {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            min-height: 96px;
-            padding: 18px 20px;
-        }
-        .summary-item + .summary-item {
-            border-left: var(--asset-line);
-        }
-        .summary-value {
-            display: block;
-            margin-top: 10px;
-            font-family: "Inter", "Segoe UI", Arial, sans-serif;
-            font-size: 1.02rem;
-            line-height: 1.4;
-            font-weight: 600;
-            color: #111927;
-        }
-        .summary-value.is-mono {
-            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-            font-size: 0.92rem;
-            letter-spacing: 0.02em;
         }
         .asset-sections {
             margin-top: 28px;
@@ -279,18 +273,6 @@
             color: #425466;
             font-weight: 600;
         }
-        @media (max-width: 960px) {
-            .asset-summary {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .summary-item:nth-child(3),
-            .summary-item:nth-child(4) {
-                border-top: var(--asset-line);
-            }
-            .summary-item:nth-child(3) {
-                border-left: 0;
-            }
-        }
         @media (max-width: 720px) {
             .asset-shell {
                 padding: 22px;
@@ -304,15 +286,15 @@
             }
         }
         @media (max-width: 640px) {
-            .asset-summary {
-                grid-template-columns: 1fr;
-            }
-            .summary-item + .summary-item {
-                border-top: var(--asset-line);
-                border-left: 0;
-            }
             .asset-actions .ui-btn {
                 flex: 1 1 auto;
+            }
+            .asset-withdraw-form {
+                flex: 1 1 100%;
+            }
+            .asset-withdraw-form select {
+                flex: 1 1 150px;
+                max-width: none;
             }
             .section-grid {
                 grid-template-columns: 1fr;
@@ -341,8 +323,8 @@
                 </div>
             </div>
             <div class="asset-actions">
-                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
                 {% if asset.is_active %}
                     <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
                         {% csrf_token %}
@@ -359,25 +341,6 @@
         {% if not asset.is_active %}
             <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>
         {% endif %}
-
-        <div class="asset-summary">
-            <div class="summary-item">
-                <span class="summary-label">Wartość</span>
-                <span class="summary-value is-mono">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</span>
-            </div>
-            <div class="summary-item">
-                <span class="summary-label">Lokalizacja</span>
-                <span class="summary-value">{{ asset.location|default:"-" }}</span>
-            </div>
-            <div class="summary-item">
-                <span class="summary-label">Osoba odpowiedzialna</span>
-                <span class="summary-value">{{ asset.responsible_person|default:"-" }}</span>
-            </div>
-            <div class="summary-item">
-                <span class="summary-label">Aktywny</span>
-                <span class="summary-value is-mono">{% if asset.is_active %}TAK{% else %}NIE{% endif %}</span>
-            </div>
-        </div>
 
         <div class="asset-sections">
             <section class="detail-section">
@@ -413,6 +376,14 @@
                         <div class="detail-item">
                             <span class="detail-label">Status</span>
                             <div class="detail-value is-mono">{{ asset.get_status_display }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">ILOŚĆ</span>
+                            <div class="detail-value is-mono">{{ asset.current_quantity }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">NUMER KODU KRESKOWEGO</span>
+                            <div class="detail-value is-mono">{{ asset.barcode|default:"—" }}</div>
                         </div>
                     </div>
                 </div>
