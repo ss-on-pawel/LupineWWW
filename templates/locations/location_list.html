@@ -4,95 +4,93 @@
 
 {% block extra_head %}
     <style>
-        .locations-shell {
+        .locations-page {
             display: grid;
-            gap: 12px;
+            gap: 10px;
         }
         .locations-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: end;
-            gap: 16px;
-            padding-bottom: 14px;
+            display: grid;
+            gap: 6px;
+            padding-bottom: 10px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.1);
         }
-        .locations-kicker,
-        .locations-table th {
-            font-family: var(--mono-font);
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-        }
         .locations-kicker {
-            margin: 0 0 10px;
+            margin: 0;
             color: var(--app-muted);
+            font-family: var(--mono-font);
             font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
         }
         .locations-title {
             margin: 0;
-            font-size: clamp(2rem, 5vw, 3.2rem);
-            line-height: 0.96;
-            letter-spacing: -0.05em;
+            font-size: 1.55rem;
+            line-height: 1.15;
+            letter-spacing: 0;
         }
-        .locations-subtitle {
-            margin: 12px 0 0;
-            max-width: 560px;
+        .locations-description {
+            margin: 0;
+            max-width: 680px;
             color: var(--app-muted);
-            line-height: 1.6;
+            font-size: 0.94rem;
+            line-height: 1.55;
         }
-        .locations-card {
-            border: 1px solid rgba(15, 23, 42, 0.1);
-            background: rgba(255, 255, 255, 0.86);
-        }
-        .locations-actions {
+        .locations-workbar {
             display: flex;
             justify-content: flex-start;
             align-items: center;
             gap: 10px;
-        }
-        .locations-tools {
-            display: flex;
-            justify-content: flex-start;
-            align-items: center;
-            gap: 10px;
+            flex-wrap: wrap;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
         .locations-search {
             display: flex;
             align-items: stretch;
             flex: 1 1 320px;
-            min-width: min(100%, 320px);
+            min-width: min(100%, 280px);
             max-width: 520px;
         }
         .locations-search input {
-            min-height: 36px;
-            padding-top: 8px;
-            padding-bottom: 8px;
+            min-height: 34px;
+            padding-top: 7px;
+            padding-bottom: 7px;
         }
-        .locations-row-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
+        .locations-table-shell {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
         }
         .locations-table-wrap {
             overflow-x: auto;
         }
         .locations-table {
             width: 100%;
+            min-width: 860px;
             border-collapse: collapse;
+            font-size: 0.9rem;
         }
         .locations-table th,
         .locations-table td {
-            padding: 14px 16px;
+            padding: 9px 11px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.08);
             text-align: left;
+            vertical-align: top;
         }
         .locations-table th {
             color: var(--app-muted);
+            font-family: var(--mono-font);
             font-size: 0.72rem;
             font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            background: rgba(248, 250, 252, 0.92);
+            white-space: nowrap;
         }
         .locations-table tbody tr:last-child td {
             border-bottom: 0;
+        }
+        .locations-table tbody tr:hover td {
+            background: rgba(248, 250, 252, 0.72);
         }
         .locations-name-cell {
             --level-indent: 0px;
@@ -104,6 +102,7 @@
             padding-left: var(--level-indent);
             font-weight: 600;
             color: #101828;
+            white-space: nowrap;
         }
         .locations-level-marker {
             color: #98a2b3;
@@ -117,21 +116,31 @@
         .locations-code {
             font-family: var(--mono-font);
             color: #344054;
-            font-size: 0.92rem;
+            font-size: 0.86rem;
+            white-space: nowrap;
         }
         .locations-parent {
             color: #344054;
+            white-space: nowrap;
         }
         .locations-path {
             color: #475467;
-            font-size: 0.92rem;
-            line-height: 1.5;
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+        .locations-row-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .locations-row-actions .ui-btn {
+            padding: 5px 9px;
+            font-size: 0.82rem;
+            line-height: 1.2;
         }
         @media (max-width: 700px) {
-            .locations-header {
-                align-items: start;
-            }
-            .locations-card {
+            .locations-table-shell {
                 border-left: 0;
                 border-right: 0;
                 margin-left: -16px;
@@ -151,20 +160,15 @@
 {% endblock %}
 
 {% block content %}
-    <section class="locations-shell">
+    <section class="locations-page">
         <header class="locations-header">
-            <div>
-                <p class="locations-kicker">Moduł lokalizacji</p>
-                <h1 class="locations-title">Lokalizacje</h1>
-                <p class="locations-subtitle">Buduj strukturę lokalizacji i rozwijaj zależności między lokalizacjami nadrzędnymi oraz podrzędnymi.</p>
-            </div>
+            <p class="locations-kicker">Lokalizacje</p>
+            <h1 class="locations-title">Lokalizacje</h1>
+            <p class="locations-description">Zarządzaj strukturą lokalizacji używaną w ewidencji i inwentaryzacji.</p>
         </header>
 
-        <div class="locations-actions">
+        <div class="locations-workbar" aria-label="Narzędzia lokalizacji">
             <a class="ui-btn ui-btn--primary" href="{% url 'locations:create' %}">Dodaj lokalizację</a>
-        </div>
-
-        <div class="locations-tools">
             <form class="locations-search" method="get">
                 <input
                     type="search"
@@ -175,7 +179,7 @@
             </form>
         </div>
 
-        <section class="locations-card" aria-labelledby="locations-table-title">
+        <section class="locations-table-shell" aria-labelledby="locations-table-title">
             <div class="locations-table-wrap">
                 <table class="locations-table">
                     <thead>
