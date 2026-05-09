@@ -5270,7 +5270,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
         self.assertEqual(
             self._messages(response),
-            ["CzÄ™Ĺ›ciowe wycofanie jest dostÄ™pne tylko dla aktywnych Ĺ›rodkĂłw iloĹ›ciowych."],
+            ["Częściowe wycofanie jest dostępne tylko dla aktywnych środków ilościowych."],
         )
 
     def test_quantity_asset_can_be_partially_withdrawn_from_record_quantity(self):
@@ -5296,6 +5296,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertEqual(entry.new_value, "7")
         self.assertEqual(entry.operator, self.user)
         self.assertIn("wycofano 3", entry.description)
+        self.assertEqual(self._messages(response), ["Część ilości środka została wycofana."])
 
         active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
         archive_response = self.client.get(

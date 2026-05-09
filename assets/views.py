@@ -826,17 +826,17 @@ def asset_withdraw(request, id):
         try:
             withdraw_quantity = int(raw_withdraw_quantity)
         except ValueError:
-            messages.error(request, "IloĹ›Ä‡ do wycofania musi byÄ‡ liczbÄ… caĹ‚kowitÄ….")
+            messages.error(request, "Ilość do wycofania musi być liczbą całkowitą.")
             return redirect("assets:detail", id=asset.pk)
 
         if withdraw_quantity < 1:
-            messages.error(request, "IloĹ›Ä‡ do wycofania musi byÄ‡ wiÄ™ksza od zera.")
+            messages.error(request, "Ilość do wycofania musi być większa od zera.")
             return redirect("assets:detail", id=asset.pk)
         if withdraw_quantity > current_quantity:
-            messages.error(request, "IloĹ›Ä‡ do wycofania nie moĹĽe przekraczaÄ‡ aktualnej iloĹ›ci.")
+            messages.error(request, "Ilość do wycofania nie może przekraczać aktualnej ilości.")
             return redirect("assets:detail", id=asset.pk)
         if withdraw_quantity < current_quantity and not capabilities["can_partial_withdraw"]:
-            messages.error(request, "CzÄ™Ĺ›ciowe wycofanie jest dostÄ™pne tylko dla aktywnych Ĺ›rodkĂłw iloĹ›ciowych.")
+            messages.error(request, "Częściowe wycofanie jest dostępne tylko dla aktywnych środków ilościowych.")
             return redirect("assets:detail", id=asset.pk)
 
     status_label = dict(Asset.Status.choices)[status]
@@ -857,15 +857,15 @@ def asset_withdraw(request, id):
             operator=request.user,
             event_type=AssetHistoryEntry.EventType.UPDATED,
             description=(
-                "Wycofano czÄ™Ĺ›Ä‡ iloĹ›ci Ĺ›rodka: "
+                "Wycofano część ilości środka: "
                 f"przed {current_quantity}, wycofano {withdraw_quantity}, "
-                f"po {remaining_quantity}, powĂłd {status_label}"
+                f"po {remaining_quantity}, powód {status_label}"
             ),
             old_value=str(current_quantity),
             new_value=str(remaining_quantity),
             field_name="current_quantity",
         )
-        messages.success(request, "CzÄ™Ĺ›Ä‡ iloĹ›ci Ĺ›rodka zostaĹ‚a wycofana.")
+        messages.success(request, "Część ilości środka została wycofana.")
         return redirect("assets:detail", id=asset.pk)
 
     asset.status = status
