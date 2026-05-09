@@ -4,6 +4,46 @@
 
 {% block content %}
     <style>
+        .asset-change-page {
+            display: grid;
+            gap: 10px;
+        }
+        .asset-change-header {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .asset-change-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .asset-change-title {
+            margin: 0;
+            font-size: 1.55rem;
+            line-height: 1.15;
+            letter-spacing: 0;
+        }
+        .asset-change-description {
+            margin: 0;
+            max-width: 720px;
+            color: var(--app-muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+        .asset-change-workbar {
+            display: flex;
+            justify-content: flex-start;
+            align-items: end;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
         .asset-change-actions {
             display: flex;
             align-items: center;
@@ -19,28 +59,32 @@
         .asset-change-filters {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 10px;
             align-items: end;
-            margin-bottom: 16px;
+            margin: 0;
         }
         .asset-change-filter-field {
             display: grid;
             gap: 6px;
         }
         .asset-change-filter-field select {
-            min-width: 180px;
+            min-width: 172px;
             width: auto;
         }
         .asset-change-toolbar {
             display: flex;
             justify-content: flex-start;
-            margin-bottom: 10px;
+            margin: 0;
         }
         .asset-change-toolbar-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
             flex-wrap: wrap;
+        }
+        .asset-change-table-shell {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
         }
         .asset-change-table-wrap {
             width: 100%;
@@ -58,12 +102,12 @@
         .asset-change-table td {
             padding: 7px 10px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.09);
-            vertical-align: top;
+            vertical-align: middle;
             line-height: 1.3;
         }
         .asset-change-table thead th {
-            background: #fafbfc;
-            color: #475467;
+            background: rgba(248, 250, 252, 0.92);
+            color: var(--app-muted);
             font-family: var(--mono-font);
             font-size: 0.7rem;
             font-weight: 700;
@@ -79,7 +123,6 @@
         .asset-change-table th:nth-child(1),
         .asset-change-table td:nth-child(1) {
             text-align: center;
-            vertical-align: middle;
             white-space: nowrap;
         }
         .asset-change-table th:nth-child(2),
@@ -171,10 +214,18 @@
             gap: 8px;
             margin-top: 14px;
         }
+        .asset-change-pagination {
+            padding-top: 2px;
+        }
     </style>
-    <section class="card">
-        <h2>Kolejka zmian</h2>
+    <section class="asset-change-page">
+        <header class="asset-change-header">
+            <p class="asset-change-kicker">Kolejka zmian</p>
+            <h1 class="asset-change-title">Kolejka zmian</h1>
+            <p class="asset-change-description">Przeglądaj zgłoszone zmiany środków i obsługuj decyzje zatwierdzenia lub odrzucenia.</p>
+        </header>
 
+        <div class="asset-change-workbar" aria-label="Narzędzia kolejki zmian">
         <form method="get" class="filters-form asset-change-filters">
             <label class="asset-change-filter-field">
                 Status
@@ -207,7 +258,9 @@
                 <button class="ui-btn ui-btn--danger" type="button" data-role="bulk-reject" disabled>Odrzuć</button>
             </div>
         </div>
+        </div>
 
+        <section class="asset-change-table-shell" aria-labelledby="asset-change-table-title">
         <div class="asset-change-table-wrap">
             <table class="asset-change-table">
                 <colgroup>
@@ -225,7 +278,7 @@
                     <th>
                         <input type="checkbox" data-role="change-select-all" aria-label="Zaznacz wszystkie zgłoszenia">
                     </th>
-                    <th>ID</th>
+                    <th id="asset-change-table-title" scope="col">ID</th>
                     <th>Operacja</th>
                     <th>Status</th>
                     <th>Zgłosił</th>
@@ -306,9 +359,10 @@
             </tbody>
             </table>
         </div>
+        </section>
 
         {% if is_paginated %}
-            <nav class="pagination" aria-label="Paginacja">
+            <nav class="pagination asset-change-pagination" aria-label="Paginacja">
                 {% if page_obj.has_previous %}
                     <a class="ui-btn ui-btn--secondary" href="?status={{ selected_status }}&operation={{ selected_operation }}&page={{ page_obj.previous_page_number }}">Poprzednia</a>
                 {% endif %}
