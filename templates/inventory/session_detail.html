@@ -24,80 +24,164 @@
             overflow-x: clip;
         }
 
-        .inventory-work-header {
+        .inventory-session-header {
             display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 12px;
-            align-items: start;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            gap: 7px;
+            padding: 14px 16px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
         }
 
-        .inventory-title-row {
+        .inventory-session-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .inventory-session-title-row {
             display: flex;
             flex-wrap: wrap;
             gap: 8px 12px;
-            align-items: baseline;
-            margin-bottom: 6px;
+            align-items: center;
         }
 
-        .inventory-backlink {
-            color: var(--muted);
-            text-decoration: none;
-            font-size: 0.86rem;
-        }
-
-        .inventory-backlink:hover,
-        .inventory-backlink:focus-visible {
-            text-decoration: underline;
-        }
-
-        .inventory-work-header h1 {
+        .inventory-session-header h1 {
             margin: 0;
-            font-size: 1.35rem;
-            line-height: 1.1;
+            font-size: 1.55rem;
+            line-height: 1.15;
+            letter-spacing: 0;
         }
 
-        .inventory-status {
-            font-size: 0.82rem;
-            font-weight: 700;
+        .inventory-session-description {
+            margin: 0;
+            max-width: 720px;
             color: var(--muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
         }
 
-        .inventory-header-actions {
+        .inventory-status-pill-session {
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0 10px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: #f8fafc;
+            color: #475467;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .inventory-session-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.1);
+            border-left: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .inventory-session-meta-item {
+            min-height: 58px;
+            padding: 10px 12px;
+            border-right: 1px solid rgba(15, 23, 42, 0.1);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+
+        .inventory-session-meta-item.is-wide {
+            grid-column: span 2;
+        }
+
+        .inventory-session-meta-label,
+        .inventory-session-kpi-label {
+            margin: 0;
+            color: var(--muted);
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.69rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .inventory-session-meta-value {
+            margin: 6px 0 0;
+            color: #101828;
+            font-size: 0.9rem;
+            line-height: 1.35;
+            font-weight: 700;
+        }
+
+        .inventory-session-actions {
             display: flex;
-            justify-content: flex-end;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .inventory-session-action-group {
+            display: flex;
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
         }
 
-        .inventory-meta,
-        .inventory-metrics {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px 12px;
+        .inventory-session-action-group form {
             margin: 0;
         }
 
-        .inventory-meta div,
-        .inventory-metrics div {
-            display: flex;
-            gap: 5px;
+        .inventory-kpi-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+            gap: 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.1);
+            border-left: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .inventory-kpi-item {
             min-width: 0;
-            font-size: 0.84rem;
+            padding: 9px 10px;
+            border-right: 1px solid rgba(15, 23, 42, 0.1);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
         }
 
-        .inventory-meta dt,
-        .inventory-metrics dt {
-            color: var(--muted);
-            font-weight: 600;
+        .inventory-session-kpi-value {
+            margin: 5px 0 0;
+            color: #101828;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.2;
         }
 
-        .inventory-meta dd,
-        .inventory-metrics dd {
+        .inventory-session-messages {
+            display: grid;
+            gap: 8px;
+        }
+
+        .inventory-status-message {
             margin: 0;
-            font-weight: 700;
+            padding: 10px 12px;
+            border: 1px solid rgba(146, 64, 14, 0.18);
+            background: #fffbeb;
+            color: #92400e;
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+
+        .inventory-status-message.is-applied {
+            border-color: rgba(22, 101, 52, 0.18);
+            background: #f0fdf4;
+            color: #166534;
         }
 
         .inventory-section {
@@ -348,8 +432,13 @@
         }
 
         @media (max-width: 720px) {
-            .inventory-work-header {
+            .inventory-session-meta-grid,
+            .inventory-kpi-bar {
                 grid-template-columns: 1fr;
+            }
+
+            .inventory-session-meta-item.is-wide {
+                grid-column: auto;
             }
 
             .inventory-table-tools {
@@ -404,95 +493,54 @@
 {% block content %}
     <section class="inventory-page">
         <div class="inventory-layout-shell">
-        <header class="inventory-work-header">
-            <div>
-                <div class="inventory-title-row">
-                    <a class="inventory-backlink" href="{% url 'inventory:session-list' %}">Inwentaryzacje</a>
-                    <h1>{{ session.number }}</h1>
-                    <span class="inventory-status">{{ session_status_display_pl }}</span>
-                </div>
-
-                <dl class="inventory-meta">
-                    <div>
-                        <dt>Lokalizacje root</dt>
-                        <dd>{{ root_locations_display|default:"-" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Zakres rodzaju</dt>
-                        <dd>{{ asset_type_scope_display|default:"-" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Start</dt>
-                        <dd>{{ session.started_at|date:"Y-m-d H:i" }}</dd>
-                    </div>
-                    {% if is_session_closed %}
-                    <div>
-                        <dt>Zamknięcie</dt>
-                        <dd>{{ session.closed_at|date:"Y-m-d H:i"|default:"-" }}</dd>
-                    </div>
-                    {% endif %}
-                </dl>
-
-                <dl class="inventory-metrics" aria-label="Postęp inwentaryzacji">
-                    <div>
-                        <dt>Pozycje ewidencji na dzień spisu</dt>
-                        <dd data-summary-value="snapshot_total">{{ snapshot_total }}</dd>
-                    </div>
-                    <div>
-                        <dt>Odczytano</dt>
-                        <dd><span data-summary-value="read_count">{{ read_count }}</span> / <span data-summary-value="snapshot_total">{{ snapshot_total }}</span></dd>
-                    </div>
-                    <div>
-                        <dt>Zgodne</dt>
-                        <dd data-summary-value="matching_count">{{ matching_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Niedobory</dt>
-                        <dd data-summary-value="shortage_count">{{ shortage_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Nadwyżki</dt>
-                        <dd data-summary-value="surplus_count">{{ surplus_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Brak odczytu</dt>
-                        <dd data-summary-value="no_read_count">{{ no_read_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Inna lokalizacja</dt>
-                        <dd data-summary-value="wrong_location_count">{{ wrong_location_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Poza zakresem</dt>
-                        <dd data-summary-value="found_out_of_scope_count">{{ found_out_of_scope_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Nieznane kody</dt>
-                        <dd data-summary-value="unknown_code_count">{{ unknown_code_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Potwierdzone ręcznie</dt>
-                        <dd data-summary-value="manual_confirmation_count">{{ manual_confirmation_count }}</dd>
-                    </div>
-                    <div>
-                        <dt>Ilościówki z różnicą</dt>
-                        <dd data-summary-value="quantity_difference_count">{{ quantity_difference_count }}</dd>
-                    </div>
-                </dl>
+        <header class="inventory-session-header">
+            <p class="inventory-session-kicker">Inwentaryzacje</p>
+            <div class="inventory-session-title-row">
+                <h1>{{ session.number }}</h1>
+                <span class="inventory-status-pill-session">{{ session_status_display_pl }}</span>
             </div>
+            <p class="inventory-session-description">Sesja robocza spisu z bieżącym postępem, zakresem i akcjami workflow.</p>
+        </header>
 
-            <div class="inventory-header-actions">
+        <section class="inventory-session-meta-grid" aria-label="Metadane sesji">
+            <div class="inventory-session-meta-item is-wide">
+                <p class="inventory-session-meta-label">Lokalizacje root</p>
+                <p class="inventory-session-meta-value">{{ root_locations_display|default:"-" }}</p>
+            </div>
+            <div class="inventory-session-meta-item">
+                <p class="inventory-session-meta-label">Zakres rodzaju</p>
+                <p class="inventory-session-meta-value">{{ asset_type_scope_display|default:"-" }}</p>
+            </div>
+            <div class="inventory-session-meta-item">
+                <p class="inventory-session-meta-label">Start</p>
+                <p class="inventory-session-meta-value">{{ session.started_at|date:"Y-m-d H:i" }}</p>
+            </div>
+            {% if is_session_closed %}
+                <div class="inventory-session-meta-item">
+                    <p class="inventory-session-meta-label">Zamknięcie</p>
+                    <p class="inventory-session-meta-value">{{ session.closed_at|date:"Y-m-d H:i"|default:"-" }}</p>
+                </div>
+            {% endif %}
+            {% if session.applied_to_assets_at %}
+                <div class="inventory-session-meta-item is-wide">
+                    <p class="inventory-session-meta-label">Naniesienie wyników</p>
+                    <p class="inventory-session-meta-value">{{ session.applied_to_assets_at|date:"Y-m-d H:i" }}{% if session.applied_to_assets_by %} przez {{ session.applied_to_assets_by }}{% endif %}</p>
+                </div>
+            {% endif %}
+        </section>
+
+        <section class="inventory-session-actions" aria-label="Akcje sesji">
+            <div class="inventory-session-action-group">
+                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-list' %}">Wróć do listy</a>
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
                 {% if is_session_closed %}
                     <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-discrepancy-report' session.pk %}">Raport rozbieżności</a>
                 {% endif %}
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Arkusz spisu</a>
+            </div>
+            <div class="inventory-session-action-group">
                 {% if is_session_closed %}
-                    {% if session.applied_to_assets_at %}
-                        <span class="inventory-table-tool-stat">
-                            Wyniki naniesiono na Ewidencję: <strong>{{ session.applied_to_assets_at|date:"Y-m-d H:i" }}</strong>{% if session.applied_to_assets_by %} przez <strong>{{ session.applied_to_assets_by }}</strong>{% endif %}
-                        </span>
-                    {% else %}
+                    {% if not session.applied_to_assets_at %}
                         <form method="post" action="{% url 'inventory:session-apply-to-assets' session.pk %}" onsubmit="return confirm('Naniesienie wyników zapisze wynik spisu w Ewidencji Głównej. Nie zmieni ilości ewidencyjnej, lokalizacji ani danych księgowych. Kontynuować?');">
                             {% csrf_token %}
                             <button class="ui-btn ui-btn--primary" type="submit">Nanieś wyniki na Ewidencję</button>
@@ -506,10 +554,64 @@
                     </form>
                 {% endif %}
             </div>
-        </header>
+        </section>
 
-        {% if is_session_closed %}
-            <div class="inventory-empty">Sesja zamknięta — edycja i import odczytów są zablokowane.</div>
+        <section class="inventory-kpi-bar" aria-label="Postęp inwentaryzacji">
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Pozycje ewidencji</p>
+                <p class="inventory-session-kpi-value" data-summary-value="snapshot_total">{{ snapshot_total }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Odczytano</p>
+                <p class="inventory-session-kpi-value"><span data-summary-value="read_count">{{ read_count }}</span> / <span data-summary-value="snapshot_total">{{ snapshot_total }}</span></p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Zgodne</p>
+                <p class="inventory-session-kpi-value" data-summary-value="matching_count">{{ matching_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Niedobory</p>
+                <p class="inventory-session-kpi-value" data-summary-value="shortage_count">{{ shortage_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Nadwyżki</p>
+                <p class="inventory-session-kpi-value" data-summary-value="surplus_count">{{ surplus_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Brak odczytu</p>
+                <p class="inventory-session-kpi-value" data-summary-value="no_read_count">{{ no_read_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Inna lokalizacja</p>
+                <p class="inventory-session-kpi-value" data-summary-value="wrong_location_count">{{ wrong_location_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Poza zakresem</p>
+                <p class="inventory-session-kpi-value" data-summary-value="found_out_of_scope_count">{{ found_out_of_scope_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Nieznane kody</p>
+                <p class="inventory-session-kpi-value" data-summary-value="unknown_code_count">{{ unknown_code_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Potwierdzone ręcznie</p>
+                <p class="inventory-session-kpi-value" data-summary-value="manual_confirmation_count">{{ manual_confirmation_count }}</p>
+            </div>
+            <div class="inventory-kpi-item">
+                <p class="inventory-session-kpi-label">Ilościówki z różnicą</p>
+                <p class="inventory-session-kpi-value" data-summary-value="quantity_difference_count">{{ quantity_difference_count }}</p>
+            </div>
+        </section>
+
+        {% if is_session_closed or session.applied_to_assets_at %}
+            <section class="inventory-session-messages" aria-label="Status sesji">
+                {% if is_session_closed %}
+                    <p class="inventory-status-message">Sesja zamknięta — edycja i import odczytów są zablokowane.</p>
+                {% endif %}
+                {% if session.applied_to_assets_at %}
+                    <p class="inventory-status-message is-applied">Wyniki naniesiono na Ewidencję: <strong>{{ session.applied_to_assets_at|date:"Y-m-d H:i" }}</strong>{% if session.applied_to_assets_by %} przez <strong>{{ session.applied_to_assets_by }}</strong>{% endif %}.</p>
+                {% endif %}
+            </section>
         {% endif %}
 
         <section class="inventory-layout-table" aria-labelledby="inventory-work-title">
