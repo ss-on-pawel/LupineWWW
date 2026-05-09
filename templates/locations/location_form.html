@@ -4,28 +4,14 @@
 
 {% block extra_head %}
     <style>
-        .location-form-shell {
+        .location-form-page {
             display: grid;
-            gap: 18px;
-        }
-        .location-form-back {
-            display: inline-flex;
-            align-items: center;
-            width: fit-content;
-            min-height: 34px;
-            padding: 0 12px;
-            border: 1px solid rgba(15, 23, 42, 0.12);
-            font-size: 0.9rem;
-        }
-        .location-form-back:hover,
-        .location-form-back:focus-visible {
-            border-color: rgba(15, 23, 42, 0.2);
-            background: rgba(15, 23, 42, 0.04);
+            gap: 10px;
         }
         .location-form-header {
             display: grid;
-            gap: 10px;
-            padding-bottom: 14px;
+            gap: 6px;
+            padding-bottom: 10px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.1);
         }
         .location-form-kicker,
@@ -34,46 +20,47 @@
             color: var(--app-muted);
             font-family: var(--mono-font);
             font-size: 0.72rem;
-            letter-spacing: 0.12em;
+            letter-spacing: 0.14em;
             text-transform: uppercase;
         }
         .location-form-title {
             margin: 0;
-            font-size: clamp(2rem, 5vw, 3rem);
-            line-height: 0.96;
-            letter-spacing: -0.05em;
+            font-size: 1.55rem;
+            line-height: 1.15;
+            letter-spacing: 0;
         }
-        .location-form-intro {
+        .location-form-description {
             margin: 0;
-            max-width: 620px;
+            max-width: 680px;
             color: var(--app-muted);
-            line-height: 1.65;
+            font-size: 0.94rem;
+            line-height: 1.55;
         }
         .location-form-context {
             display: grid;
-            gap: 8px;
-            margin-top: 18px;
-            padding: 14px 16px;
+            gap: 6px;
+            max-width: 760px;
+            padding: 12px 14px;
             border: 1px solid rgba(15, 23, 42, 0.1);
             background: rgba(248, 250, 252, 0.76);
         }
         .location-form-context p {
             margin: 0;
-            line-height: 1.6;
+            line-height: 1.55;
         }
-        .location-form-card {
-            padding: 22px 24px;
+        .location-form-shell {
+            max-width: 760px;
             border: 1px solid rgba(15, 23, 42, 0.1);
-            background:
-                linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px),
-                rgba(255, 255, 255, 0.9);
-            background-size: 28px 28px, 28px 28px, auto;
+            background: rgba(255, 255, 255, 0.88);
+            padding: 16px;
         }
-        .location-form-grid {
+        .location-form {
             display: grid;
-            gap: 18px;
-            margin-top: 18px;
+            gap: 16px;
+        }
+        .location-form-section {
+            display: grid;
+            gap: 14px;
         }
         .location-form-field {
             display: grid;
@@ -88,30 +75,29 @@
         .location-form-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: flex-start;
+            gap: 8px;
             flex-wrap: wrap;
-            margin-top: 22px;
+            padding-top: 2px;
         }
         @media (max-width: 700px) {
-            .location-form-card {
-                padding: 20px 16px;
-                border-left: 0;
-                border-right: 0;
+            .location-form-shell,
+            .location-form-context {
                 margin-left: -16px;
                 margin-right: -16px;
+                border-left: 0;
+                border-right: 0;
             }
         }
     </style>
 {% endblock %}
 
 {% block content %}
-    <section class="location-form-shell">
-        <a class="location-form-back" href="{{ cancel_url }}">&larr; Powrót do lokalizacji</a>
-
+    <section class="location-form-page">
         <header class="location-form-header">
-            <p class="location-form-kicker">Formularz lokalizacji</p>
+            <p class="location-form-kicker">Lokalizacje</p>
             <h1 class="location-form-title">{{ form_title }}</h1>
-            <p class="location-form-intro">{{ form_intro }}</p>
+            <p class="location-form-description">{{ form_intro }}</p>
         </header>
 
         {% if parent_location %}
@@ -121,13 +107,11 @@
             </section>
         {% endif %}
 
-        <section class="location-form-card" aria-labelledby="location-form-section-title">
-            <p class="location-form-label">Sekcja</p>
-            <h2 id="location-form-section-title">Dane lokalizacji</h2>
-
-            <form method="post">
+        <section class="location-form-shell" aria-labelledby="location-form-section-title">
+            <form class="location-form" method="post">
                 {% csrf_token %}
-                <div class="location-form-grid">
+                <div class="location-form-section">
+                    <p class="location-form-label" id="location-form-section-title">Dane lokalizacji</p>
                     <div class="location-form-field">
                         <label for="{{ form.name.id_for_label }}">Nazwa</label>
                         {{ form.name }}
