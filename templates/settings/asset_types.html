@@ -4,34 +4,83 @@
 
 {% block extra_head %}
     <style>
+        .settings-page {
+            display: grid;
+            gap: 14px;
+        }
         .settings-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 14px;
+            display: grid;
+            gap: 6px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .settings-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
         }
         .settings-title {
             margin: 0;
-            font-size: 1.45rem;
+            font-size: 1.55rem;
+            line-height: 1.15;
             letter-spacing: 0;
+        }
+        .settings-description {
+            margin: 0;
+            max-width: 680px;
+            color: var(--app-muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+        .settings-workbar {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .settings-table-shell {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
         }
         .settings-table-wrap {
             overflow-x: auto;
-            border-top: 1px solid rgba(15, 23, 42, 0.12);
         }
         .settings-table {
+            width: 100%;
             min-width: 760px;
+            border-collapse: collapse;
             font-size: 0.9rem;
         }
         .settings-table th,
         .settings-table td {
-            padding: 9px 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
             white-space: nowrap;
+        }
+        .settings-table th {
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            background: rgba(248, 250, 252, 0.92);
+        }
+        .settings-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+        .settings-table tbody tr:hover td {
+            background: rgba(248, 250, 252, 0.72);
         }
         .settings-code {
             font-family: var(--mono-font);
             font-size: 0.86rem;
+            color: #344054;
         }
         .settings-actions {
             display: flex;
@@ -46,54 +95,63 @@
 {% endblock %}
 
 {% block content %}
-    <header class="settings-header">
-        <h1 class="settings-title">Rodzaje środków</h1>
-        <a class="ui-btn ui-btn--primary" href="{% url 'settings:asset-type-create' %}">Dodaj rodzaj</a>
-    </header>
+    <section class="settings-page">
+        <header class="settings-header">
+            <p class="settings-kicker">Słowniki</p>
+            <h1 class="settings-title">Rodzaje środków</h1>
+            <p class="settings-description">Zarządzaj słownikiem rodzajów środków, ich kodami oraz oznaczeniem obsługi ilościowej.</p>
+        </header>
 
-    <div class="settings-table-wrap">
-        <table class="settings-table">
-            <thead>
-                <tr>
-                    <th>Nazwa</th>
-                    <th>Kod</th>
-                    <th>Ilościowy</th>
-                    <th>Aktywny</th>
-                    <th>Kolejność</th>
-                    <th>Akcje</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for asset_type in asset_types %}
-                    <tr>
-                        <td data-label="Nazwa">{{ asset_type.name }}</td>
-                        <td data-label="Kod"><span class="settings-code">{{ asset_type.code }}</span></td>
-                        <td data-label="Ilościowy">{% if asset_type.is_quantity_based %}Tak{% else %}Nie{% endif %}</td>
-                        <td data-label="Aktywny">{% if asset_type.is_active %}Tak{% else %}Nie{% endif %}</td>
-                        <td data-label="Kolejność">{{ asset_type.sort_order }}</td>
-                        <td data-label="Akcje">
-                            <div class="settings-actions">
-                                <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-type-update' asset_type.pk %}">Edytuj</a>
-                                {% if asset_type.is_active %}
-                                    <form class="settings-inline-form" method="post" action="{% url 'settings:asset-type-deactivate' asset_type.pk %}">
-                                        {% csrf_token %}
-                                        <button class="ui-btn ui-btn--secondary" type="submit">Dezaktywuj</button>
-                                    </form>
-                                {% else %}
-                                    <form class="settings-inline-form" method="post" action="{% url 'settings:asset-type-activate' asset_type.pk %}">
-                                        {% csrf_token %}
-                                        <button class="ui-btn ui-btn--secondary" type="submit">Aktywuj</button>
-                                    </form>
-                                {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="6">Brak rodzajów środków.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+        <div class="settings-workbar" aria-label="Narzędzia słownika">
+            <a class="ui-btn ui-btn--primary" href="{% url 'settings:asset-type-create' %}">Dodaj rodzaj</a>
+        </div>
+
+        <section class="settings-table-shell" aria-labelledby="settings-table-title">
+            <div class="settings-table-wrap">
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th id="settings-table-title" scope="col">Nazwa</th>
+                            <th scope="col">Kod</th>
+                            <th scope="col">Ilościowy</th>
+                            <th scope="col">Aktywny</th>
+                            <th scope="col">Kolejność</th>
+                            <th scope="col">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset_type in asset_types %}
+                            <tr>
+                                <td data-label="Nazwa">{{ asset_type.name }}</td>
+                                <td data-label="Kod"><span class="settings-code">{{ asset_type.code }}</span></td>
+                                <td data-label="Ilościowy">{% if asset_type.is_quantity_based %}Tak{% else %}Nie{% endif %}</td>
+                                <td data-label="Aktywny">{% if asset_type.is_active %}Tak{% else %}Nie{% endif %}</td>
+                                <td data-label="Kolejność">{{ asset_type.sort_order }}</td>
+                                <td data-label="Akcje">
+                                    <div class="settings-actions">
+                                        <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-type-update' asset_type.pk %}">Edytuj</a>
+                                        {% if asset_type.is_active %}
+                                            <form class="settings-inline-form" method="post" action="{% url 'settings:asset-type-deactivate' asset_type.pk %}">
+                                                {% csrf_token %}
+                                                <button class="ui-btn ui-btn--secondary" type="submit">Dezaktywuj</button>
+                                            </form>
+                                        {% else %}
+                                            <form class="settings-inline-form" method="post" action="{% url 'settings:asset-type-activate' asset_type.pk %}">
+                                                {% csrf_token %}
+                                                <button class="ui-btn ui-btn--secondary" type="submit">Aktywuj</button>
+                                            </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6">Brak rodzajów środków.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </section>
 {% endblock %}
