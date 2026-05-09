@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Dodaj składnik majątku{% endblock %}
+{% block title %}{{ page_title|default:"Dodaj składnik majątku" }}{% endblock %}
 
 {% block content %}
     <form method="post">
         {% csrf_token %}
+        {{ form.record_quantity.as_hidden }}
+        {{ form.is_active.as_hidden }}
+        {{ form.last_inventory_date.as_hidden }}
 
         <section class="card">
-            <h2>Nowy składnik majątku</h2>
+            <h2>{{ page_title|default:"Nowy składnik majątku" }}</h2>
             <p class="intro">Uzupełnij podstawowe dane identyfikacyjne, organizacyjne i eksploatacyjne.</p>
 
             {% if form.non_field_errors %}
@@ -21,20 +24,35 @@
             <h3 class="section-title">Dane podstawowe</h3>
             <div class="form-grid">
                 <div class="form-field">
-                    {{ form.name.label_tag }}
-                    {{ form.name }}
-                    {{ form.name.errors }}
-                </div>
-                <div class="form-field">
                     {{ form.inventory_number.label_tag }}
                     {{ form.inventory_number }}
                     {% if form.inventory_number.help_text %}<div class="helptext">{{ form.inventory_number.help_text }}</div>{% endif %}
                     {{ form.inventory_number.errors }}
                 </div>
                 <div class="form-field">
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    {{ form.name.errors }}
+                </div>
+                <div class="form-field">
                     {{ form.asset_type.label_tag }}
                     {{ form.asset_type }}
                     {{ form.asset_type.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.barcode.label_tag }}
+                    {{ form.barcode }}
+                    {% if form.barcode.help_text %}<div class="helptext">{{ form.barcode.help_text }}</div>{% endif %}
+                    {{ form.barcode.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.status.label_tag }}
+                    {{ form.status }}
+                    {{ form.status.errors }}
+                </div>
+                <div class="form-field">
+                    <label>Ilość</label>
+                    <div class="detail-value is-mono">{{ form.instance.current_quantity|default_if_none:"—" }}</div>
                 </div>
                 <div class="form-field">
                     {{ form.category.label_tag }}
@@ -50,7 +68,43 @@
         </section>
 
         <section class="card">
-            <h3 class="section-title">Identyfikacja i specyfikacja</h3>
+            <h3 class="section-title">Organizacyjne</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.location_fk.label_tag }}
+                    {{ form.location_fk }}
+                    {{ form.location_fk.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.room.label_tag }}
+                    {{ form.room }}
+                    {{ form.room.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.organizational_unit.label_tag }}
+                    {{ form.organizational_unit }}
+                    {{ form.organizational_unit.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.department.label_tag }}
+                    {{ form.department }}
+                    {{ form.department.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.responsible_person.label_tag }}
+                    {{ form.responsible_person }}
+                    {{ form.responsible_person.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.current_user.label_tag }}
+                    {{ form.current_user }}
+                    {{ form.current_user.errors }}
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3 class="section-title">Techniczne</h3>
             <div class="form-grid">
                 <div class="form-field">
                     {{ form.manufacturer.label_tag }}
@@ -68,10 +122,9 @@
                     {{ form.serial_number.errors }}
                 </div>
                 <div class="form-field">
-                    {{ form.barcode.label_tag }}
-                    {{ form.barcode }}
-                    {% if form.barcode.help_text %}<div class="helptext">{{ form.barcode.help_text }}</div>{% endif %}
-                    {{ form.barcode.errors }}
+                    {{ form.technical_condition.label_tag }}
+                    {{ form.technical_condition }}
+                    {{ form.technical_condition.errors }}
                 </div>
                 <div class="form-field">
                     {{ form.external_id.label_tag }}
@@ -82,7 +135,7 @@
         </section>
 
         <section class="card">
-            <h3 class="section-title">Dane zakupowe</h3>
+            <h3 class="section-title">Finansowe</h3>
             <div class="form-grid">
                 <div class="form-field">
                     {{ form.purchase_date.label_tag }}
@@ -105,46 +158,10 @@
                     {{ form.invoice_number }}
                     {{ form.invoice_number.errors }}
                 </div>
-            </div>
-        </section>
-
-        <section class="card">
-            <h3 class="section-title">Przypisanie organizacyjne</h3>
-            <div class="form-grid">
                 <div class="form-field">
                     {{ form.cost_center.label_tag }}
                     {{ form.cost_center }}
                     {{ form.cost_center.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.organizational_unit.label_tag }}
-                    {{ form.organizational_unit }}
-                    {{ form.organizational_unit.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.department.label_tag }}
-                    {{ form.department }}
-                    {{ form.department.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.location_fk.label_tag }}
-                    {{ form.location_fk }}
-                    {{ form.location_fk.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.room.label_tag }}
-                    {{ form.room }}
-                    {{ form.room.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.responsible_person.label_tag }}
-                    {{ form.responsible_person }}
-                    {{ form.responsible_person.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.current_user.label_tag }}
-                    {{ form.current_user }}
-                    {{ form.current_user.errors }}
                 </div>
             </div>
         </section>
@@ -152,21 +169,6 @@
         <section class="card">
             <h3 class="section-title">Eksploatacja</h3>
             <div class="form-grid">
-                <div class="form-field">
-                    {{ form.status.label_tag }}
-                    {{ form.status }}
-                    {{ form.status.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.technical_condition.label_tag }}
-                    {{ form.technical_condition }}
-                    {{ form.technical_condition.errors }}
-                </div>
-                <div class="form-field">
-                    {{ form.last_inventory_date.label_tag }}
-                    {{ form.last_inventory_date }}
-                    {{ form.last_inventory_date.errors }}
-                </div>
                 <div class="form-field">
                     {{ form.next_review_date.label_tag }}
                     {{ form.next_review_date }}
@@ -183,12 +185,14 @@
                     {{ form.insurance_until.errors }}
                 </div>
                 <div class="form-field">
-                    {{ form.is_active.label_tag }}
-                    {{ form.is_active }}
-                    {{ form.is_active.errors }}
+                    <label>Data ostatniej inwentaryzacji</label>
+                    <div class="detail-value is-mono">{{ form.instance.last_inventory_date|date:"Y-m-d"|default:"—" }}</div>
+                    {{ form.last_inventory_date.errors }}
                 </div>
             </div>
+        </section>
 
+        <section class="card">
             <div class="actions">
                 <button class="ui-btn ui-btn--primary" type="submit">Zapisz składnik</button>
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>

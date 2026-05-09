@@ -245,6 +245,12 @@ class Asset(models.Model):
     def __str__(self) -> str:
         return f"{self.name} ({self.inventory_number})"
 
+    @property
+    def current_quantity(self):
+        if self.last_inventory_quantity is not None:
+            return self.last_inventory_quantity
+        return self.record_quantity
+
     def save(self, *args, **kwargs):
         synced_location_fields = self._sync_location_cache()
         synced_fields = self._sync_asset_type_fields()

@@ -56,9 +56,7 @@ def _format_csv_bool(value):
 
 
 def _get_asset_current_quantity(asset):
-    if asset.last_inventory_quantity is not None:
-        return asset.last_inventory_quantity
-    return asset.record_quantity
+    return asset.current_quantity
 
 
 EXPORTABLE_ASSET_COLUMNS = {
@@ -991,11 +989,7 @@ def asset_list_api(request):
             "asset_type": asset.asset_type,
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "record_quantity": asset.record_quantity,
-            "current_quantity": (
-                asset.last_inventory_quantity
-                if asset.last_inventory_quantity is not None
-                else asset.record_quantity
-            ),
+            "current_quantity": asset.current_quantity,
             "category": asset.category,
             "manufacturer": asset.manufacturer,
             "model": asset.model,

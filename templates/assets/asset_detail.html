@@ -30,11 +30,6 @@
             z-index: 1;
         }
         .asset-system-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 24px;
-            flex-wrap: wrap;
             padding-bottom: 28px;
             border-bottom: var(--asset-line);
         }
@@ -76,6 +71,7 @@
         .meta-pill {
             display: inline-flex;
             align-items: center;
+            max-width: 100%;
             min-height: 34px;
             padding: 0 12px;
             border: var(--asset-line);
@@ -86,12 +82,16 @@
             letter-spacing: 0.05em;
             text-transform: uppercase;
             color: #314154;
+            overflow-wrap: anywhere;
         }
         .asset-actions {
             display: flex;
             gap: 10px;
             flex-wrap: nowrap;
             align-items: center;
+            justify-content: flex-start;
+            padding: 14px 0;
+            border-bottom: var(--asset-line);
         }
         .asset-withdraw-form {
             display: flex;
@@ -277,11 +277,7 @@
             .asset-shell {
                 padding: 22px;
             }
-            .asset-system-header {
-                gap: 18px;
-            }
             .asset-actions {
-                width: 100%;
                 flex-wrap: wrap;
             }
         }
@@ -318,25 +314,25 @@
                 <p class="asset-subtitle">{{ asset.inventory_number }}</p>
                 <div class="asset-meta-row">
                     <span class="meta-pill">STATUS / {{ asset.get_status_display }}</span>
-                    <span class="meta-pill">TYP / {{ asset_type_display }}</span>
-                    <span class="meta-pill">STAN / {{ asset.get_technical_condition_display }}</span>
+                    <span class="meta-pill">RODZAJ / {{ asset_type_display }}</span>
+                    <span class="meta-pill">LOKALIZACJA / {{ asset.location|default:"-" }}</span>
                 </div>
             </div>
-            <div class="asset-actions">
-                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
-                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
-                {% if asset.is_active %}
-                    <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
-                        {% csrf_token %}
-                        <select name="status" aria-label="Status wycofania">
-                            {% for value, label in withdraw_status_options %}
-                                <option value="{{ value }}">{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                        <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
-                    </form>
-                {% endif %}
-            </div>
+        </div>
+        <div class="asset-actions">
+            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+            {% if asset.is_active %}
+                <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
+                    {% csrf_token %}
+                    <select name="status" aria-label="Status wycofania">
+                        {% for value, label in withdraw_status_options %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
+                </form>
+            {% endif %}
         </div>
         {% if not asset.is_active %}
             <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>

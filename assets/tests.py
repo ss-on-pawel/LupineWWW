@@ -223,6 +223,36 @@ class AssetRecordQuantityModelTests(TestCase):
 
         self.assertEqual(asset.record_quantity, 0)
 
+    def test_current_quantity_falls_back_to_record_quantity(self):
+        asset = Asset.objects.create(
+            name="Current quantity fallback asset",
+            inventory_number="CQ-FALLBACK-001",
+            record_quantity=7,
+            last_inventory_quantity=None,
+        )
+
+        self.assertEqual(asset.current_quantity, 7)
+
+    def test_current_quantity_uses_last_inventory_quantity(self):
+        asset = Asset.objects.create(
+            name="Current quantity inventory asset",
+            inventory_number="CQ-INVENTORY-001",
+            record_quantity=7,
+            last_inventory_quantity=3,
+        )
+
+        self.assertEqual(asset.current_quantity, 3)
+
+    def test_current_quantity_preserves_zero_last_inventory_quantity(self):
+        asset = Asset.objects.create(
+            name="Current quantity zero inventory asset",
+            inventory_number="CQ-ZERO-001",
+            record_quantity=7,
+            last_inventory_quantity=0,
+        )
+
+        self.assertEqual(asset.current_quantity, 0)
+
 
 class AssetLocationSyncModelTests(TestCase):
     def test_save_syncs_location_cache_from_location_fk_path(self):
@@ -4632,6 +4662,51 @@ class AssetDetailViewTests(TestCase):
         self.assertContains(response, "Detail Laptop")
         self.assertContains(response, "DETAIL-001")
 
+    def test_detail_view_renders_current_quantity_from_record_quantity_fallback(self):
+        asset = Asset.objects.create(
+            name="Detail Quantity Fallback",
+            inventory_number="DETAIL-QTY-FALLBACK-001",
+            record_quantity=6,
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        user = User.objects.create_superuser(
+            username="detail-quantity-fallback",
+            email="detail-quantity-fallback@example.com",
+            password="test-pass-123",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ILOŚĆ")
+        self.assertContains(response, '<div class="detail-value is-mono">6</div>', html=True)
+
+    def test_detail_view_renders_current_quantity_from_last_inventory_quantity(self):
+        asset = Asset.objects.create(
+            name="Detail Quantity Inventory",
+            inventory_number="DETAIL-QTY-INVENTORY-001",
+            record_quantity=6,
+            last_inventory_quantity=2,
+            status=Asset.Status.IN_STOCK,
+            location="Warehouse",
+            category="IT",
+        )
+        user = User.objects.create_superuser(
+            username="detail-quantity-inventory",
+            email="detail-quantity-inventory@example.com",
+            password="test-pass-123",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ILOŚĆ")
+        self.assertContains(response, '<div class="detail-value is-mono">2</div>', html=True)
+
     def test_scoped_user_can_view_archived_asset_detail(self):
         location = Location.objects.create(name="Archived Detail Warehouse")
         asset = Asset.objects.create(
@@ -5126,6 +5201,81 @@ class AssetUpdateViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, asset.name)
+
+    def test_update_form_uses_edit_title(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location)
+        user = self._manager_with_location("update-edit-title", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Edytuj składnik majątku")
+        self.assertNotContains(response, "<h2>Nowy składnik majątku</h2>", html=True)
+
+    def test_update_form_renders_asset_detail_sections(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location)
+        user = self._manager_with_location("update-sections", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dane podstawowe")
+        self.assertContains(response, "Organizacyjne")
+        self.assertContains(response, "Techniczne")
+        self.assertContains(response, "Finansowe")
+        self.assertContains(response, "Eksploatacja")
+
+    def test_update_form_renders_quantity_as_read_only_display(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(
+            inventory_number="UPDATE-QUANTITY-DISPLAY-001",
+            location_obj=allowed_location,
+            record_quantity=9,
+        )
+        user = self._manager_with_location("update-quantity-display", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ilość")
+        self.assertContains(response, '<div class="detail-value is-mono">9</div>', html=True)
+
+    def test_update_form_keeps_quantity_and_active_fields_hidden(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(location_obj=allowed_location)
+        user = self._manager_with_location("update-hidden-system-fields", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="hidden" name="record_quantity"')
+        self.assertContains(response, 'type="hidden" name="is_active"')
+        self.assertNotContains(response, 'type="number" name="record_quantity"')
+        self.assertNotContains(response, 'type="checkbox" name="is_active"')
+
+    def test_update_form_renders_last_inventory_date_as_read_only_display(self):
+        allowed_location, _ = self._create_location_tree()
+        asset = self._create_asset(
+            inventory_number="UPDATE-LAST-INVENTORY-DATE-001",
+            location_obj=allowed_location,
+            last_inventory_date=date(2026, 5, 1),
+        )
+        user = self._manager_with_location("update-last-inventory-display", allowed_location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Data ostatniej inwentaryzacji")
+        self.assertContains(response, '<div class="detail-value is-mono">2026-05-01</div>', html=True)
+        self.assertContains(response, 'type="hidden" name="last_inventory_date"')
+        self.assertNotContains(response, 'type="date" name="last_inventory_date"')
 
     def test_user_outside_scope_gets_404_for_update_form(self):
         allowed_location, outside_location = self._create_location_tree()
