@@ -221,6 +221,18 @@ def _user_can_manage_asset_types(user):
     return profile.can_approve_asset_changes
 
 
+def _user_can_restore_asset(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        profile = user.profile
+    except ObjectDoesNotExist:
+        return False
+    return profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}
+
+
 def _get_asset_form_location_queryset(user):
     accessible_location_ids = get_accessible_location_ids(user)
     queryset = Location.objects.filter(is_active=True).order_by("name", "id")
@@ -799,6 +811,7 @@ def asset_detail(request, id):
         "assets/asset_detail.html",
         {
             "asset": asset,
+            "can_restore_asset": (not asset.is_active) and _user_can_restore_asset(request.user),
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "withdraw_capabilities": get_asset_withdraw_capabilities(asset),
             "history_entries": history_entries,
@@ -811,6 +824,38 @@ def asset_detail(request, id):
             "page_title": "Karta środka",
         },
     )
+
+
+@login_required
+@require_POST
+def asset_restore(request, id):
+    if not _user_can_restore_asset(request.user):
+        raise PermissionDenied
+
+    asset = get_object_or_404(Asset.objects.select_related("asset_type_ref", "location_fk"), pk=id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    if asset.is_active:
+        return HttpResponse("Asset is already active.", status=400)
+
+    asset.status = Asset.Status.ACTIVE
+    asset.is_active = True
+    asset.updated_at = timezone.now()
+    asset.save(update_fields=["status", "is_active", "updated_at"])
+
+    record_asset_history(
+        asset=asset,
+        operator=request.user,
+        event_type=AssetHistoryEntry.EventType.RESTORED,
+        description="Przywrócono środek z Archiwum do Ewidencji.",
+        old_value="Archiwum",
+        new_value="Aktywna Ewidencja",
+        field_name="is_active",
+    )
+    messages.success(request, "Środek został przywrócony do Ewidencji.")
+    return redirect("assets:detail", id=asset.pk)
 
 
 @login_required

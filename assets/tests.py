@@ -5431,6 +5431,210 @@ class AssetDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "System")
 
+    def test_active_asset_does_not_show_restore_button(self):
+        asset = Asset.objects.create(
+            name="Active Restore Hidden",
+            inventory_number="DETAIL-RESTORE-ACTIVE-001",
+            status=Asset.Status.ACTIVE,
+            location="Warehouse",
+            category="IT",
+        )
+        user = User.objects.create_superuser(
+            username="detail-restore-active-superuser",
+            email="detail-restore-active-superuser@example.com",
+            password="test-pass-123",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Przywróć do Ewidencji")
+        self.assertNotContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
+
+    def test_archived_asset_shows_restore_button_for_manager(self):
+        location = Location.objects.create(name="Detail Restore Allowed")
+        asset = Asset.objects.create(
+            name="Archived Restore Visible",
+            inventory_number="DETAIL-RESTORE-MANAGER-001",
+            status=Asset.Status.LIQUIDATED,
+            location=location.path,
+            location_fk=location,
+            category="IT",
+            is_active=False,
+        )
+        user = User.objects.create_user(username="detail-restore-manager", password="test-pass-123")
+        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.save(update_fields=["role"])
+        user.profile.allowed_locations.add(location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Przywróć do Ewidencji")
+        self.assertContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
+
+    def test_archived_asset_does_not_show_restore_button_for_regular_user(self):
+        location = Location.objects.create(name="Detail Restore User")
+        asset = Asset.objects.create(
+            name="Archived Restore Hidden",
+            inventory_number="DETAIL-RESTORE-USER-001",
+            status=Asset.Status.LIQUIDATED,
+            location=location.path,
+            location_fk=location,
+            category="IT",
+            is_active=False,
+        )
+        user = User.objects.create_user(username="detail-restore-user", password="test-pass-123")
+        user.profile.allowed_locations.add(location)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Przywróć do Ewidencji")
+        self.assertNotContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
+
+
+class AssetRestoreViewTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Restore Location")
+        self.other_location = Location.objects.create(name="Restore Other")
+
+    def _create_asset(self, inventory_number="RESTORE-001", **overrides):
+        defaults = {
+            "name": "Restore Asset",
+            "inventory_number": inventory_number,
+            "status": Asset.Status.LIQUIDATED,
+            "location": self.location.path,
+            "location_fk": self.location,
+            "category": "IT",
+            "is_active": False,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _admin(self, username="restore-admin"):
+        user = User.objects.create_user(username=username, password="test-pass-123")
+        user.profile.role = UserProfile.Role.ADMIN
+        user.profile.save(update_fields=["role"])
+        return user
+
+    def _manager(self, username="restore-manager", location=None):
+        user = User.objects.create_user(username=username, password="test-pass-123")
+        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.save(update_fields=["role"])
+        user.profile.allowed_locations.add(location or self.location)
+        return user
+
+    def _regular_user(self, username="restore-user", location=None):
+        user = User.objects.create_user(username=username, password="test-pass-123")
+        user.profile.allowed_locations.add(location or self.location)
+        return user
+
+    def _restore(self, asset):
+        return self.client.post(reverse("assets:asset-restore", kwargs={"id": asset.id}))
+
+    def _messages(self, response):
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
+    def test_admin_can_restore_archived_asset(self):
+        asset = self._create_asset("RESTORE-ADMIN-001")
+        self.client.force_login(self._admin())
+
+        response = self._restore(asset)
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+        self.assertEqual(self._messages(response), ["Środek został przywrócony do Ewidencji."])
+
+    def test_manager_can_restore_archived_asset_in_scope(self):
+        asset = self._create_asset("RESTORE-MANAGER-001")
+        self.client.force_login(self._manager())
+
+        response = self._restore(asset)
+
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+
+    def test_manager_cannot_restore_asset_outside_scope(self):
+        asset = self._create_asset(
+            "RESTORE-SCOPE-001",
+            location=self.other_location.path,
+            location_fk=self.other_location,
+        )
+        self.client.force_login(self._manager())
+
+        response = self._restore(asset)
+
+        self.assertEqual(response.status_code, 404)
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_regular_user_cannot_restore_asset(self):
+        asset = self._create_asset("RESTORE-USER-001")
+        self.client.force_login(self._regular_user())
+
+        response = self._restore(asset)
+
+        self.assertEqual(response.status_code, 403)
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_cannot_restore_active_asset(self):
+        asset = self._create_asset("RESTORE-ACTIVE-001", status=Asset.Status.ACTIVE, is_active=True)
+        self.client.force_login(self._admin("restore-active-admin"))
+
+        response = self._restore(asset)
+
+        self.assertEqual(response.status_code, 400)
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_restore_creates_history_entry(self):
+        asset = self._create_asset("RESTORE-HISTORY-001")
+        user = self._manager("restore-history-manager")
+        self.client.force_login(user)
+
+        self._restore(asset)
+
+        entry = AssetHistoryEntry.objects.get(asset=asset)
+        self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.RESTORED)
+        self.assertEqual(entry.description, "Przywrócono środek z Archiwum do Ewidencji.")
+        self.assertEqual(entry.field_name, "is_active")
+        self.assertEqual(entry.old_value, "Archiwum")
+        self.assertEqual(entry.new_value, "Aktywna Ewidencja")
+        self.assertEqual(entry.operator, user)
+
+    def test_restore_moves_asset_from_archive_to_active_list(self):
+        asset = self._create_asset("RESTORE-LISTS-001")
+        self.client.force_login(self._manager("restore-lists-manager"))
+
+        self._restore(asset)
+
+        active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+        archive_response = self.client.get(
+            reverse("assets:api-list"),
+            {"asset_scope": "archive", "search": asset.inventory_number},
+        )
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(active_response.json()["pagination"]["total_items"], 1)
+        self.assertEqual(active_response.json()["results"][0]["inventory_number"], asset.inventory_number)
+        self.assertEqual(archive_response.status_code, 200)
+        self.assertEqual(archive_response.json()["pagination"]["total_items"], 0)
+
 
 class AssetWithdrawViewTests(TestCase):
     def setUp(self):

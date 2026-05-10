@@ -15,6 +15,7 @@ from .views import (
     asset_detail,
     asset_export_csv_api,
     asset_list_api,
+    asset_restore,
     asset_withdraw,
 )
 
@@ -35,6 +36,7 @@ urlpatterns = [
     path("assets/changes/<int:pk>/reject/", asset_change_reject, name="change-reject"),
     path("assets/add/", AssetCreateView.as_view(), name="create"),
     path("assets/<int:pk>/edit/", AssetUpdateView.as_view(), name="update"),
+    path("assets/<int:id>/restore/", asset_restore, name="asset-restore"),
     path("assets/<int:id>/withdraw/", asset_withdraw, name="asset-withdraw"),
     path("assets/<int:id>/", asset_detail, name="detail"),
 ]

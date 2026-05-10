@@ -376,6 +376,12 @@
                     <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
                 </form>
             {% endif %}
+            {% if can_restore_asset %}
+                <form method="post" action="{% url 'assets:asset-restore' asset.id %}" onsubmit="return window.confirm('Przywrócić środek do aktywnej Ewidencji?');">
+                    {% csrf_token %}
+                    <button class="ui-btn ui-btn--success" type="submit">Przywróć do Ewidencji</button>
+                </form>
+            {% endif %}
         </div>
         {% if not asset.is_active %}
             <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>
