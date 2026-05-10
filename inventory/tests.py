@@ -42,7 +42,7 @@ class StartInventorySessionTests(TestCase):
             "barcode": f"BC-{inventory_number}",
             "location_fk": location,
             "location": location.path if location else "Legacy only",
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
         }
         defaults.update(overrides)
         defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
@@ -135,13 +135,13 @@ class StartInventorySessionTests(TestCase):
 
         asset.name = "Changed name"
         asset.barcode = "BC-CHANGED"
-        asset.status = Asset.Status.IN_USE
+        asset.status = Asset.Status.INACTIVE
         asset.save(update_fields=["name", "barcode", "status", "updated_at"])
         snapshot.refresh_from_db()
 
         self.assertEqual(snapshot.name, "Original name")
         self.assertEqual(snapshot.barcode, "BC-ORIGINAL")
-        self.assertEqual(snapshot.status_snapshot, Asset.Status.IN_STOCK)
+        self.assertEqual(snapshot.status_snapshot, Asset.Status.ACTIVE)
 
     def test_asset_without_location_fk_is_not_snapshotted(self):
         self._create_asset("NOLOC-001", None)
@@ -197,7 +197,7 @@ class InventorySessionListViewTests(TestCase):
             barcode=f"BC-{inventory_number}",
             location=location.path,
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
 
     def _start_session(self, root_location):
@@ -307,7 +307,7 @@ class InventorySessionDetailViewTests(TestCase):
             "barcode": f"BC-{inventory_number}",
             "location": location.path,
             "location_fk": location,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
         }
         defaults.update(overrides)
         defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
@@ -501,7 +501,7 @@ class InventorySessionStartViewTests(TestCase):
             barcode=f"BC-{inventory_number}",
             location=location.path,
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
 
     def test_anonymous_user_is_redirected_to_login(self):
@@ -645,7 +645,7 @@ class InventorySessionCloseViewTests(TestCase):
             barcode=f"BC-{inventory_number}",
             location=location.path,
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
 
     def _start_session(self):
@@ -750,7 +750,7 @@ class InventorySessionApplyToAssetsViewTests(TestCase):
             "barcode": f"BC-{inventory_number}",
             "location": location.path,
             "location_fk": location,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "purchase_value": Decimal("123.45"),
         }
         defaults.update(overrides)
@@ -1128,7 +1128,7 @@ class InventorySessionReportViewTests(TestCase):
             "barcode": barcode,
             "location": location.path,
             "location_fk": location,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
         }
         defaults.update(overrides)
         defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
@@ -1369,7 +1369,7 @@ class InventorySessionSheetViewTests(TestCase):
             "barcode": barcode,
             "location": location.path,
             "location_fk": location,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
         }
         defaults.update(overrides)
         defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
@@ -1472,7 +1472,7 @@ class ImportInventoryScanTextTests(TestCase):
             barcode=barcode,
             location=location.path,
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
 
     def test_import_resolves_session_from_first_non_empty_line(self):
@@ -1603,7 +1603,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
             "barcode": barcode,
             "location": location.path,
             "location_fk": location,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
         }
         defaults.update(overrides)
         defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
@@ -2279,7 +2279,7 @@ class InventorySessionManualQuantityModelTests(TestCase):
             barcode="BC-MANUAL-MODEL",
             location=self.root.path,
             location_fk=self.root,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
         self.session = start_inventory_session(
             created_by=self.user,
@@ -2330,7 +2330,7 @@ class InventorySessionManualConfirmationModelTests(TestCase):
             barcode="BC-MANUAL-CONF-MODEL",
             location=self.root.path,
             location_fk=self.root,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
         self.session = start_inventory_session(
             created_by=self.user,
@@ -2397,7 +2397,7 @@ class InventoryManualQuantityApiTests(TestCase):
             barcode=barcode,
             location=location.path,
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
 
     def _post(self, payload):
@@ -2533,7 +2533,7 @@ class InventoryManualConfirmationApiTests(TestCase):
             barcode=barcode,
             location=location.path,
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
 
     def _post(self, payload, user=None):
@@ -2744,7 +2744,7 @@ class ScanFileImportApiTests(TestCase):
             barcode="BC-API-ASSET",
             location=self.child.path,
             location_fk=self.child,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
         )
         self.session = start_inventory_session(
             created_by=self.user,

@@ -33,8 +33,6 @@ from locations.models import Location
 
 ASSET_WITHDRAW_STATUSES = {
     Asset.Status.LIQUIDATED,
-    Asset.Status.SOLD,
-    Asset.Status.LOST,
 }
 
 
@@ -801,8 +799,6 @@ def asset_detail(request, id):
             "history_entries": history_entries,
             "withdraw_status_options": [
                 (Asset.Status.LIQUIDATED, dict(Asset.Status.choices)[Asset.Status.LIQUIDATED]),
-                (Asset.Status.SOLD, dict(Asset.Status.choices)[Asset.Status.SOLD]),
-                (Asset.Status.LOST, dict(Asset.Status.choices)[Asset.Status.LOST]),
             ],
             "page_title": "Karta środka",
         },

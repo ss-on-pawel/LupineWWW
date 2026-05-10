@@ -227,7 +227,7 @@ class Command(BaseCommand):
         Asset.objects.filter(external_id__startswith=DEMO_PREFIX).delete()
         rng = Random(RANDOM_SEED)
         leaf_locations = [location for path, location in locations.items() if path.count(" / ") == 3]
-        statuses = [Asset.Status.IN_STOCK, Asset.Status.IN_USE, Asset.Status.RESERVED, Asset.Status.IN_SERVICE]
+        statuses = [Asset.Status.ACTIVE, Asset.Status.INACTIVE]
         conditions = [
             Asset.TechnicalCondition.NEW,
             Asset.TechnicalCondition.VERY_GOOD,
@@ -246,7 +246,7 @@ class Command(BaseCommand):
             name = self._asset_name(index, type_code, is_quantity)
             inventory_number = f"LUP-{index:05d}"
             is_archived = index % 47 == 0
-            status = rng.choice([Asset.Status.LIQUIDATED, Asset.Status.SOLD, Asset.Status.LOST]) if is_archived else rng.choice(statuses)
+            status = Asset.Status.LIQUIDATED if is_archived else rng.choice(statuses)
             assets.append(
                 Asset(
                     name=name,

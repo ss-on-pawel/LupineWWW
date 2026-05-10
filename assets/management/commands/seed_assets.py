@@ -45,13 +45,9 @@ ROOM_POOL = ["A-101", "A-204", "B-015", "B-220", "C-310", "MAG-01", "SRV-02", ""
 UNIT_POOL = ["Finanse", "IT", "Administracja", "Operacje", "Logistyka", "Sprzedaz"]
 DEPARTMENT_POOL = ["Back Office", "Helpdesk", "Zakupy", "Kontroling", "Magazyn", "Utrzymanie"]
 STATUS_WEIGHTS = [
-    (Asset.Status.IN_USE, 40),
-    (Asset.Status.IN_STOCK, 18),
-    (Asset.Status.RESERVED, 8),
-    (Asset.Status.IN_SERVICE, 10),
-    (Asset.Status.LIQUIDATED, 6),
-    (Asset.Status.SOLD, 6),
-    (Asset.Status.LOST, 2),
+    (Asset.Status.ACTIVE, 66),
+    (Asset.Status.INACTIVE, 20),
+    (Asset.Status.LIQUIDATED, 14),
 ]
 CONDITION_WEIGHTS = [
     (Asset.TechnicalCondition.NEW, 10),
@@ -201,7 +197,7 @@ class Command(BaseCommand):
 
         purchase_value = Decimal(str(rng.randint(450, 125000))) + Decimal(str(rng.choice([0, 0.99, 0.49, 0.75])))
         assigned_person = rng.choice(users) if users and rng.random() < 0.32 else None
-        current_user = rng.choice(users) if users and status == Asset.Status.IN_USE and rng.random() < 0.45 else None
+        current_user = rng.choice(users) if users and status == Asset.Status.ACTIVE and rng.random() < 0.45 else None
 
         asset = Asset(
             name=f"{base_name} {ordinal:05d}",
@@ -235,7 +231,7 @@ class Command(BaseCommand):
             next_review_date=next_review_date if rng.random() > 0.24 else None,
             warranty_until=warranty_until if rng.random() > 0.18 else None,
             insurance_until=insurance_until if rng.random() > 0.28 else None,
-            is_active=status not in {Asset.Status.LIQUIDATED, Asset.Status.SOLD, Asset.Status.LOST},
+            is_active=status != Asset.Status.LIQUIDATED,
             created_at=created_at,
             updated_at=updated_at,
         )

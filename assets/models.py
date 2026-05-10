@@ -12,13 +12,9 @@ class Asset(models.Model):
         OTHER = "other", "Inne"
 
     class Status(models.TextChoices):
-        IN_STOCK = "in_stock", "Na stanie"
-        IN_USE = "in_use", "W użyciu"
-        RESERVED = "reserved", "Zarezerwowany"
-        IN_SERVICE = "in_service", "W serwisie"
+        ACTIVE = "active", "Aktywny"
+        INACTIVE = "inactive", "Nieaktywny"
         LIQUIDATED = "liquidated", "Zlikwidowany"
-        SOLD = "sold", "Sprzedany"
-        LOST = "lost", "Utracony"
 
     class TechnicalCondition(models.TextChoices):
         NEW = "new", "Nowy"
@@ -162,7 +158,7 @@ class Asset(models.Model):
     status = models.CharField(
         max_length=30,
         choices=Status.choices,
-        default=Status.IN_STOCK,
+        default=Status.ACTIVE,
         db_index=True,
         verbose_name="Status",
     )
@@ -249,11 +245,19 @@ class Asset(models.Model):
     def save(self, *args, **kwargs):
         synced_location_fields = self._sync_location_cache()
         synced_fields = self._sync_asset_type_fields()
+        synced_active_fields = self._sync_active_from_status()
         update_fields = kwargs.get("update_fields")
-        all_synced_fields = synced_fields | synced_location_fields
+        all_synced_fields = synced_fields | synced_location_fields | synced_active_fields
         if update_fields is not None and all_synced_fields:
             kwargs["update_fields"] = set(update_fields) | all_synced_fields
         super().save(*args, **kwargs)
+
+    def _sync_active_from_status(self) -> set[str]:
+        is_active = self.status != self.Status.LIQUIDATED
+        if self.is_active == is_active:
+            return set()
+        self.is_active = is_active
+        return {"is_active"}
 
     def _sync_location_cache(self) -> set[str]:
         if not self.location_fk_id:

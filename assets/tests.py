@@ -19,7 +19,7 @@ from django.utils import timezone
 from accounts.models import UserProfile
 from users.models import User
 from locations.models import Location
-from inventory.models import InventorySession
+from inventory.models import InventorySession, InventorySnapshotItem
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
@@ -38,6 +38,9 @@ from .views import AssetChangeRequestListView, _user_can_review_asset_changes
 backfill_asset_type_ref = importlib.import_module(
     "assets.migrations.0010_asset_asset_type_ref"
 ).backfill_asset_type_ref
+simplify_asset_statuses = importlib.import_module(
+    "assets.migrations.0018_simplify_asset_status"
+).simplify_asset_statuses
 
 
 class AssetTypeDictionaryModelTests(TestCase):
@@ -206,6 +209,74 @@ class AssetTypeFieldSyncTests(TestCase):
         self.assertEqual(asset.asset_type_ref.code, "low_value")
 
 
+class AssetStatusModelTests(TestCase):
+    def test_default_status_is_active(self):
+        asset = Asset.objects.create(
+            name="Status default asset",
+            inventory_number="STATUS-DEFAULT-001",
+        )
+
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+        self.assertTrue(asset.is_active)
+
+    def test_liquidated_status_marks_asset_inactive(self):
+        asset = Asset.objects.create(
+            name="Status liquidated asset",
+            inventory_number="STATUS-LIQUIDATED-001",
+            status=Asset.Status.ACTIVE,
+        )
+
+        asset.status = Asset.Status.LIQUIDATED
+        asset.save(update_fields=["status"])
+        asset.refresh_from_db()
+
+        self.assertFalse(asset.is_active)
+
+    def test_active_and_inactive_statuses_mark_asset_active(self):
+        asset = Asset.objects.create(
+            name="Status inactive asset",
+            inventory_number="STATUS-INACTIVE-001",
+            status=Asset.Status.LIQUIDATED,
+        )
+
+        asset.status = Asset.Status.INACTIVE
+        asset.save(update_fields=["status"])
+        asset.refresh_from_db()
+
+        self.assertTrue(asset.is_active)
+
+
+class AssetStatusMigrationTests(TestCase):
+    def test_simplify_asset_statuses_maps_legacy_values_and_snapshots(self):
+        user = User.objects.create_user(username="status-migration-user", password="test-pass-123")
+        location = Location.objects.create(name="Status Migration Location")
+        asset = Asset.objects.create(
+            name="Status migration asset",
+            inventory_number="STATUS-MIGRATION-001",
+            status=Asset.Status.ACTIVE,
+            location_fk=location,
+        )
+        Asset.objects.filter(pk=asset.pk).update(status="sold", is_active=True)
+        session = InventorySession.objects.create(number="SM0001", created_by=user)
+        snapshot = InventorySnapshotItem.objects.create(
+            session=session,
+            asset=asset,
+            asset_id_snapshot=asset.pk,
+            inventory_number=asset.inventory_number,
+            name=asset.name,
+            location_fk_id_snapshot=location.pk,
+            status_snapshot="in_service",
+        )
+
+        simplify_asset_statuses(django_apps, None)
+
+        asset.refresh_from_db()
+        snapshot.refresh_from_db()
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+        self.assertFalse(asset.is_active)
+        self.assertEqual(snapshot.status_snapshot, Asset.Status.INACTIVE)
+
+
 class AssetRecordQuantityModelTests(TestCase):
     def test_record_quantity_defaults_to_one(self):
         asset = Asset.objects.create(
@@ -355,6 +426,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=5,
             current_quantity=5,
+            status=Asset.Status.LIQUIDATED,
             is_active=False,
         )
 
@@ -433,7 +505,7 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
             "responsible_person": "",
             "current_user": "",
             "current_quantity": "1",
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "last_inventory_date": "",
             "next_review_date": "",
@@ -859,7 +931,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
             "name": "Not Created",
             "inventory_number": "DESERIALIZE-NO-CREATE-001",
             "asset_type": Asset.AssetType.FIXED,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
         }
 
@@ -875,7 +947,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
             "inventory_number": "DESERIALIZE-CREATE-001",
             "asset_type": Asset.AssetType.LOW_VALUE,
             "location_fk": location.id,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "review_comment": "ignored",
         }
@@ -918,7 +990,7 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
             "name": "Approved Asset",
             "inventory_number": inventory_number,
             "asset_type": Asset.AssetType.FIXED,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "category": "IT",
             "current_quantity": 1,
@@ -1103,7 +1175,7 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         asset = Asset.objects.create(
             name="Existing Asset",
             inventory_number="APPROVE-UPDATE-EXISTING-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -1205,7 +1277,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
             "category": "IT",
             "location": location_obj.path if location_obj else "Legacy location",
             "location_fk": location_obj,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "is_active": True,
         }
@@ -1252,7 +1324,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
             {
                 "name": "Approved Update",
                 "asset_type": Asset.AssetType.LOW_VALUE,
-                "status": Asset.Status.IN_USE,
+                "status": Asset.Status.INACTIVE,
                 "technical_condition": Asset.TechnicalCondition.VERY_GOOD,
             }
         )
@@ -1308,7 +1380,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         change_request.refresh_from_db()
         self.assertEqual(updated_asset.name, "Approved Update")
         self.assertEqual(updated_asset.current_quantity, 7)
-        self.assertEqual(updated_asset.status, Asset.Status.IN_USE)
+        self.assertEqual(updated_asset.status, Asset.Status.INACTIVE)
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
         self.assertEqual(change_request.reviewed_by, reviewer)
         self.assertIsNotNone(change_request.reviewed_at)
@@ -1652,7 +1724,7 @@ class RejectAssetChangeRequestTests(TestCase):
             "name": "Rejected Asset",
             "inventory_number": inventory_number,
             "asset_type": Asset.AssetType.FIXED,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
         }
 
@@ -1812,7 +1884,7 @@ class RejectAssetChangeRequestTests(TestCase):
         asset = Asset.objects.create(
             name="Original Asset",
             inventory_number="REJECT-UPDATE-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -1858,7 +1930,7 @@ class AssetChangeRequestModelTests(TestCase):
         asset = Asset.objects.create(
             name="Existing Laptop",
             inventory_number="UPD-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="HQ",
             category="IT",
         )
@@ -1867,12 +1939,12 @@ class AssetChangeRequestModelTests(TestCase):
             requested_by=user,
             operation=AssetChangeRequest.Operation.UPDATE,
             asset=asset,
-            payload={"status": Asset.Status.IN_USE, "location": "HQ / Room 1"},
+            payload={"status": Asset.Status.INACTIVE, "location": "HQ / Room 1"},
         )
 
         self.assertEqual(request.asset, asset)
         self.assertEqual(request.status, AssetChangeRequest.Status.PENDING)
-        self.assertEqual(request.payload["status"], Asset.Status.IN_USE)
+        self.assertEqual(request.payload["status"], Asset.Status.INACTIVE)
         self.assertEqual(request.payload["location"], "HQ / Room 1")
 
 
@@ -1888,7 +1960,7 @@ class AssetChangeRequestListViewTests(TestCase):
         return Asset.objects.create(
             name=f"Asset {inventory_number}",
             inventory_number=inventory_number,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=location.path if location else "Legacy only",
             location_fk=location,
             category="IT",
@@ -2275,14 +2347,14 @@ class AssetChangeRequestListViewTests(TestCase):
                     "inventory_number": "OLD-001",
                     "value": 1000,
                     "location": "Old location",
-                    "status": "in_stock",
+                    "status": "active",
                 },
                 "proposed": {
                     "name": "New name",
                     "inventory_number": "NEW-001",
                     "value": 1200,
                     "location": "New location",
-                    "status": "in_use",
+                    "status": "inactive",
                 },
             },
         )
@@ -2300,7 +2372,7 @@ class AssetChangeRequestListViewTests(TestCase):
         self.assertContains(response, 'class="asset-change-diff-new">1200</span>')
         self.assertContains(response, "+ 2 innych zmian")
         self.assertNotContains(response, "Lokalizacja: Old location → New location")
-        self.assertNotContains(response, "Status: in_stock → in_use")
+        self.assertNotContains(response, "Status: active → inactive")
 
     def test_change_list_shows_create_summary(self):
         requester = User.objects.create_user(username="queue-create-summary-requester", password="test-pass-123")
@@ -2437,7 +2509,7 @@ class AssetChangeRequestListViewTests(TestCase):
                 "inventory_number": "QUEUE-APPROVE-POST-001",
                 "asset_type": Asset.AssetType.LOW_VALUE,
                 "category": "IT",
-                "status": Asset.Status.IN_STOCK,
+                "status": Asset.Status.ACTIVE,
                 "technical_condition": Asset.TechnicalCondition.GOOD,
                 "current_quantity": 1,
                 "location_fk": location.id,
@@ -2493,7 +2565,7 @@ class AssetChangeRequestDetailViewTests(TestCase):
         return Asset.objects.create(
             name=f"Detail Asset {inventory_number}",
             inventory_number=inventory_number,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=location.path if location else "Legacy only",
             location_fk=location,
             category="IT",
@@ -2667,8 +2739,8 @@ class AssetChangeRequestDetailViewTests(TestCase):
             "DETAIL-DIFF-UPDATE",
             asset=asset,
             payload={
-                "current": {"name": "Old Name", "status": Asset.Status.IN_STOCK, "category": "Same"},
-                "proposed": {"name": "New Name", "status": Asset.Status.IN_USE, "category": "Same"},
+                "current": {"name": "Old Name", "status": Asset.Status.ACTIVE, "category": "Same"},
+                "proposed": {"name": "New Name", "status": Asset.Status.INACTIVE, "category": "Same"},
             },
         )
         self.client.force_login(reviewer)
@@ -2681,8 +2753,8 @@ class AssetChangeRequestDetailViewTests(TestCase):
         self.assertContains(response, "<th>Jest</th>", html=True)
         self.assertContains(response, "Old Name")
         self.assertContains(response, "New Name")
-        self.assertContains(response, Asset.Status.IN_STOCK)
-        self.assertContains(response, Asset.Status.IN_USE)
+        self.assertContains(response, Asset.Status.ACTIVE)
+        self.assertContains(response, Asset.Status.INACTIVE)
         self.assertNotContains(response, "<td>category</td>", html=True)
 
     def test_update_detail_without_differences_shows_message(self):
@@ -2861,7 +2933,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
             category="IT",
             location=location.path if location else "Legacy only",
             location_fk=location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             technical_condition=Asset.TechnicalCondition.GOOD,
             is_active=True,
         )
@@ -2881,7 +2953,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
             "inventory_number": inventory_number,
             "asset_type": Asset.AssetType.FIXED,
             "category": "IT",
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "current_quantity": 1,
             "location_fk": location.id,
@@ -3332,7 +3404,7 @@ class AssetListApiTests(TestCase):
             Asset.objects.create(
                 name=f"Asset {index:03d}",
                 inventory_number=f"INV-{index:03d}",
-                status=Asset.Status.IN_USE if index % 2 else Asset.Status.IN_STOCK,
+                status=Asset.Status.INACTIVE if index % 2 else Asset.Status.ACTIVE,
                 location="HQ" if index <= 30 else "Branch",
                 category="IT" if index % 3 else "Furniture",
                 purchase_value=Decimal(index * 100),
@@ -3341,7 +3413,7 @@ class AssetListApiTests(TestCase):
         cls.target = Asset.objects.create(
             name="Laptop Executive",
             inventory_number="VIP-001",
-            status=Asset.Status.RESERVED,
+            status=Asset.Status.INACTIVE,
             location="Board Room",
             category="IT",
             purchase_value=Decimal("9999.99"),
@@ -3351,7 +3423,7 @@ class AssetListApiTests(TestCase):
         cls.date_outside = Asset.objects.create(
             name="Archive Router",
             inventory_number="ARC-001",
-            status=Asset.Status.RESERVED,
+            status=Asset.Status.INACTIVE,
             location="Archive",
             category="IT",
             purchase_value=Decimal("2500"),
@@ -3387,7 +3459,7 @@ class AssetListApiTests(TestCase):
             reverse("assets:api-list"),
             {
                 "search": "VIP",
-                "status": Asset.Status.RESERVED,
+                "status": Asset.Status.INACTIVE,
                 "location": "Board Room",
             },
         )
@@ -3412,7 +3484,7 @@ class AssetListApiTests(TestCase):
         response = self.client.get(
             reverse("assets:api-list"),
             {
-                "filter__status__equals": Asset.Status.RESERVED,
+                "filter__status__equals": Asset.Status.INACTIVE,
                 "filter__purchase_value__gt": "5000",
                 "filter__name__contains": "Laptop",
             },
@@ -3464,14 +3536,14 @@ class AssetListApiTests(TestCase):
             name="Fixed Filter Asset",
             inventory_number="FILTER-FIXED-001",
             asset_type=Asset.AssetType.FIXED,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Filter Lab",
         )
         Asset.objects.create(
             name="Low Value Filter Asset",
             inventory_number="FILTER-LOW-001",
             asset_type=Asset.AssetType.LOW_VALUE,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Filter Lab",
         )
 
@@ -3495,7 +3567,7 @@ class AssetListApiTests(TestCase):
             inventory_number="RQ-API-001",
             record_quantity=37,
             current_quantity=41,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Record Quantity Lab",
         )
 
@@ -3522,7 +3594,7 @@ class AssetListApiTests(TestCase):
             last_inventory_quantity=5,
             last_inventory_session=session,
             last_inventory_at=applied_at,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Last Inventory Lab",
         )
 
@@ -3543,7 +3615,7 @@ class AssetListApiTests(TestCase):
             record_quantity=3,
             current_quantity=0,
             last_inventory_quantity=0,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Last Inventory Lab",
         )
 
@@ -3557,7 +3629,7 @@ class AssetListApiTests(TestCase):
         asset = Asset.objects.create(
             name="No Last Inventory API Asset",
             inventory_number="LI-NONE-API-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Last Inventory Lab",
         )
 
@@ -3583,7 +3655,7 @@ class AssetListApiTests(TestCase):
             name="Custom Type Display Asset",
             inventory_number="DISPLAY-CUSTOM-001",
             asset_type="tt",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Display Lab",
         )
 
@@ -3599,7 +3671,7 @@ class AssetListApiTests(TestCase):
             name="Legacy Type Display Asset",
             inventory_number="DISPLAY-LEGACY-001",
             asset_type=Asset.AssetType.FIXED,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Display Lab",
         )
 
@@ -3621,7 +3693,7 @@ class AssetListApiTests(TestCase):
             name="No Ref Type Display Asset",
             inventory_number="DISPLAY-NO-REF-001",
             asset_type="no-ref-type",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Display Lab",
         )
         Asset.objects.filter(pk=asset.pk).update(asset_type_ref=None)
@@ -3657,13 +3729,13 @@ class AssetListApiTests(TestCase):
     def test_api_supports_enum_in_filters(self):
         response = self.client.get(
             reverse("assets:api-list"),
-            {"filter__status__in": ",".join([Asset.Status.RESERVED, Asset.Status.IN_USE])},
+            {"filter__status__in": ",".join([Asset.Status.ACTIVE, Asset.Status.INACTIVE])},
         )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
 
-        self.assertEqual(payload["pagination"]["total_items"], 32)
+        self.assertEqual(payload["pagination"]["total_items"], 62)
 
     def test_api_supports_number_between_filters(self):
         response = self.client.get(
@@ -3716,7 +3788,7 @@ class AssetListApiTests(TestCase):
             reverse("assets:api-list"),
             {
                 "filter__purchase_date__between": "2024-01-01,2024-12-31",
-                "filter__status__equals": Asset.Status.RESERVED,
+                "filter__status__equals": Asset.Status.INACTIVE,
                 "filter__name__contains": "Laptop",
             },
         )
@@ -3748,7 +3820,7 @@ class AssetExportCsvApiTests(TestCase):
             name="Za\u017c\u00f3\u0142\u0107 laptop",
             inventory_number="EXP-001",
             asset_type=Asset.AssetType.FIXED,
-            status=Asset.Status.IN_USE,
+            status=Asset.Status.ACTIVE,
             location_fk=cls.root_location,
             category="IT",
             purchase_value=Decimal("1234.50"),
@@ -3761,7 +3833,7 @@ class AssetExportCsvApiTests(TestCase):
             name="Export Monitor",
             inventory_number="EXP-002",
             asset_type=Asset.AssetType.LOW_VALUE,
-            status=Asset.Status.RESERVED,
+            status=Asset.Status.INACTIVE,
             location_fk=cls.child_location,
             category="IT",
             purchase_value=Decimal("2500.00"),
@@ -3772,7 +3844,7 @@ class AssetExportCsvApiTests(TestCase):
             name="Outside Export",
             inventory_number="EXP-003",
             asset_type=Asset.AssetType.FIXED,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location_fk=cls.other_location,
             category="Office",
             purchase_value=Decimal("500.00"),
@@ -3846,13 +3918,13 @@ class AssetExportCsvApiTests(TestCase):
         response = self._export(
             {
                 "columns": "inventory_number,status",
-                "filter__status__equals": Asset.Status.RESERVED,
+                "filter__status__equals": Asset.Status.INACTIVE,
             }
         )
 
         self.assertEqual(response.status_code, 200)
         rows = self._csv_rows(response)
-        self.assertEqual(rows, [["Nr inwentarzowy", "Status"], ["EXP-002", "Zarezerwowany"]])
+        self.assertEqual(rows, [["Nr inwentarzowy", "Status"], ["EXP-002", "Nieaktywny"]])
 
     def test_export_respects_ordering(self):
         response = self._export({"columns": "inventory_number", "ordering": "-purchase_value"})
@@ -3971,7 +4043,7 @@ class AssetListApiExtendedTests(TestCase):
         asset = Asset.objects.create(
             name="Pending Update Asset",
             inventory_number="PENDING-UPD-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -3994,7 +4066,7 @@ class AssetListApiExtendedTests(TestCase):
         asset = Asset.objects.create(
             name="Rejected Update Asset",
             inventory_number="REJECTED-UPD-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4021,7 +4093,7 @@ class AssetListApiExtendedTests(TestCase):
         asset = Asset.objects.create(
             name="Rejected Comment Asset",
             inventory_number="REJECTED-COMMENT-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=location.path,
             location_fk=location,
             category="IT",
@@ -4051,7 +4123,7 @@ class AssetListApiExtendedTests(TestCase):
         asset = Asset.objects.create(
             name="Other Rejected Comment Asset",
             inventory_number="REJECTED-COMMENT-OTHER",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=location.path,
             location_fk=location,
             category="IT",
@@ -4077,14 +4149,14 @@ class AssetListApiExtendedTests(TestCase):
         pending_asset = Asset.objects.create(
             name="Other Pending Update Asset",
             inventory_number="PENDING-UPD-OTHER",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
         asset = Asset.objects.create(
             name="No Pending Update Asset",
             inventory_number="NO-PENDING-UPD-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4116,7 +4188,7 @@ class AssetListApiExtendedTests(TestCase):
         asset = Asset.objects.create(
             name="Approved Update Asset",
             inventory_number="APPROVED-UPD-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4139,7 +4211,7 @@ class AssetListApiExtendedTests(TestCase):
         asset = Asset.objects.create(
             name="Pending And Rejected Update Asset",
             inventory_number="PENDING-REJECTED-UPD-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4171,7 +4243,7 @@ class AssetListApiExtendedTests(TestCase):
             Asset.objects.create(
                 name=f"Pending Query Asset {index}",
                 inventory_number=f"PENDING-QUERY-{index:03d}",
-                status=Asset.Status.IN_STOCK,
+                status=Asset.Status.ACTIVE,
                 location="Pending Query",
                 category="IT",
             )
@@ -4217,7 +4289,7 @@ class AssetBulkMoveApiTests(TestCase):
         cls.asset_one = Asset.objects.create(
             name="Bulk Asset 1",
             inventory_number="BULK-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="HQ",
             location_fk=cls.root_location,
             category="IT",
@@ -4225,7 +4297,7 @@ class AssetBulkMoveApiTests(TestCase):
         cls.asset_two = Asset.objects.create(
             name="Bulk Asset 2",
             inventory_number="BULK-002",
-            status=Asset.Status.IN_USE,
+            status=Asset.Status.INACTIVE,
             location="Branch",
             location_fk=cls.root_location,
             category="IT",
@@ -4284,7 +4356,7 @@ class AssetBulkMoveApiTests(TestCase):
         asset = Asset.objects.create(
             name="Bulk Already There",
             inventory_number="BULK-UNCHANGED-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=self.target_location.path,
             location_fk=self.target_location,
             category="IT",
@@ -4411,7 +4483,7 @@ class AssetBulkMoveApiAccessTests(TestCase):
         cls.asset_in_scope = Asset.objects.create(
             name="In Scope",
             inventory_number="BULK-S-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=cls.child_location.path,
             location_fk=cls.child_location,
             category="IT",
@@ -4419,7 +4491,7 @@ class AssetBulkMoveApiAccessTests(TestCase):
         cls.asset_in_scope_two = Asset.objects.create(
             name="In Scope Two",
             inventory_number="BULK-S-002",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=cls.grandchild_location.path,
             location_fk=cls.grandchild_location,
             category="IT",
@@ -4427,7 +4499,7 @@ class AssetBulkMoveApiAccessTests(TestCase):
         cls.asset_out_of_scope = Asset.objects.create(
             name="Out of Scope",
             inventory_number="BULK-S-003",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=cls.other_child_location.path,
             location_fk=cls.other_child_location,
             category="IT",
@@ -4435,7 +4507,7 @@ class AssetBulkMoveApiAccessTests(TestCase):
         cls.asset_without_fk = Asset.objects.create(
             name="Without FK",
             inventory_number="BULK-S-004",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Legacy only",
             location_fk=None,
             category="IT",
@@ -4565,7 +4637,7 @@ class AssetListApiLocationAccessTests(TestCase):
         cls.asset_root = Asset.objects.create(
             name="Asset Root",
             inventory_number="ACL-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="nieuzywane-root",
             location_fk=cls.root_location,
             category="IT",
@@ -4573,7 +4645,7 @@ class AssetListApiLocationAccessTests(TestCase):
         cls.asset_child = Asset.objects.create(
             name="Asset Child",
             inventory_number="ACL-002",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="nieuzywane-child",
             location_fk=cls.child_location,
             category="IT",
@@ -4581,7 +4653,7 @@ class AssetListApiLocationAccessTests(TestCase):
         cls.asset_grandchild = Asset.objects.create(
             name="Asset Grandchild",
             inventory_number="ACL-003",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="nieuzywane-grandchild",
             location_fk=cls.grandchild_location,
             category="IT",
@@ -4589,7 +4661,7 @@ class AssetListApiLocationAccessTests(TestCase):
         cls.asset_outside = Asset.objects.create(
             name="Asset Outside",
             inventory_number="ACL-004",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="nieuzywane-outside",
             location_fk=cls.other_child_location,
             category="IT",
@@ -4597,7 +4669,7 @@ class AssetListApiLocationAccessTests(TestCase):
         cls.asset_without_fk = Asset.objects.create(
             name="Asset Without FK",
             inventory_number="ACL-005",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="nieuzywane-null",
             location_fk=None,
             category="IT",
@@ -4711,7 +4783,7 @@ class AssetListViewTests(TestCase):
         Asset.objects.create(
             name="Monitor",
             inventory_number="MON-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4875,7 +4947,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="Detail Anonymous",
             inventory_number="DETAIL-ANON-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4890,7 +4962,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="Detail Laptop",
             inventory_number="DETAIL-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=location.path,
             location_fk=location,
             category="IT",
@@ -4913,7 +4985,7 @@ class AssetDetailViewTests(TestCase):
             inventory_number="DETAIL-QTY-001",
             record_quantity=6,
             current_quantity=4,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4937,7 +5009,7 @@ class AssetDetailViewTests(TestCase):
             record_quantity=6,
             current_quantity=5,
             last_inventory_quantity=2,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -4985,7 +5057,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="Out Of Scope Detail",
             inventory_number="DETAIL-SCOPE-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=outside_location.path,
             location_fk=outside_location,
             category="IT",
@@ -5006,7 +5078,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="No FK Detail",
             inventory_number="DETAIL-NO-FK-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Legacy only",
             location_fk=None,
             category="IT",
@@ -5026,7 +5098,7 @@ class AssetDetailViewTests(TestCase):
         out_of_scope_asset = Asset.objects.create(
             name="Admin Out Of Scope Detail",
             inventory_number="DETAIL-ADMIN-SCOPE-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=outside_location.path,
             location_fk=outside_location,
             category="IT",
@@ -5034,7 +5106,7 @@ class AssetDetailViewTests(TestCase):
         null_location_asset = Asset.objects.create(
             name="Admin Null FK Detail",
             inventory_number="DETAIL-ADMIN-NO-FK-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Legacy only",
             location_fk=None,
             category="IT",
@@ -5062,7 +5134,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="Public Update Link",
             inventory_number="DETAIL-UPDATE-LINK-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -5082,7 +5154,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="History Detail",
             inventory_number="DETAIL-HISTORY-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -5102,7 +5174,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="History Values Detail",
             inventory_number="DETAIL-HISTORY-VALUES-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -5122,8 +5194,8 @@ class AssetDetailViewTests(TestCase):
             operator=operator,
             event_type=AssetHistoryEntry.EventType.UPDATED,
             description="Zmieniono status",
-            old_value="Na stanie",
-            new_value="W użyciu",
+            old_value="Aktywny",
+            new_value="Nieaktywny",
             field_name="status",
         )
         self.client.force_login(viewer)
@@ -5133,14 +5205,14 @@ class AssetDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Zmieniono status")
         self.assertContains(response, "Anna Kowalska")
-        self.assertContains(response, "W użyciu")
-        self.assertContains(response, "Na stanie")
+        self.assertContains(response, "Nieaktywny")
+        self.assertContains(response, "Aktywny")
 
     def test_detail_view_without_history_shows_empty_state(self):
         asset = Asset.objects.create(
             name="No History Detail",
             inventory_number="DETAIL-HISTORY-EMPTY-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -5162,7 +5234,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="Out Of Scope History Detail",
             inventory_number="DETAIL-HISTORY-SCOPE-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=outside_location.path,
             location_fk=outside_location,
             category="IT",
@@ -5189,7 +5261,7 @@ class AssetDetailViewTests(TestCase):
         asset = Asset.objects.create(
             name="System History Detail",
             inventory_number="DETAIL-HISTORY-SYSTEM-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Warehouse",
             category="IT",
         )
@@ -5229,7 +5301,7 @@ class AssetWithdrawViewTests(TestCase):
         defaults = {
             "name": "Withdraw Asset",
             "inventory_number": inventory_number,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "location": self.location.path,
             "location_fk": self.location,
             "category": "IT",
@@ -5249,12 +5321,12 @@ class AssetWithdrawViewTests(TestCase):
     def test_withdraw_sets_inactive_and_status(self):
         asset = self._create_asset("WITHDRAW-STATUS-001")
 
-        response = self._withdraw(asset, Asset.Status.SOLD)
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED)
 
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertFalse(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.SOLD)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
 
     def test_withdraw_creates_business_history_entry(self):
         asset = self._create_asset("WITHDRAW-HISTORY-001")
@@ -5272,7 +5344,7 @@ class AssetWithdrawViewTests(TestCase):
     def test_withdraw_moves_asset_from_active_list_to_archive(self):
         asset = self._create_asset("WITHDRAW-LISTS-001")
 
-        self._withdraw(asset, Asset.Status.LOST)
+        self._withdraw(asset, Asset.Status.LIQUIDATED)
 
         active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
         archive_response = self.client.get(
@@ -5297,25 +5369,25 @@ class AssetWithdrawViewTests(TestCase):
         self.assertContains(response, "Środek znajduje się w Archiwum")
 
     def test_cannot_withdraw_already_archived_asset(self):
-        asset = self._create_asset("WITHDRAW-ARCHIVED-001", is_active=False, status=Asset.Status.SOLD)
+        asset = self._create_asset("WITHDRAW-ARCHIVED-001", is_active=False, status=Asset.Status.LIQUIDATED)
 
         response = self._withdraw(asset, Asset.Status.LIQUIDATED)
 
         self.assertEqual(response.status_code, 400)
         asset.refresh_from_db()
         self.assertFalse(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.SOLD)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_withdraw_rejects_invalid_status(self):
         asset = self._create_asset("WITHDRAW-INVALID-001")
 
-        response = self._withdraw(asset, Asset.Status.IN_USE)
+        response = self._withdraw(asset, Asset.Status.INACTIVE)
 
         self.assertEqual(response.status_code, 400)
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_withdraw_respects_location_scope(self):
@@ -5330,7 +5402,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_regular_asset_rejects_partial_withdraw_quantity(self):
@@ -5341,7 +5413,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertEqual(asset.current_quantity, 10)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
         self.assertEqual(
@@ -5362,7 +5434,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertEqual(asset.record_quantity, 10)
         self.assertIsNone(asset.last_inventory_quantity)
         self.assertEqual(asset.current_quantity, 7)
@@ -5391,12 +5463,12 @@ class AssetWithdrawViewTests(TestCase):
             current_quantity=10,
         )
 
-        response = self._withdraw(asset, Asset.Status.SOLD, withdraw_quantity="10")
+        response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="10")
 
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertFalse(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.SOLD)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
         self.assertEqual(asset.current_quantity, 10)
         entry = AssetHistoryEntry.objects.get(asset=asset)
         self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.WITHDRAWN)
@@ -5415,7 +5487,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertEqual(asset.current_quantity, 10)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
@@ -5432,7 +5504,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertEqual(asset.current_quantity, 10)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
@@ -5450,7 +5522,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": asset.id}))
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertEqual(asset.record_quantity, 15)
         self.assertEqual(asset.last_inventory_quantity, 10)
         self.assertEqual(asset.current_quantity, 7)
@@ -5495,7 +5567,7 @@ class AssetUpdateViewTests(TestCase):
             "name": "Update Asset",
             "inventory_number": inventory_number,
             "asset_type": Asset.AssetType.FIXED,
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "location": location_value,
             "location_fk": location_obj,
@@ -5529,7 +5601,7 @@ class AssetUpdateViewTests(TestCase):
             "room": "101",
             "responsible_person": "",
             "current_user": "",
-            "status": Asset.Status.IN_USE,
+            "status": Asset.Status.INACTIVE,
             "technical_condition": Asset.TechnicalCondition.VERY_GOOD,
             "last_inventory_date": "",
             "next_review_date": "",
@@ -5795,7 +5867,7 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(asset.name, "Saved Update")
         self.assertEqual(asset.location, allowed_location.path)
         self.assertEqual(asset.location_fk, allowed_location)
-        self.assertEqual(asset.status, Asset.Status.IN_USE)
+        self.assertEqual(asset.status, Asset.Status.INACTIVE)
         self.assertFalse(AssetChangeRequest.objects.exists())
 
     def test_archived_asset_edit_is_blocked(self):
@@ -5868,7 +5940,7 @@ class AssetUpdateViewTests(TestCase):
         child_location = Location.objects.create(name="Sala historii", parent=allowed_location)
         asset = self._create_asset(
             location_obj=allowed_location,
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             is_active=True,
             purchase_value=Decimal("10.50"),
         )
@@ -5877,7 +5949,7 @@ class AssetUpdateViewTests(TestCase):
 
         payload = self._unchanged_update_payload(asset)
         payload["location_fk"] = str(child_location.id)
-        payload["status"] = Asset.Status.LIQUIDATED
+        payload["status"] = Asset.Status.INACTIVE
         payload["purchase_value"] = "20.75"
         payload.pop("is_active")
         response = self.client.post(reverse("assets:update", kwargs={"pk": asset.pk}), data=payload)
@@ -5889,8 +5961,8 @@ class AssetUpdateViewTests(TestCase):
         }
         self.assertEqual(entries["location_fk"].old_value, allowed_location.path)
         self.assertEqual(entries["location_fk"].new_value, child_location.path)
-        self.assertEqual(entries["status"].old_value, "Na stanie")
-        self.assertEqual(entries["status"].new_value, "Zlikwidowany")
+        self.assertEqual(entries["status"].old_value, "Aktywny")
+        self.assertEqual(entries["status"].new_value, "Nieaktywny")
         self.assertNotIn("is_active", entries)
         self.assertEqual(entries["purchase_value"].old_value, "10.50")
         self.assertEqual(entries["purchase_value"].new_value, "20.75")
@@ -6209,7 +6281,7 @@ class AssetCreateViewTests(TestCase):
             "inventory_number": "CREATE-001",
             "asset_type": Asset.AssetType.FIXED,
             "current_quantity": "1",
-            "status": Asset.Status.IN_STOCK,
+            "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "location_fk": str(location.id),
             "is_active": "on",
@@ -6237,7 +6309,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(asset.name, "Created Asset")
         self.assertEqual(asset.asset_type, Asset.AssetType.FIXED)
         self.assertEqual(asset.current_quantity, 6)
-        self.assertEqual(asset.status, Asset.Status.IN_STOCK)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
         self.assertEqual(asset.technical_condition, Asset.TechnicalCondition.GOOD)
         self.assertIsNotNone(asset.location_fk)
         self.assertEqual(asset.location, asset.location_fk.path)
@@ -6322,7 +6394,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(change_request.payload["inventory_number"], "CREATE-APPROVAL-001")
         self.assertEqual(change_request.payload["asset_type"], Asset.AssetType.FIXED)
         self.assertEqual(change_request.payload["current_quantity"], 1)
-        self.assertEqual(change_request.payload["status"], Asset.Status.IN_STOCK)
+        self.assertEqual(change_request.payload["status"], Asset.Status.ACTIVE)
         self.assertEqual(change_request.payload["technical_condition"], Asset.TechnicalCondition.GOOD)
         self.assertIn("location_fk", change_request.payload)
         self.assertNotIn("record_quantity", change_request.payload)
@@ -6468,7 +6540,7 @@ class SeedAssetsCommandTests(TestCase):
         Asset.objects.create(
             name="Existing Asset",
             inventory_number="INV-EXIST-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="HQ",
             category="IT",
         )
@@ -6489,21 +6561,21 @@ class BackfillAssetLocationFkCommandTests(TestCase):
         matching_asset = Asset.objects.create(
             name="Laptop Match",
             inventory_number="BF-001",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=target.path,
             category="IT",
         )
         Asset.objects.create(
             name="Laptop Empty",
             inventory_number="BF-002",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="",
             category="IT",
         )
         Asset.objects.create(
             name="Laptop Miss",
             inventory_number="BF-003",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Nieistniejaca / Sciezka",
             category="IT",
         )
@@ -6524,14 +6596,14 @@ class BackfillAssetLocationFkCommandTests(TestCase):
         matching_asset = Asset.objects.create(
             name="Laptop Match 2",
             inventory_number="BF-010",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location=target.path,
             category="IT",
         )
         unmatched_asset = Asset.objects.create(
             name="Laptop Miss 2",
             inventory_number="BF-011",
-            status=Asset.Status.IN_STOCK,
+            status=Asset.Status.ACTIVE,
             location="Krakow / Nieistniejace",
             category="IT",
         )

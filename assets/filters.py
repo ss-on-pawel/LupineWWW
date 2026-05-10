@@ -86,13 +86,9 @@ ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
         "status",
         TYPE_OPERATORS["enum"],
         (
-            ("in_stock", "Na stanie"),
-            ("in_use", "W użyciu"),
-            ("reserved", "Zarezerwowany"),
-            ("in_service", "W serwisie"),
+            ("active", "Aktywny"),
+            ("inactive", "Nieaktywny"),
             ("liquidated", "Zlikwidowany"),
-            ("sold", "Sprzedany"),
-            ("lost", "Utracony"),
         ),
     ),
     "asset_type": FilterFieldSpec(
