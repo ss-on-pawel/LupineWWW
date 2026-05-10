@@ -271,7 +271,7 @@
         }
         .asset-list-shell input,
         .asset-list-shell select,
-        .asset-list-shell button {
+        .asset-list-shell button:not(.ui-btn) {
             border: 1px solid rgba(15, 23, 42, 0.14);
             background: rgba(255, 255, 255, 0.94);
             color: #0f172a;
@@ -1175,30 +1175,40 @@
             --asset-row-bg: #fff;
             height: 48px;
         }
+        .asset-list-shell[data-mode="dense"] .asset-table tbody tr {
+            height: 34px;
+        }
         .asset-table thead th {
             position: sticky;
             top: 0;
             z-index: 5;
-            height: 42px;
-            background: #fafbfc;
+            height: 30px;
+            padding: 5px 7px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+            background: linear-gradient(180deg, #f4f6f8 0%, #eceff3 100%);
             color: #475467;
             white-space: nowrap;
             overflow: visible;
             text-overflow: clip;
             font-family: var(--mono-font);
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.14em;
+            font-size: 0.69rem;
+            font-weight: 700;
+            line-height: 1.25;
+            letter-spacing: 0;
             text-transform: uppercase;
             background-clip: padding-box;
         }
+        .asset-list-shell[data-work-mode="management"] .asset-table thead th {
+            padding: 5px 7px;
+        }
         .asset-list-shell[data-mode="dense"] .asset-table thead th {
-            padding-top: 6px;
-            padding-bottom: 6px;
+            height: 30px;
+            padding: 5px 7px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.14);
             background: linear-gradient(180deg, #f4f6f8 0%, #eceff3 100%);
             font-size: 0.69rem;
             font-weight: 700;
+            letter-spacing: 0;
         }
         .asset-list-shell[data-mode="dense"] .asset-table tbody tr:nth-child(even) {
             --asset-row-bg: #fcfcfd;
@@ -1227,7 +1237,7 @@
         }
         .asset-table thead .sticky-cell {
             z-index: 7;
-            background: #fafbfc;
+            background: linear-gradient(180deg, #f4f6f8 0%, #eceff3 100%);
         }
         .asset-list-shell[data-mode="dense"] .asset-table thead .sticky-cell {
             z-index: 9;
@@ -1491,6 +1501,7 @@
             color: #475467;
             font-size: 0.72rem;
             font-weight: 600;
+            line-height: 1.2;
             letter-spacing: 0.08em;
         }
         .asset-inventory-manual-input {
@@ -1652,6 +1663,7 @@
         class="asset-list-shell"
         data-api-url="{{ asset_api_url }}"
         data-export-url="{{ asset_export_url }}"
+        data-create-url="{% url 'assets:create' %}"
         data-detail-url-template="{% url 'assets:detail' 0 %}"
         data-asset-list-mode="{{ asset_list_mode|default:'active' }}"
         data-mode="standard"
@@ -1746,7 +1758,7 @@
 
                 <div class="asset-list-table-tools">
                     <div class="asset-table-tools-left">
-                        <button id="asset-management-add" type="button" class="ui-btn ui-btn--primary" hidden>Dodaj środek</button>
+                        <button id="asset-management-add" type="button" class="ui-btn ui-btn--success" hidden>Dodaj środek</button>
                         <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Usuń</button>
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
@@ -2222,6 +2234,7 @@
             const storageKeyRejectedDismissed = "asset-rejected-dismissed-v1";
             const apiUrl = shell.dataset.apiUrl;
             const exportUrl = shell.dataset.exportUrl;
+            const createUrl = shell.dataset.createUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
             const detailTemplate = shell.dataset.detailUrlTemplate;
@@ -3903,7 +3916,7 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.disabled = true;
 
                 elements.managementAddButton.textContent = "Dodaj środek";
-                elements.managementAddButton.className = "ui-btn ui-btn--primary";
+                elements.managementAddButton.className = "ui-btn ui-btn--success";
                 elements.managementAddButton.disabled = false;
                 elements.moveTrigger.className = "ui-btn ui-btn--secondary";
                 elements.moveTrigger.disabled = state.moveSubmitting;
@@ -3935,6 +3948,10 @@ let searchDebounceId = null;
             }
 
             function handleAddRecordAction() {
+                if (state.mode === "management") {
+                    window.location.assign(createUrl);
+                    return;
+                }
                 if (state.mode === "inventory") {
                     console.info("Spis z natury");
                 }

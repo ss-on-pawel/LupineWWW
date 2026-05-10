@@ -277,7 +277,7 @@
                                 <th>Nazwa składnika</th>
                                 <th>Rodzaj</th>
                                 <th>Lokalizacja wg ewidencji</th>
-                                <th>Ilość ewidencyjna</th>
+                                <th>Ilość oczekiwana</th>
                                 <th>Ilość faktyczna</th>
                                 <th>Różnica</th>
                                 <th>Uwagi</th>
@@ -291,7 +291,7 @@
                                     <td>{{ item.snapshot.name }}</td>
                                     <td>{{ item.snapshot.asset_type_display|default:"-" }}</td>
                                     <td>{{ item.snapshot.location_path|default:"-" }}</td>
-                                    <td>{{ item.record_quantity }}</td>
+                                    <td>{{ item.expected_quantity }}</td>
                                     <td>{{ item.actual_quantity }}</td>
                                     <td>{{ item.difference_display }}</td>
                                     <td></td>

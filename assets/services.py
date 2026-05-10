@@ -399,7 +399,6 @@ def _with_asset_payload_defaults(payload):
 
     payload = dict(payload)
     payload.setdefault("current_quantity", 1)
-    payload.setdefault("record_quantity", 1)
     return payload
 
 

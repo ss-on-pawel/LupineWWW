@@ -3471,12 +3471,12 @@ class AssetListApiTests(TestCase):
         self.assertEqual(payload["pagination"]["total_items"], 1)
         self.assertEqual(payload["results"][0]["id"], fixed_asset.id)
 
-    def test_api_returns_record_quantity(self):
+    def test_api_returns_current_quantity_without_legacy_quantity_fields(self):
         asset = Asset.objects.create(
-            name="Record Quantity API Asset",
+            name="Current Quantity API Asset",
             inventory_number="RQ-API-001",
             record_quantity=37,
-            current_quantity=37,
+            current_quantity=41,
             status=Asset.Status.IN_STOCK,
             location="Record Quantity Lab",
         )
@@ -3486,8 +3486,9 @@ class AssetListApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         row = response.json()["results"][0]
         self.assertEqual(row["inventory_number"], "RQ-API-001")
-        self.assertEqual(row["record_quantity"], 37)
-        self.assertEqual(row["current_quantity"], 37)
+        self.assertEqual(row["current_quantity"], 41)
+        self.assertNotIn("record_quantity", row)
+        self.assertNotIn("last_inventory_quantity", row)
 
     def test_api_returns_last_inventory_result_fields(self):
         session = InventorySession.objects.create(
@@ -3511,15 +3512,13 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         row = response.json()["results"][0]
-        self.assertEqual(row["record_quantity"], 8)
         self.assertEqual(row["current_quantity"], 5)
-        self.assertEqual(row["last_inventory_quantity"], 5)
         self.assertEqual(row["last_inventory_session_id"], session.id)
         self.assertEqual(row["last_inventory_session_number"], "INV-API-0001")
         self.assertEqual(row["last_inventory_at"], applied_at.isoformat())
         self.assertEqual(row["last_inventory_at_display"], applied_at.strftime("%Y-%m-%d %H:%M"))
 
-    def test_api_returns_zero_last_inventory_quantity_as_zero(self):
+    def test_api_returns_zero_current_quantity_as_zero(self):
         asset = Asset.objects.create(
             name="Zero Last Inventory API Asset",
             inventory_number="LI-ZERO-API-001",
@@ -3534,9 +3533,7 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         row = response.json()["results"][0]
-        self.assertEqual(row["record_quantity"], 3)
         self.assertEqual(row["current_quantity"], 0)
-        self.assertEqual(row["last_inventory_quantity"], 0)
 
     def test_api_handles_asset_without_applied_inventory_result(self):
         asset = Asset.objects.create(
@@ -3550,9 +3547,7 @@ class AssetListApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         row = response.json()["results"][0]
-        self.assertEqual(row["record_quantity"], 1)
         self.assertEqual(row["current_quantity"], 1)
-        self.assertIsNone(row["last_inventory_quantity"])
         self.assertEqual(row["last_inventory_at"], "")
         self.assertEqual(row["last_inventory_at_display"], "")
         self.assertIsNone(row["last_inventory_session_id"])

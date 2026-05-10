@@ -646,13 +646,13 @@
                                 <th class="inventory-col-confirm">Potwierdź</th>
                                 <th class="inventory-col-manual">Ręczne</th>
                                 <th class="inventory-col-actual">Ilość faktyczna</th>
-                                <th class="inventory-col-record">Ilość ewidencyjna</th>
+                                <th class="inventory-col-record">Ilość oczekiwana</th>
                                 <th class="inventory-col-difference">R&Oacute;&#379;NICA</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in inventory_work_items %}
-                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-record-quantity="{{ item.record_quantity }}" data-observed-status="{{ item.observed.status|default:'' }}" data-is-quantity-based="{% if item.is_quantity_based %}true{% else %}false{% endif %}">
+                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-expected-quantity="{{ item.expected_quantity }}" data-observed-status="{{ item.observed.status|default:'' }}" data-is-quantity-based="{% if item.is_quantity_based %}true{% else %}false{% endif %}">
                                     <td class="inventory-col-number inventory-mono">{{ item.snapshot.inventory_number }}</td>
                                     <td class="inventory-col-name">{{ item.snapshot.name }}</td>
                                     <td class="inventory-col-type">{{ item.snapshot.asset_type_display|default:"-" }}</td>
@@ -679,7 +679,7 @@
                                         {% endif %}
                                     </td>
                                     <td class="inventory-col-actual inventory-mono" data-role="inventory-actual-quantity">{{ item.actual_quantity }}</td>
-                                    <td class="inventory-col-record inventory-mono">{{ item.record_quantity }}</td>
+                                    <td class="inventory-col-record inventory-mono">{{ item.expected_quantity }}</td>
                                     <td class="inventory-col-difference inventory-mono" data-role="inventory-difference">{{ item.difference_display }}</td>
                                 </tr>
                             {% endfor %}
@@ -800,8 +800,8 @@
                 if (!differenceCell) {
                     return;
                 }
-                const recordQuantity = parseQuantity(row.dataset.recordQuantity);
-                const difference = actualQuantity - recordQuantity;
+                const expectedQuantity = parseQuantity(row.dataset.expectedQuantity);
+                const difference = actualQuantity - expectedQuantity;
                 differenceCell.textContent = formatDifference(difference);
                 return difference;
             }

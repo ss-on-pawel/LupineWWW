@@ -390,26 +390,27 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertNotContains(response, "Detail Other")
         self.assertNotContains(response, "BC-CURRENT")
 
-    def test_start_session_snapshots_record_quantity_and_purchase_value(self):
+    def test_start_session_snapshots_current_quantity_and_purchase_value(self):
         asset = self._create_asset(
             "DETAIL-VALUE-SNAP-001",
             self.child,
             record_quantity=7,
+            current_quantity=9,
             purchase_value=Decimal("123.45"),
         )
         session = self._start_session(self.root)
 
         snapshot_item = session.snapshot_items.get(asset_id_snapshot=asset.pk)
 
-        self.assertEqual(snapshot_item.record_quantity_snapshot, 7)
+        self.assertEqual(snapshot_item.record_quantity_snapshot, 9)
         self.assertEqual(snapshot_item.purchase_value_snapshot, Decimal("123.45"))
 
-    def test_analysis_uses_snapshot_record_quantity_after_asset_update(self):
-        asset = self._create_asset("DETAIL-QTY-HISTORY-001", self.child, record_quantity=5)
+    def test_analysis_uses_snapshot_expected_quantity_after_asset_update(self):
+        asset = self._create_asset("DETAIL-QTY-HISTORY-001", self.child, record_quantity=5, current_quantity=5)
         session = self._start_session(self.root)
 
-        asset.record_quantity = 99
-        asset.save(update_fields=["record_quantity", "updated_at"])
+        asset.current_quantity = 99
+        asset.save(update_fields=["current_quantity", "updated_at"])
         self.client.force_login(self.admin_user)
 
         response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
@@ -419,7 +420,7 @@ class InventorySessionDetailViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(work_item["record_quantity"], 5)
+        self.assertEqual(work_item["expected_quantity"], 5)
         self.assertEqual(work_item["difference"], -5)
 
     def test_analysis_uses_snapshot_purchase_value_after_asset_update(self):
@@ -444,11 +445,12 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertEqual(work_item["purchase_value"], Decimal("123.45"))
         self.assertEqual(work_item["purchase_value_display"], "123.45 zł")
 
-    def test_old_snapshot_without_quantity_and_value_uses_asset_fallback(self):
+    def test_old_snapshot_without_quantity_and_value_uses_current_asset_quantity(self):
         asset = self._create_asset(
             "DETAIL-OLD-SNAP-001",
             self.child,
             record_quantity=6,
+            current_quantity=8,
             purchase_value=Decimal("88.00"),
         )
         session = self._start_session(self.root)
@@ -465,7 +467,7 @@ class InventorySessionDetailViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(work_item["record_quantity"], 6)
+        self.assertEqual(work_item["expected_quantity"], 8)
         self.assertEqual(work_item["purchase_value"], Decimal("88.00"))
         self.assertEqual(work_item["purchase_value_display"], "88.00 zł")
 
@@ -844,12 +846,12 @@ class InventorySessionApplyToAssetsViewTests(TestCase):
         self.assertEqual(entry.old_value, "4")
         self.assertEqual(entry.new_value, "1")
 
-    def test_apply_inventory_uses_previous_last_inventory_quantity_as_old_quantity(self):
+    def test_apply_inventory_uses_current_quantity_as_old_quantity(self):
         asset = self._create_asset(
             "APPLY-HISTORY-OLD-LAST-001",
             record_quantity=10,
             current_quantity=3,
-            last_inventory_quantity=3,
+            last_inventory_quantity=9,
         )
         session = self._start_session()
         self._close_session(session)
@@ -1425,7 +1427,7 @@ class InventorySessionSheetViewTests(TestCase):
 
         self.assertContains(response, self.no_read_asset.inventory_number)
         self.assertContains(response, self.scanned_asset.inventory_number)
-        self.assertContains(response, "Ilość ewidencyjna")
+        self.assertContains(response, "Ilość oczekiwana")
         self.assertContains(response, "Ilość faktyczna")
         self.assertContains(response, "Różnica")
         self.assertContains(response, "-1")
@@ -1744,9 +1746,9 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertEqual(work_item["read_quantity"], 1)
         self.assertEqual(work_item["actual_quantity"], 1)
 
-    def test_work_table_context_uses_snapshot_record_quantity(self):
-        self.ok_asset.record_quantity = 42
-        self.ok_asset.save(update_fields=["record_quantity"])
+    def test_work_table_context_uses_snapshot_expected_quantity(self):
+        self.ok_asset.current_quantity = 42
+        self.ok_asset.save(update_fields=["current_quantity"])
 
         response = self._detail_response()
         work_item = next(
@@ -1754,11 +1756,11 @@ class InventorySessionDetailScanProgressTests(TestCase):
             if item["snapshot"].inventory_number == "PROGRESS-OK-001"
         )
 
-        self.assertEqual(work_item["record_quantity"], 1)
+        self.assertEqual(work_item["expected_quantity"], 1)
 
     def test_regular_asset_without_scan_has_negative_difference(self):
-        self.ok_asset.record_quantity = 1
-        self.ok_asset.save(update_fields=["record_quantity"])
+        self.ok_asset.current_quantity = 1
+        self.ok_asset.save(update_fields=["current_quantity"])
 
         response = self._detail_response()
         work_item = next(
@@ -1767,14 +1769,14 @@ class InventorySessionDetailScanProgressTests(TestCase):
         )
 
         self.assertEqual(work_item["actual_quantity"], 0)
-        self.assertEqual(work_item["record_quantity"], 1)
+        self.assertEqual(work_item["expected_quantity"], 1)
         self.assertEqual(work_item["difference"], -1)
         self.assertEqual(work_item["difference_display"], "-1")
         self.assertContains(response, 'data-role="inventory-difference"')
 
     def test_regular_asset_with_scan_has_zero_difference(self):
-        self.ok_asset.record_quantity = 1
-        self.ok_asset.save(update_fields=["record_quantity"])
+        self.ok_asset.current_quantity = 1
+        self.ok_asset.save(update_fields=["current_quantity"])
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-PROGRESS-OK")
 
         response = self._detail_response()
@@ -1784,7 +1786,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
         )
 
         self.assertEqual(work_item["actual_quantity"], 1)
-        self.assertEqual(work_item["record_quantity"], 1)
+        self.assertEqual(work_item["expected_quantity"], 1)
         self.assertEqual(work_item["difference"], 0)
         self.assertEqual(work_item["difference_display"], "0")
 
@@ -1948,7 +1950,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertEqual(work_item["read_quantity"], 3)
         self.assertEqual(work_item["actual_quantity"], 3)
 
-    def test_quantity_asset_difference_uses_read_manual_and_record_quantity(self):
+    def test_quantity_asset_difference_uses_read_manual_and_expected_quantity(self):
         quantity_asset = self._create_asset(
             "PROGRESS-QTY-DIFF-001",
             self.child,
@@ -1986,7 +1988,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertEqual(work_item["read_quantity"], 3)
         self.assertEqual(work_item["manual_quantity"], 2)
         self.assertEqual(work_item["actual_quantity"], 5)
-        self.assertEqual(work_item["record_quantity"], 10)
+        self.assertEqual(work_item["expected_quantity"], 10)
         self.assertEqual(work_item["difference"], -5)
         self.assertEqual(work_item["difference_display"], "-5")
 
@@ -2030,7 +2032,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertEqual(work_item["read_quantity"], 5)
         self.assertEqual(work_item["manual_quantity"], 10)
         self.assertEqual(work_item["actual_quantity"], 15)
-        self.assertEqual(work_item["record_quantity"], 8)
+        self.assertEqual(work_item["expected_quantity"], 8)
         self.assertEqual(work_item["difference"], 7)
         self.assertEqual(work_item["difference_display"], "+7")
         self.assertContains(response, ">+7<")

@@ -317,9 +317,9 @@ def _build_inventory_session_analysis(session):
                 manual_confirmed=manual_confirmed,
                 is_quantity_based=is_quantity_based,
             )
-            record_quantity = _get_snapshot_record_quantity(snapshot_item)
+            expected_quantity = _get_snapshot_expected_quantity(snapshot_item)
             purchase_value = _get_snapshot_purchase_value(snapshot_item)
-            difference = actual_quantity - record_quantity
+            difference = actual_quantity - expected_quantity
             work_item = {
                 "snapshot": snapshot_item,
                 "observed": observed_item,
@@ -331,7 +331,7 @@ def _build_inventory_session_analysis(session):
                 "manual_quantity": manual_quantity,
                 "manual_confirmed": manual_confirmed,
                 "actual_quantity": actual_quantity,
-                "record_quantity": record_quantity,
+                "expected_quantity": expected_quantity,
                 "purchase_value": purchase_value,
                 "purchase_value_display": _format_inventory_purchase_value(purchase_value),
                 "difference": difference,
@@ -487,7 +487,7 @@ def _get_scanned_code_counts(session):
     return code_counts
 
 
-def _get_snapshot_record_quantity(snapshot_item):
+def _get_snapshot_expected_quantity(snapshot_item):
     if snapshot_item.record_quantity_snapshot is not None:
         return snapshot_item.record_quantity_snapshot
     if snapshot_item.asset_id and snapshot_item.asset:
