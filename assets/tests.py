@@ -4928,6 +4928,9 @@ class AssetListViewTests(TestCase):
         self.assertContains(response, "Archiwum środków")
         self.assertContains(response, "Widok środków wycofanych z aktywnej ewidencji.")
         self.assertContains(response, 'data-api-url="/api/assets/?asset_scope=archive"')
+        self.assertContains(response, 'data-asset-list-mode="archive"')
+        self.assertContains(response, '<div class="asset-header-mode" aria-label="Tryb widoku ewidencji" hidden aria-hidden="true">')
+        self.assertContains(response, 'const isArchiveMode = assetListMode === "archive";')
         self.assertContains(response, reverse("assets:list"))
 
     def test_manager_sees_change_queue_menu(self):

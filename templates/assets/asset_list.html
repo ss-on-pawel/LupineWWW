@@ -478,6 +478,12 @@
         .asset-management-toolbar[hidden] {
             display: none;
         }
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-management-add,
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-management-delete,
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-move-trigger,
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-move-target {
+            display: none !important;
+        }
         .asset-management-toolbar-group {
             display: inline-flex;
             align-items: center;
@@ -1655,7 +1661,7 @@
 
 {% block app_header_actions %}
     {{ block.super }}
-    <div class="asset-header-mode" aria-label="Tryb widoku ewidencji">
+    <div class="asset-header-mode" aria-label="Tryb widoku ewidencji"{% if asset_list_mode == "archive" %} hidden aria-hidden="true"{% endif %}>
         <div id="asset-work-mode-shell" class="asset-work-mode" data-mode="management">
             <label for="asset-work-mode-toggle">
                 <input id="asset-work-mode-toggle" type="checkbox">
@@ -2242,6 +2248,8 @@
             const storageKeyRejectedDismissed = "asset-rejected-dismissed-v1";
             const apiUrl = shell.dataset.apiUrl;
             const exportUrl = shell.dataset.exportUrl;
+            const assetListMode = shell.dataset.assetListMode || "active";
+            const isArchiveMode = assetListMode === "archive";
             const createUrl = shell.dataset.createUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
@@ -2509,6 +2517,9 @@ let searchDebounceId = null;
                 });
 
                 elements.moveTrigger.addEventListener("click", function () {
+                    if (isArchiveMode) {
+                        return;
+                    }
                     if (state.moveSubmitting) {
                         return;
                     }
@@ -2527,6 +2538,9 @@ let searchDebounceId = null;
                     submitBulkMove(selectedAssetIds);
                 });
                 elements.moveTarget.addEventListener("click", function () {
+                    if (isArchiveMode) {
+                        return;
+                    }
                     openMovePopup();
                 });
                 elements.moveSearch.addEventListener("input", function (event) {
@@ -2641,7 +2655,11 @@ let searchDebounceId = null;
                     : state.filters;
                 state.ordering = patch.ordering !== undefined ? patch.ordering : state.ordering;
                 state.mode = patch.mode !== undefined ? patch.mode : state.mode;
-                window.localStorage.setItem(storageKeyWorkMode, state.mode);
+                if (isArchiveMode) {
+                    state.mode = "management";
+                } else {
+                    window.localStorage.setItem(storageKeyWorkMode, state.mode);
+                }
                 syncControls();
                 renderFilterRows();
                 fetchAndRender();
@@ -3323,6 +3341,9 @@ let searchDebounceId = null;
             }
 
             function loadWorkMode() {
+                if (isArchiveMode) {
+                    return "management";
+                }
                 const stored = window.localStorage.getItem(storageKeyWorkMode);
                 return stored === "inventory" ? "inventory" : "management";
             }
@@ -3896,6 +3917,9 @@ let searchDebounceId = null;
             }
 
             function setWorkMode(mode) {
+                if (isArchiveMode) {
+                    return;
+                }
                 if (mode !== "management" && mode !== "inventory") {
                     return;
                 }
@@ -3904,6 +3928,15 @@ let searchDebounceId = null;
             }
 
             function syncManagementToolbar() {
+                if (isArchiveMode) {
+                    elements.managementToolbar.hidden = true;
+                    elements.managementAddButton.hidden = true;
+                    elements.managementDeleteButton.hidden = true;
+                    elements.moveTrigger.hidden = true;
+                    elements.moveTarget.hidden = true;
+                    closeMovePopup();
+                    return;
+                }
                 elements.managementToolbar.hidden = state.mode !== "management";
                 elements.managementAddButton.hidden = state.mode !== "management";
                 elements.managementDeleteButton.hidden = state.mode !== "management";
@@ -3961,6 +3994,9 @@ let searchDebounceId = null;
             }
 
             function handleAddRecordAction() {
+                if (isArchiveMode) {
+                    return;
+                }
                 if (state.mode === "management") {
                     window.location.assign(createUrl);
                     return;
