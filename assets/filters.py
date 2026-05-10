@@ -125,6 +125,17 @@ ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
             ("false", "Nie"),
         ),
     ),
+    "is_in_active_inventory": FilterFieldSpec(
+        "is_in_active_inventory",
+        "W aktywnej inwentaryzacji",
+        "enum",
+        "is_in_active_inventory",
+        TYPE_OPERATORS["enum"],
+        (
+            ("true", "Tak"),
+            ("false", "Nie"),
+        ),
+    ),
     "purchase_value": FilterFieldSpec("purchase_value", "Wartość", "number", "purchase_value", TYPE_OPERATORS["number"]),
     "purchase_date": FilterFieldSpec("purchase_date", "Data zakupu", "date", "purchase_date", TYPE_OPERATORS["date"]),
     "commissioning_date": FilterFieldSpec("commissioning_date", "Przyjęcie do użycia", "date", "commissioning_date", TYPE_OPERATORS["date"]),
@@ -210,14 +221,14 @@ def _normalize_filter_value(spec: FilterFieldSpec, operator: str, raw_value: str
             values = [item.strip() for item in str(raw_value).split(",") if item.strip()]
             if not values or any(item not in allowed for item in values):
                 return None
-            if spec.field == "is_active":
+            if spec.field in {"is_active", "is_in_active_inventory"}:
                 return [_parse_bool(value) for value in values]
             return values
 
         value = str(raw_value).strip()
         if value not in allowed:
             return None
-        if spec.field == "is_active":
+        if spec.field in {"is_active", "is_in_active_inventory"}:
             return _parse_bool(value)
         return value
 

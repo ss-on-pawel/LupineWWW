@@ -28,6 +28,7 @@ from .services import (
     serialize_asset_form_payload,
     user_requires_asset_change_approval,
 )
+from inventory.models import InventorySession, InventorySnapshotItem
 from locations.models import Location
 
 
@@ -789,6 +790,10 @@ def asset_detail(request, id):
 
     asset_type_names_by_code = dict(AssetTypeDictionary.objects.values_list("code", "name"))
     history_entries = asset.history_entries.select_related("operator").order_by("-occurred_at", "-id")[:50]
+    is_in_active_inventory = InventorySnapshotItem.objects.filter(
+        asset_id_snapshot=asset.pk,
+        session__status=InventorySession.Status.ACTIVE,
+    ).exists()
     return render(
         request,
         "assets/asset_detail.html",
@@ -797,6 +802,9 @@ def asset_detail(request, id):
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "withdraw_capabilities": get_asset_withdraw_capabilities(asset),
             "history_entries": history_entries,
+            "is_in_active_inventory": is_in_active_inventory,
+            "runtime_status": "inventory" if is_in_active_inventory else "",
+            "runtime_status_display": "Inwentaryzowany" if is_in_active_inventory else "",
             "withdraw_status_options": [
                 (Asset.Status.LIQUIDATED, dict(Asset.Status.choices)[Asset.Status.LIQUIDATED]),
             ],
@@ -968,10 +976,10 @@ def build_asset_list_queryset(request):
     if location:
         queryset = queryset.filter(location=location)
 
-    parsed_filters = parse_asset_filters(request.GET)
-    queryset = apply_asset_filters(queryset, parsed_filters)
-    queryset = queryset.filter(is_active=(asset_scope == "active"))
-
+    active_inventory_items = InventorySnapshotItem.objects.filter(
+        asset_id_snapshot=OuterRef("pk"),
+        session__status=InventorySession.Status.ACTIVE,
+    )
     pending_update_requests = AssetChangeRequest.objects.filter(
         operation=AssetChangeRequest.Operation.UPDATE,
         status=AssetChangeRequest.Status.PENDING,
@@ -987,6 +995,7 @@ def build_asset_list_queryset(request):
         rejected_update_comment_requests = rejected_update_comment_requests.filter(requested_by=request.user)
 
     queryset = queryset.annotate(
+        is_in_active_inventory=Exists(active_inventory_items),
         has_pending_update=Exists(pending_update_requests),
         has_rejected_update=Exists(rejected_update_requests),
         rejected_update_comment=Subquery(
@@ -996,6 +1005,9 @@ def build_asset_list_queryset(request):
             .values("review_comment")[:1]
         ),
     )
+    parsed_filters = parse_asset_filters(request.GET)
+    queryset = apply_asset_filters(queryset, parsed_filters)
+    queryset = queryset.filter(is_active=(asset_scope == "active"))
 
     ordering_field = _resolve_asset_ordering(ordering)
     queryset = queryset.order_by(ordering_field, "id")
@@ -1056,6 +1068,9 @@ def asset_list_api(request):
             "current_user": _format_person(asset.current_user),
             "status": asset.status,
             "status_display": asset.get_status_display(),
+            "is_in_active_inventory": asset.is_in_active_inventory,
+            "runtime_status": "inventory" if asset.is_in_active_inventory else "",
+            "runtime_status_display": "Inwentaryzowany" if asset.is_in_active_inventory else "",
             "technical_condition": asset.technical_condition,
             "technical_condition_display": asset.get_technical_condition_display(),
             "last_inventory_date": asset.last_inventory_date.isoformat() if asset.last_inventory_date else "",

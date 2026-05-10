@@ -84,6 +84,11 @@
             color: #314154;
             overflow-wrap: anywhere;
         }
+        .meta-pill-runtime {
+            border-color: rgba(14, 116, 144, 0.26);
+            background: rgba(240, 249, 255, 0.78);
+            color: #155e75;
+        }
         .asset-actions {
             display: flex;
             gap: 8px;
@@ -343,6 +348,9 @@
                 <p class="asset-subtitle">{{ asset.inventory_number }}</p>
                 <div class="asset-meta-row">
                     <span class="meta-pill">STATUS / {{ asset.get_status_display }}</span>
+                    {% if is_in_active_inventory %}
+                        <span class="meta-pill meta-pill-runtime">PROCES / {{ runtime_status_display }}</span>
+                    {% endif %}
                     <span class="meta-pill">RODZAJ / {{ asset_type_display }}</span>
                     <span class="meta-pill">LOKALIZACJA / {{ asset.location|default:"-" }}</span>
                 </div>

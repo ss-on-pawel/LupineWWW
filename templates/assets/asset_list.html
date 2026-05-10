@@ -1295,16 +1295,16 @@
             max-width: 360px;
         }
         .asset-table .cell-status {
-            width: 120px;
-            min-width: 120px;
-            max-width: 120px;
+            width: 164px;
+            min-width: 164px;
+            max-width: 164px;
             overflow: visible;
             text-overflow: clip;
         }
         .asset-list-shell[data-mode="dense"] .asset-table .cell-status {
-            width: 118px;
-            min-width: 118px;
-            max-width: 118px;
+            width: 154px;
+            min-width: 154px;
+            max-width: 154px;
             overflow: visible;
             text-overflow: clip;
         }
@@ -1503,6 +1503,14 @@
             font-weight: 600;
             line-height: 1.2;
             letter-spacing: 0.08em;
+        }
+        .asset-runtime-status-pill {
+            border-color: rgba(14, 116, 144, 0.24);
+            background: rgba(240, 249, 255, 0.78);
+            color: #155e75;
+        }
+        .asset-list-shell[data-mode="dense"] .asset-runtime-status-pill {
+            border-color: rgba(14, 116, 144, 0.24);
         }
         .asset-inventory-manual-input {
             width: 100%;
@@ -3099,8 +3107,13 @@ let searchDebounceId = null;
                             }
                         } else if (column.key === "status") {
                             const pill = document.createElement("span");
-                            pill.className = "asset-status-pill";
-                            pill.textContent = row.status_display || "-";
+                            if (row.is_in_active_inventory) {
+                                pill.className = "asset-status-pill asset-runtime-status-pill";
+                                pill.textContent = row.runtime_status_display || "Inwentaryzowany";
+                            } else {
+                                pill.className = "asset-status-pill";
+                                pill.textContent = row.status_display || "-";
+                            }
                             td.appendChild(pill);
                         } else {
                             td.textContent = getCellDisplayValue(column.key, row);

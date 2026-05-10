@@ -3496,6 +3496,101 @@ class AssetListApiTests(TestCase):
         self.assertEqual(payload["pagination"]["total_items"], 1)
         self.assertEqual(payload["results"][0]["inventory_number"], "VIP-001")
 
+    def test_api_returns_runtime_status_for_asset_in_active_inventory(self):
+        session = InventorySession.objects.create(number="RINV0001", created_by=self.admin_user)
+        location = Location.objects.create(name="Runtime Inventory API")
+        InventorySnapshotItem.objects.create(
+            session=session,
+            asset=self.target,
+            asset_id_snapshot=self.target.pk,
+            inventory_number=self.target.inventory_number,
+            name=self.target.name,
+            location_fk_id_snapshot=location.pk,
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": self.target.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], Asset.Status.INACTIVE)
+        self.assertEqual(row["status_display"], "Nieaktywny")
+        self.assertTrue(row["is_in_active_inventory"])
+        self.assertEqual(row["runtime_status"], "inventory")
+        self.assertEqual(row["runtime_status_display"], "Inwentaryzowany")
+
+    def test_api_does_not_set_runtime_status_for_closed_inventory_session(self):
+        session = InventorySession.objects.create(
+            number="RINV0002",
+            status=InventorySession.Status.CLOSED,
+            created_by=self.admin_user,
+        )
+        location = Location.objects.create(name="Runtime Closed API")
+        InventorySnapshotItem.objects.create(
+            session=session,
+            asset=self.target,
+            asset_id_snapshot=self.target.pk,
+            inventory_number=self.target.inventory_number,
+            name=self.target.name,
+            location_fk_id_snapshot=location.pk,
+        )
+
+        response = self.client.get(reverse("assets:api-list"), {"search": self.target.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertFalse(row["is_in_active_inventory"])
+        self.assertEqual(row["runtime_status"], "")
+        self.assertEqual(row["runtime_status_display"], "")
+
+    def test_api_does_not_set_runtime_status_for_asset_outside_active_inventory(self):
+        response = self.client.get(reverse("assets:api-list"), {"search": self.target.inventory_number})
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertFalse(row["is_in_active_inventory"])
+        self.assertEqual(row["runtime_status"], "")
+        self.assertEqual(row["runtime_status_display"], "")
+
+    def test_api_filters_by_active_inventory_runtime_state(self):
+        location = Location.objects.create(name="Runtime Filter Location")
+        in_inventory = Asset.objects.create(
+            name="Runtime Filter In",
+            inventory_number="RUNTIME-FILTER-IN-001",
+            status=Asset.Status.ACTIVE,
+            location="Runtime Filter",
+        )
+        outside_inventory = Asset.objects.create(
+            name="Runtime Filter Out",
+            inventory_number="RUNTIME-FILTER-OUT-001",
+            status=Asset.Status.ACTIVE,
+            location="Runtime Filter",
+        )
+        session = InventorySession.objects.create(number="RINV0003", created_by=self.admin_user)
+        InventorySnapshotItem.objects.create(
+            session=session,
+            asset=in_inventory,
+            asset_id_snapshot=in_inventory.pk,
+            inventory_number=in_inventory.inventory_number,
+            name=in_inventory.name,
+            location_fk_id_snapshot=location.pk,
+        )
+
+        true_response = self.client.get(
+            reverse("assets:api-list"),
+            {"location": "Runtime Filter", "filter__is_in_active_inventory__equals": "true"},
+        )
+        false_response = self.client.get(
+            reverse("assets:api-list"),
+            {"location": "Runtime Filter", "filter__is_in_active_inventory__equals": "false"},
+        )
+
+        self.assertEqual(true_response.status_code, 200)
+        self.assertEqual(false_response.status_code, 200)
+        self.assertEqual(true_response.json()["pagination"]["total_items"], 1)
+        self.assertEqual(true_response.json()["results"][0]["id"], in_inventory.id)
+        self.assertEqual(false_response.json()["pagination"]["total_items"], 1)
+        self.assertEqual(false_response.json()["results"][0]["id"], outside_inventory.id)
+
     def test_api_defaults_to_active_scope(self):
         response = self.client.get(reverse("assets:api-list"), {"search": "ARCHIVE-API-001"})
 
@@ -3725,6 +3820,18 @@ class AssetListApiTests(TestCase):
                 {choice["value"] for choice in asset_type_schema["choices"]}
             )
         )
+
+    def test_runtime_inventory_filter_schema_is_separate_from_status(self):
+        schema = get_asset_filter_ui_schema()
+        runtime_schema = next(item for item in schema if item["field"] == "is_in_active_inventory")
+        status_schema = next(item for item in schema if item["field"] == "status")
+
+        self.assertEqual(runtime_schema["label"], "W aktywnej inwentaryzacji")
+        self.assertEqual(
+            runtime_schema["choices"],
+            [{"value": "true", "label": "Tak"}, {"value": "false", "label": "Nie"}],
+        )
+        self.assertFalse(any(choice["value"] == "inventory" for choice in status_schema["choices"]))
 
     def test_api_supports_enum_in_filters(self):
         response = self.client.get(
@@ -4798,6 +4905,10 @@ class AssetListViewTests(TestCase):
         self.assertContains(response, 'id="asset-export-csv"')
         self.assertContains(response, "Eksport CSV")
         self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
+        self.assertContains(response, "W aktywnej inwentaryzacji")
+        self.assertContains(response, "asset-runtime-status-pill")
+        self.assertContains(response, "row.is_in_active_inventory")
+        self.assertNotContains(response, "asset-status-stack")
 
     def test_archive_view_renders_with_archive_api_url(self):
         Asset.objects.create(
@@ -4978,6 +5089,37 @@ class AssetDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Detail Laptop")
         self.assertContains(response, "DETAIL-001")
+
+    def test_detail_view_shows_runtime_inventory_badge(self):
+        location = Location.objects.create(name="Detail Runtime Inventory")
+        asset = Asset.objects.create(
+            name="Detail Runtime Asset",
+            inventory_number="DETAIL-RUNTIME-001",
+            status=Asset.Status.ACTIVE,
+            location=location.path,
+            location_fk=location,
+        )
+        user = User.objects.create_superuser(
+            username="detail-runtime-superuser",
+            email="detail-runtime-superuser@example.com",
+            password="test-pass-123",
+        )
+        session = InventorySession.objects.create(number="RINV0004", created_by=user)
+        InventorySnapshotItem.objects.create(
+            session=session,
+            asset=asset,
+            asset_id_snapshot=asset.pk,
+            inventory_number=asset.inventory_number,
+            name=asset.name,
+            location_fk_id_snapshot=location.pk,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "STATUS / Aktywny")
+        self.assertContains(response, "PROCES / Inwentaryzowany")
 
     def test_detail_view_renders_current_quantity(self):
         asset = Asset.objects.create(
