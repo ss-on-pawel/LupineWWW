@@ -37,6 +37,15 @@
         .asset-list-shell .asset-change-summary-close:hover {
             opacity: 1;
         }
+        .asset-list-notice {
+            margin: 0 0 10px;
+            color: #166534;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .asset-list-notice[hidden] {
+            display: none;
+        }
         .asset-list-shell[data-work-mode="management"] {
             width: calc(100vw - 32px);
             max-width: none;
@@ -1773,7 +1782,7 @@
                 <div class="asset-list-table-tools">
                     <div class="asset-table-tools-left">
                         <button id="asset-management-add" type="button" class="ui-btn ui-btn--success" hidden>Dodaj środek</button>
-                        <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Usuń</button>
+                        <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Wycofaj</button>
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
                     </div>
@@ -1813,6 +1822,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="asset-list-notice" class="asset-list-notice" hidden></div>
 
                 <div class="asset-list-table-wrap">
                     <table class="asset-table">
@@ -2253,6 +2263,7 @@
             const createUrl = shell.dataset.createUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
+            const bulkWithdrawApiUrl = "/api/assets/bulk-withdraw/";
             const detailTemplate = shell.dataset.detailUrlTemplate;
             const defaultPageSize = 50;
             const searchDebounceMs = 300;
@@ -2364,6 +2375,7 @@
                 columnsTrigger: shell.querySelector(".asset-list-columns"),
                 columnsToggle: document.getElementById("asset-columns-toggle"),
                 exportCsvButton: document.getElementById("asset-export-csv"),
+                listNotice: document.getElementById("asset-list-notice"),
                 columnsPanel: document.getElementById("asset-columns-panel"),
                 columnsOptions: document.getElementById("asset-columns-options"),
                 inventoryBanner: document.getElementById("asset-inventory-banner"),
@@ -2400,6 +2412,7 @@
                 moveOptionsLoading: false,
                 moveOptionsError: "",
                 moveSubmitting: false,
+                withdrawSubmitting: false,
                 filters: [],
                 ordering: "-updated_at",
                 columns: loadColumns(),
@@ -2599,6 +2612,11 @@ let searchDebounceId = null;
                 elements.managementAddButton.addEventListener("click", handleAddRecordAction);
 
                 elements.tableBody.addEventListener("change", function (event) {
+                    const selectedAsset = event.target.closest("[data-role='asset-select']");
+                    if (selectedAsset) {
+                        syncToolbarControls();
+                        return;
+                    }
                     const input = event.target.closest("[data-role='inventory-manual']");
                     if (!input) {
                         return;
@@ -3786,6 +3804,53 @@ let searchDebounceId = null;
                     });
             }
 
+            function showListNotice(message) {
+                if (!elements.listNotice) {
+                    return;
+                }
+                elements.listNotice.textContent = message || "";
+                elements.listNotice.hidden = !message;
+            }
+
+            function submitBulkWithdraw(assetIds) {
+                state.withdrawSubmitting = true;
+                syncToolbarControls();
+
+                fetch(bulkWithdrawApiUrl, {
+                    method: "POST",
+                    headers: {
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCsrfToken(),
+                    },
+                    body: JSON.stringify({
+                        asset_ids: assetIds,
+                    }),
+                })
+                    .then(function (response) {
+                        return response.json().catch(function () {
+                            return {};
+                        }).then(function (payload) {
+                            return { ok: response.ok, payload: payload };
+                        });
+                    })
+                    .then(function (result) {
+                        if (!result.ok || !result.payload.success) {
+                            throw new Error(result.payload.error || "Nie udało się wycofać środków.");
+                        }
+                        clearSelectedAssets();
+                        showListNotice(result.payload.message || "Wycofano zaznaczone środki do Archiwum.");
+                        fetchAndRender();
+                    })
+                    .catch(function (error) {
+                        window.alert(error.message || "Nie udało się wycofać środków.");
+                    })
+                    .finally(function () {
+                        state.withdrawSubmitting = false;
+                        syncToolbarControls();
+                    });
+            }
+
             function arrangeSearchAndFiltersLayout() {
                 const searchField = shell.querySelector('[data-role="search-field"]');
                 const filtersSection = elements.filtersSection;
@@ -3902,7 +3967,7 @@ let searchDebounceId = null;
                 if (!isInventoryMode) {
                     elements.topbarColumnsButton.textContent = "Kolumny";
                     elements.topbarEditButton.textContent = "Edytuj";
-                    elements.topbarDeleteButton.textContent = "Usuń";
+                    elements.topbarDeleteButton.textContent = "Wycofaj";
                     elements.topbarAddButton.textContent = "Dodaj środek";
                     elements.topbarExtraButton.hidden = true;
                     return;
@@ -3957,9 +4022,9 @@ let searchDebounceId = null;
                 elements.columnsToggle.className = "ui-btn ui-btn--secondary";
                 elements.columnsToggle.disabled = state.mode === "inventory";
 
-                elements.managementDeleteButton.textContent = "Usuń";
+                elements.managementDeleteButton.textContent = "Wycofaj";
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
-                elements.managementDeleteButton.disabled = true;
+                elements.managementDeleteButton.disabled = state.withdrawSubmitting || getSelectedAssetIds().length < 1;
 
                 elements.managementAddButton.textContent = "Dodaj środek";
                 elements.managementAddButton.className = "ui-btn ui-btn--success";
@@ -3985,6 +4050,18 @@ let searchDebounceId = null;
             }
 
             function handleDeleteRecordAction() {
+                if (isArchiveMode || state.withdrawSubmitting) {
+                    return;
+                }
+                if (state.mode === "management") {
+                    const selectedAssetIds = getSelectedAssetIds();
+                    if (!selectedAssetIds.length) {
+                        syncToolbarControls();
+                        return;
+                    }
+                    submitBulkWithdraw(selectedAssetIds);
+                    return;
+                }
                 if (state.mode === "inventory") {
                     state.inventoryManual = {};
                     if (state.lastPayload) {

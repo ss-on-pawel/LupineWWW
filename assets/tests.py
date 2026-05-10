@@ -4732,6 +4732,164 @@ class AssetBulkMoveApiAccessTests(TestCase):
         self.assertEqual(self.asset_out_of_scope.location_fk, self.other_child_location)
 
 
+class AssetBulkWithdrawApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root_location = Location.objects.create(name="Withdraw Warszawa")
+        cls.child_location = Location.objects.create(name="Withdraw Biuro", parent=cls.root_location)
+        cls.other_location = Location.objects.create(name="Withdraw Krakow")
+
+        cls.admin_user = User.objects.create_superuser(
+            username="bulk-withdraw-admin",
+            email="bulk-withdraw-admin@example.com",
+            password="test-pass-123",
+        )
+        cls.manager_user = User.objects.create_user(username="bulk-withdraw-manager", password="test-pass-123")
+        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.save(update_fields=["role"])
+        cls.manager_user.profile.allowed_locations.add(cls.root_location)
+
+        cls.regular_user = User.objects.create_user(username="bulk-withdraw-user", password="test-pass-123")
+        cls.regular_user.profile.allowed_locations.add(cls.root_location)
+
+    def _create_asset(self, inventory_number, location=None, **overrides):
+        location = location or self.child_location
+        defaults = {
+            "name": "Bulk Withdraw Asset",
+            "inventory_number": inventory_number,
+            "status": Asset.Status.ACTIVE,
+            "location": location.path,
+            "location_fk": location,
+            "category": "IT",
+            "current_quantity": 7,
+            "is_active": True,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
+
+    def _post_bulk_withdraw(self, asset_ids):
+        return self.client.post(
+            reverse("assets:api-bulk-withdraw"),
+            data={"asset_ids": asset_ids},
+            content_type="application/json",
+        )
+
+    def test_bulk_withdraw_works(self):
+        asset_one = self._create_asset("BULK-WITHDRAW-001")
+        asset_two = self._create_asset("BULK-WITHDRAW-002")
+        self.client.force_login(self.admin_user)
+
+        response = self._post_bulk_withdraw([asset_one.id, asset_two.id])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success"], True)
+        self.assertEqual(response.json()["updated_count"], 2)
+        for asset in (asset_one, asset_two):
+            asset.refresh_from_db()
+            self.assertFalse(asset.is_active)
+            self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+            self.assertEqual(asset.current_quantity, 7)
+            self.assertEqual(asset.location_fk, self.child_location)
+
+    def test_manager_can_bulk_withdraw_assets_in_scope(self):
+        asset = self._create_asset("BULK-WITHDRAW-SCOPE-001")
+        self.client.force_login(self.manager_user)
+
+        response = self._post_bulk_withdraw([asset.id])
+
+        self.assertEqual(response.status_code, 200)
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+
+    def test_manager_cannot_bulk_withdraw_assets_outside_scope(self):
+        asset = self._create_asset("BULK-WITHDRAW-SCOPE-002", location=self.other_location)
+        self.client.force_login(self.manager_user)
+
+        response = self._post_bulk_withdraw([asset.id])
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["success"], False)
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_user_cannot_bulk_withdraw_assets(self):
+        asset = self._create_asset("BULK-WITHDRAW-USER-001")
+        self.client.force_login(self.regular_user)
+
+        response = self._post_bulk_withdraw([asset.id])
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["success"], False)
+        asset.refresh_from_db()
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+
+    def test_bulk_withdraw_moves_asset_from_active_list_to_archive(self):
+        asset = self._create_asset("BULK-WITHDRAW-LISTS-001")
+        self.client.force_login(self.manager_user)
+
+        self._post_bulk_withdraw([asset.id])
+
+        active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
+        archive_response = self.client.get(
+            reverse("assets:api-list"),
+            {"asset_scope": "archive", "search": asset.inventory_number},
+        )
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(active_response.json()["pagination"]["total_items"], 0)
+        self.assertEqual(archive_response.status_code, 200)
+        self.assertEqual(archive_response.json()["pagination"]["total_items"], 1)
+        self.assertEqual(archive_response.json()["results"][0]["inventory_number"], asset.inventory_number)
+
+    def test_bulk_withdraw_creates_history_entries(self):
+        asset_one = self._create_asset("BULK-WITHDRAW-HISTORY-001")
+        asset_two = self._create_asset("BULK-WITHDRAW-HISTORY-002")
+        self.client.force_login(self.manager_user)
+
+        response = self._post_bulk_withdraw([asset_one.id, asset_two.id])
+
+        self.assertEqual(response.status_code, 200)
+        entries = AssetHistoryEntry.objects.filter(
+            asset__in=[asset_one, asset_two],
+            event_type=AssetHistoryEntry.EventType.WITHDRAWN,
+        )
+        self.assertEqual(entries.count(), 2)
+        for entry in entries:
+            self.assertEqual(entry.description, "Wycofano środek do Archiwum.")
+            self.assertEqual(entry.operator, self.manager_user)
+            self.assertEqual(entry.field_name, "is_active")
+            self.assertEqual(entry.old_value, "Aktywna Ewidencja")
+            self.assertEqual(entry.new_value, "Archiwum - Zlikwidowany")
+
+    def test_bulk_withdraw_rejects_archived_asset(self):
+        asset = self._create_asset(
+            "BULK-WITHDRAW-ARCHIVED-001",
+            status=Asset.Status.LIQUIDATED,
+            is_active=False,
+        )
+        self.client.force_login(self.admin_user)
+
+        response = self._post_bulk_withdraw([asset.id])
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["success"], False)
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+    def test_bulk_withdraw_rejects_get(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("assets:api-bulk-withdraw"))
+
+        self.assertEqual(response.status_code, 405)
+
+
 class AssetListApiLocationAccessTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -4904,6 +5062,9 @@ class AssetListViewTests(TestCase):
         self.assertContains(response, 'data-export-url="/api/assets/export/"')
         self.assertContains(response, 'id="asset-export-csv"')
         self.assertContains(response, "Eksport CSV")
+        self.assertContains(response, '<button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Wycofaj</button>', html=True)
+        self.assertContains(response, 'elements.managementDeleteButton.disabled = state.withdrawSubmitting || getSelectedAssetIds().length < 1;')
+        self.assertContains(response, 'const selectedAsset = event.target.closest("[data-role=\'asset-select\']");')
         self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
         self.assertContains(response, "W aktywnej inwentaryzacji")
         self.assertContains(response, "asset-runtime-status-pill")

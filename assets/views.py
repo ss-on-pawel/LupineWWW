@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.paginator import EmptyPage, Paginator
+from django.db import transaction
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -231,6 +232,10 @@ def _user_can_restore_asset(user):
     except ObjectDoesNotExist:
         return False
     return profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}
+
+
+def _user_can_bulk_withdraw_assets(user):
+    return _user_can_restore_asset(user)
 
 
 def _get_asset_form_location_queryset(user):
@@ -1202,6 +1207,87 @@ def _normalize_csv_value(value):
     return value
 
 
+def _parse_asset_id_list_payload(payload):
+    raw_asset_ids = payload.get("asset_ids")
+    if not isinstance(raw_asset_ids, list) or not raw_asset_ids:
+        return None, JsonResponse({"success": False, "error": "asset_ids must be a non-empty list."}, status=400)
+
+    asset_ids = []
+    for raw_asset_id in raw_asset_ids:
+        try:
+            asset_id = int(raw_asset_id)
+        except (TypeError, ValueError):
+            return None, JsonResponse({"success": False, "error": "asset_ids must contain valid asset IDs."}, status=400)
+        if asset_id <= 0:
+            return None, JsonResponse({"success": False, "error": "asset_ids must contain valid asset IDs."}, status=400)
+        asset_ids.append(asset_id)
+
+    return set(asset_ids), None
+
+
+@login_required
+@require_POST
+def asset_bulk_withdraw_api(request):
+    if not _user_can_bulk_withdraw_assets(request.user):
+        return JsonResponse({"success": False, "error": "Forbidden."}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"success": False, "error": "Invalid JSON body."}, status=400)
+
+    unique_asset_ids, error_response = _parse_asset_id_list_payload(payload)
+    if error_response is not None:
+        return error_response
+
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None:
+        withdrawable_assets = Asset.objects.filter(
+            id__in=unique_asset_ids,
+            location_fk_id__in=accessible_location_ids,
+        )
+        if withdrawable_assets.count() != len(unique_asset_ids):
+            return JsonResponse({"success": False, "error": "One or more assets are outside your allowed scope."}, status=403)
+    else:
+        withdrawable_assets = Asset.objects.filter(id__in=unique_asset_ids)
+        if withdrawable_assets.count() != len(unique_asset_ids):
+            return JsonResponse({"success": False, "error": "One or more assets were not found."}, status=404)
+
+    if withdrawable_assets.filter(is_active=False).exists():
+        return JsonResponse({"success": False, "error": "Archived assets cannot be withdrawn again."}, status=400)
+
+    assets = list(withdrawable_assets)
+    now = timezone.now()
+    history_entries = [
+        AssetHistoryEntry(
+            asset=asset,
+            operator=request.user,
+            event_type=AssetHistoryEntry.EventType.WITHDRAWN,
+            description="Wycofano środek do Archiwum.",
+            old_value="Aktywna Ewidencja",
+            new_value="Archiwum - Zlikwidowany",
+            field_name="is_active",
+        )
+        for asset in assets
+    ]
+
+    with transaction.atomic():
+        updated_count = withdrawable_assets.update(
+            status=Asset.Status.LIQUIDATED,
+            is_active=False,
+            updated_at=now,
+        )
+        AssetHistoryEntry.objects.bulk_create(history_entries)
+
+    return JsonResponse(
+        {
+            "success": True,
+            "updated_count": updated_count,
+            "message": f"Wycofano {updated_count} środków do Archiwum.",
+        }
+    )
+
+
 def asset_bulk_move_api(request):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed."}, status=405)
@@ -1211,19 +1297,9 @@ def asset_bulk_move_api(request):
     except (UnicodeDecodeError, json.JSONDecodeError):
         return JsonResponse({"success": False, "error": "Invalid JSON body."}, status=400)
 
-    raw_asset_ids = payload.get("asset_ids")
-    if not isinstance(raw_asset_ids, list) or not raw_asset_ids:
-        return JsonResponse({"success": False, "error": "asset_ids must be a non-empty list."}, status=400)
-
-    asset_ids = []
-    for raw_asset_id in raw_asset_ids:
-        try:
-            asset_id = int(raw_asset_id)
-        except (TypeError, ValueError):
-            return JsonResponse({"success": False, "error": "asset_ids must contain valid asset IDs."}, status=400)
-        if asset_id <= 0:
-            return JsonResponse({"success": False, "error": "asset_ids must contain valid asset IDs."}, status=400)
-        asset_ids.append(asset_id)
+    unique_asset_ids, error_response = _parse_asset_id_list_payload(payload)
+    if error_response is not None:
+        return error_response
 
     if "target_location_id" not in payload:
         return JsonResponse({"success": False, "error": "target_location_id is required."}, status=400)
@@ -1242,7 +1318,6 @@ def asset_bulk_move_api(request):
     except Location.DoesNotExist:
         return JsonResponse({"success": False, "error": "target_location_id does not point to an active location."}, status=400)
 
-    unique_asset_ids = set(asset_ids)
     accessible_location_ids = get_accessible_location_ids(request.user)
 
     if accessible_location_ids is not None:
