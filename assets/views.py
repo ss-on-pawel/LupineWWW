@@ -199,6 +199,10 @@ def _user_can_review_asset_changes(user):
         profile = user.profile
     except ObjectDoesNotExist:
         return False
+    if profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}:
+        return True
+    if profile.role == profile.Role.USER:
+        return False
     return profile.can_approve_asset_changes
 
 
@@ -213,6 +217,8 @@ def _user_can_manage_asset_types(user):
         profile = user.profile
     except ObjectDoesNotExist:
         return False
+    if profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}:
+        return True
     return profile.can_approve_asset_changes
 
 

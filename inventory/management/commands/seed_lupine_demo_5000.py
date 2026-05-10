@@ -113,7 +113,7 @@ class Command(BaseCommand):
             locations = self._seed_locations()
             users = self._seed_users(locations)
             assets = self._seed_assets(asset_count, asset_types, locations)
-            sessions = self._seed_inventory_sessions(users["admin"], users["reviewer"], locations, asset_types)
+            sessions = self._seed_inventory_sessions(users["admin"], users["manager"], locations, asset_types)
 
         self.stdout.write(self.style.SUCCESS("Seed Lupine demo 5000 zakonczony."))
         self.stdout.write(f"Assety demo: {len(assets)}")
@@ -185,7 +185,7 @@ class Command(BaseCommand):
                 "is_staff": True,
                 "is_superuser": False,
                 "role": UserProfile.Role.MANAGER,
-                "can_approve": False,
+                "can_approve": True,
                 "requires_approval": False,
                 "roots": ["Warszawa", "Krakow"],
             },
@@ -199,18 +199,9 @@ class Command(BaseCommand):
                 "requires_approval": True,
                 "roots": ["Poznan"],
             },
-            "reviewer": {
-                "username": "demo.reviewer",
-                "email": "demo.reviewer@lupine.local",
-                "is_staff": True,
-                "is_superuser": False,
-                "role": UserProfile.Role.MANAGER,
-                "can_approve": True,
-                "requires_approval": False,
-                "roots": ["Wroclaw", "Gdansk", "Lodz"],
-            },
         }
         users = {}
+        User.objects.filter(username="demo.reviewer").delete()
         for key, spec in specs.items():
             user, _created = User.objects.update_or_create(
                 username=spec["username"],

@@ -220,6 +220,9 @@ def user_requires_asset_change_approval(user) -> bool:
     if profile.pk is None:
         return True
 
+    if profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}:
+        return False
+
     if profile.can_approve_asset_changes:
         return False
 
@@ -429,7 +432,12 @@ def _reviewer_has_global_asset_approval_access(reviewer):
     if getattr(reviewer, "is_superuser", False):
         return True
 
-    return False
+    try:
+        profile = reviewer.profile
+    except ObjectDoesNotExist:
+        return False
+
+    return profile.pk is not None and profile.role == profile.Role.ADMIN
 
 
 def _reviewer_can_approve_asset_changes(reviewer):
@@ -438,7 +446,13 @@ def _reviewer_can_approve_asset_changes(reviewer):
     except ObjectDoesNotExist:
         return False
 
-    return profile.pk is not None and profile.can_approve_asset_changes
+    if profile.pk is None:
+        return False
+
+    if profile.role == profile.Role.USER:
+        return False
+
+    return profile.role == profile.Role.MANAGER or profile.can_approve_asset_changes
 
 
 def _serialize_payload_value(value):
