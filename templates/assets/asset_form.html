@@ -5,7 +5,6 @@
 {% block content %}
     <form method="post">
         {% csrf_token %}
-        {{ form.record_quantity.as_hidden }}
         {{ form.is_active.as_hidden }}
         {{ form.last_inventory_date.as_hidden }}
 
@@ -51,8 +50,9 @@
                     {{ form.status.errors }}
                 </div>
                 <div class="form-field">
-                    <label>Ilość</label>
-                    <div class="detail-value is-mono">{{ form.instance.current_quantity|default_if_none:"—" }}</div>
+                    {{ form.current_quantity.label_tag }}
+                    {{ form.current_quantity }}
+                    {{ form.current_quantity.errors }}
                 </div>
                 <div class="form-field">
                     {{ form.category.label_tag }}

@@ -53,6 +53,7 @@ class Asset(models.Model):
         verbose_name="Rodzaj (słownik)",
     )
     record_quantity = models.PositiveIntegerField(default=1, verbose_name="Ilość ewidencyjna")
+    current_quantity = models.PositiveIntegerField(default=1, db_index=True, verbose_name="Aktualna ilość")
     category = models.CharField(
         max_length=120,
         blank=True,
@@ -244,12 +245,6 @@ class Asset(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.inventory_number})"
-
-    @property
-    def current_quantity(self):
-        if self.last_inventory_quantity is not None:
-            return self.last_inventory_quantity
-        return self.record_quantity
 
     def save(self, *args, **kwargs):
         synced_location_fields = self._sync_location_cache()

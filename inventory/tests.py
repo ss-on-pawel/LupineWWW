@@ -45,6 +45,7 @@ class StartInventorySessionTests(TestCase):
             "status": Asset.Status.IN_STOCK,
         }
         defaults.update(overrides)
+        defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
         return Asset.objects.create(**defaults)
 
     def test_session_gets_first_number_and_active_status(self):
@@ -309,6 +310,7 @@ class InventorySessionDetailViewTests(TestCase):
             "status": Asset.Status.IN_STOCK,
         }
         defaults.update(overrides)
+        defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
         return Asset.objects.create(**defaults)
 
     def _start_session(self, root_location):
@@ -750,6 +752,7 @@ class InventorySessionApplyToAssetsViewTests(TestCase):
             "purchase_value": Decimal("123.45"),
         }
         defaults.update(overrides)
+        defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
         return Asset.objects.create(**defaults)
 
     def _start_session(self, asset_types=None):
@@ -845,6 +848,7 @@ class InventorySessionApplyToAssetsViewTests(TestCase):
         asset = self._create_asset(
             "APPLY-HISTORY-OLD-LAST-001",
             record_quantity=10,
+            current_quantity=3,
             last_inventory_quantity=3,
         )
         session = self._start_session()
@@ -1125,6 +1129,7 @@ class InventorySessionReportViewTests(TestCase):
             "status": Asset.Status.IN_STOCK,
         }
         defaults.update(overrides)
+        defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
         return Asset.objects.create(**defaults)
 
     def _report_url(self, session=None):
@@ -1365,6 +1370,7 @@ class InventorySessionSheetViewTests(TestCase):
             "status": Asset.Status.IN_STOCK,
         }
         defaults.update(overrides)
+        defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
         return Asset.objects.create(**defaults)
 
     def _sheet_url(self, session=None):
@@ -1598,6 +1604,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
             "status": Asset.Status.IN_STOCK,
         }
         defaults.update(overrides)
+        defaults.setdefault("current_quantity", defaults.get("record_quantity", 1))
         return Asset.objects.create(**defaults)
 
     def _detail_response(self):

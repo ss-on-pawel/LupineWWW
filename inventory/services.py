@@ -210,7 +210,8 @@ def _build_snapshot_item(session: InventorySession, asset: Asset) -> InventorySn
         barcode=asset.barcode,
         asset_type=asset.asset_type,
         asset_type_display=asset.get_asset_type_display(),
-        record_quantity_snapshot=asset.record_quantity,
+        # Legacy column name; stores the expected quantity copied from Asset.current_quantity.
+        record_quantity_snapshot=asset.current_quantity,
         purchase_value_snapshot=asset.purchase_value,
         location_fk_id_snapshot=location.id,
         location_code=location.code,

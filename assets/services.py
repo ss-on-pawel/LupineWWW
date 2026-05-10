@@ -72,6 +72,11 @@ ASSET_HISTORY_FIELD_SPECS = {
         "description": "Zmieniono rodzaj",
         "value": _format_asset_type,
     },
+    "current_quantity": {
+        "label": "Ilość",
+        "description": "Zmieniono ilość",
+        "value": lambda asset: _format_empty(asset.current_quantity),
+    },
     "status": {
         "label": "Status",
         "description": "Zmieniono status",
@@ -393,6 +398,7 @@ def _with_asset_payload_defaults(payload):
         return payload
 
     payload = dict(payload)
+    payload.setdefault("current_quantity", 1)
     payload.setdefault("record_quantity", 1)
     return payload
 

@@ -427,11 +427,7 @@ def apply_inventory_session_to_assets(request, pk):
                 continue
             if not asset.is_active:
                 continue
-            old_current_quantity = (
-                asset.last_inventory_quantity
-                if asset.last_inventory_quantity is not None
-                else asset.record_quantity
-            )
+            old_current_quantity = asset.current_quantity
             new_current_quantity = work_item["actual_quantity"]
             if old_current_quantity != new_current_quantity:
                 history_entries.append(
@@ -448,6 +444,7 @@ def apply_inventory_session_to_assets(request, pk):
                         source_object_id=session.pk,
                     )
                 )
+            asset.current_quantity = work_item["actual_quantity"]
             asset.last_inventory_quantity = work_item["actual_quantity"]
             asset.last_inventory_session = session
             asset.last_inventory_at = now
@@ -457,6 +454,7 @@ def apply_inventory_session_to_assets(request, pk):
         Asset.objects.bulk_update(
             assets_to_update,
             [
+                "current_quantity",
                 "last_inventory_quantity",
                 "last_inventory_session",
                 "last_inventory_at",
@@ -493,7 +491,7 @@ def _get_snapshot_record_quantity(snapshot_item):
     if snapshot_item.record_quantity_snapshot is not None:
         return snapshot_item.record_quantity_snapshot
     if snapshot_item.asset_id and snapshot_item.asset:
-        return snapshot_item.asset.record_quantity
+        return snapshot_item.asset.current_quantity
     return 1
 
 

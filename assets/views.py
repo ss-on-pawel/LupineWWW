@@ -843,14 +843,9 @@ def asset_withdraw(request, id):
     remaining_quantity = current_quantity - withdraw_quantity
     if remaining_quantity > 0:
         now = timezone.now()
-        if asset.last_inventory_quantity is not None:
-            asset.last_inventory_quantity = remaining_quantity
-            update_fields = ["last_inventory_quantity", "updated_at"]
-        else:
-            asset.record_quantity = remaining_quantity
-            update_fields = ["record_quantity", "updated_at"]
+        asset.current_quantity = remaining_quantity
         asset.updated_at = now
-        asset.save(update_fields=update_fields)
+        asset.save(update_fields=["current_quantity", "updated_at"])
 
         record_asset_history(
             asset=asset,
@@ -919,6 +914,7 @@ def build_asset_list_queryset(request):
             "asset_type_ref__code",
             "asset_type_ref__name",
             "record_quantity",
+            "current_quantity",
             "category",
             "manufacturer",
             "model",

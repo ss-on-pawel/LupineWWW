@@ -224,35 +224,48 @@ class AssetRecordQuantityModelTests(TestCase):
 
         self.assertEqual(asset.record_quantity, 0)
 
-    def test_current_quantity_falls_back_to_record_quantity(self):
+    def test_current_quantity_defaults_to_one(self):
         asset = Asset.objects.create(
-            name="Current quantity fallback asset",
-            inventory_number="CQ-FALLBACK-001",
-            record_quantity=7,
-            last_inventory_quantity=None,
+            name="Current quantity default asset",
+            inventory_number="CQ-DEFAULT-001",
         )
 
-        self.assertEqual(asset.current_quantity, 7)
+        self.assertEqual(asset.current_quantity, 1)
 
-    def test_current_quantity_uses_last_inventory_quantity(self):
+    def test_current_quantity_can_store_zero(self):
         asset = Asset.objects.create(
-            name="Current quantity inventory asset",
-            inventory_number="CQ-INVENTORY-001",
-            record_quantity=7,
-            last_inventory_quantity=3,
-        )
-
-        self.assertEqual(asset.current_quantity, 3)
-
-    def test_current_quantity_preserves_zero_last_inventory_quantity(self):
-        asset = Asset.objects.create(
-            name="Current quantity zero inventory asset",
+            name="Current quantity zero asset",
             inventory_number="CQ-ZERO-001",
-            record_quantity=7,
-            last_inventory_quantity=0,
+            current_quantity=0,
         )
 
         self.assertEqual(asset.current_quantity, 0)
+
+    def test_current_quantity_is_not_calculated_from_record_quantity(self):
+        asset = Asset.objects.create(
+            name="Current quantity independent record asset",
+            inventory_number="CQ-INDEPENDENT-RECORD-001",
+            record_quantity=7,
+            current_quantity=2,
+            last_inventory_quantity=None,
+        )
+
+        self.assertEqual(asset.current_quantity, 2)
+
+    def test_changing_last_inventory_quantity_does_not_change_current_quantity(self):
+        asset = Asset.objects.create(
+            name="Current quantity independent inventory asset",
+            inventory_number="CQ-INDEPENDENT-INVENTORY-001",
+            record_quantity=7,
+            current_quantity=4,
+            last_inventory_quantity=3,
+        )
+
+        asset.last_inventory_quantity = 0
+        asset.save(update_fields=["last_inventory_quantity", "updated_at"])
+        asset.refresh_from_db()
+
+        self.assertEqual(asset.current_quantity, 4)
 
 
 class AssetWithdrawCapabilitiesTests(TestCase):
@@ -262,6 +275,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
             "inventory_number": inventory_number,
             "asset_type": Asset.AssetType.FIXED,
             "record_quantity": 1,
+            "current_quantity": 1,
             "is_active": True,
         }
         defaults.update(overrides)
@@ -296,6 +310,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
             "WITHDRAW-CAP-QTY-MANY-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=3,
+            current_quantity=3,
         )
 
         capabilities = get_asset_withdraw_capabilities(asset)
@@ -310,6 +325,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
             "WITHDRAW-CAP-QTY-FALLBACK-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=4,
+            current_quantity=4,
         )
         Asset.objects.filter(pk=asset.pk).update(asset_type_ref=None)
         asset.refresh_from_db()
@@ -322,7 +338,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
         self.assertEqual(capabilities["current_quantity"], 4)
 
     def test_unknown_legacy_asset_type_is_not_quantity_based(self):
-        asset = self._create_asset("WITHDRAW-CAP-LEGACY-001", record_quantity=5)
+        asset = self._create_asset("WITHDRAW-CAP-LEGACY-001", record_quantity=5, current_quantity=5)
         Asset.objects.filter(pk=asset.pk).update(asset_type="legacy_unknown", asset_type_ref=None)
         asset.refresh_from_db()
 
@@ -338,6 +354,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
             "WITHDRAW-CAP-INACTIVE-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=5,
+            current_quantity=5,
             is_active=False,
         )
 
@@ -353,6 +370,7 @@ class AssetWithdrawCapabilitiesTests(TestCase):
             "WITHDRAW-CAP-ZERO-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=5,
+            current_quantity=0,
             last_inventory_quantity=0,
         )
 
@@ -414,6 +432,7 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
             "room": "",
             "responsible_person": "",
             "current_user": "",
+            "current_quantity": "1",
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "last_inventory_date": "",
@@ -796,6 +815,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
             "purchase_date": "2026-04-27",
             "responsible_person": user.pk,
             "current_user": user.pk,
+            "current_quantity": 9,
             "is_active": True,
             "record_quantity": 9,
             "last_inventory_date": "2026-05-01",
@@ -809,6 +829,7 @@ class DeserializeAssetPayloadForFormTests(TestCase):
         self.assertEqual(form_data["purchase_date"], "2026-04-27")
         self.assertEqual(form_data["responsible_person"], user.pk)
         self.assertEqual(form_data["current_user"], user.pk)
+        self.assertEqual(form_data["current_quantity"], 9)
         self.assertNotIn("is_active", form_data)
         self.assertNotIn("record_quantity", form_data)
         self.assertNotIn("last_inventory_date", form_data)
@@ -893,6 +914,7 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "category": "IT",
+            "current_quantity": 1,
             "location_fk": location.id,
             "is_active": True,
         }
@@ -916,13 +938,17 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
             email="approve-create-superuser@example.com",
             password="test-pass-123",
         )
-        change_request = self._create_request(requester)
+        change_request = self._create_request(
+            requester,
+            payload=self._create_payload(current_quantity=6),
+        )
 
         asset = approve_asset_change_request(change_request, reviewer)
 
         change_request.refresh_from_db()
         self.assertEqual(asset.inventory_number, "APPROVE-CREATE-001")
         self.assertEqual(asset.name, "Approved Asset")
+        self.assertEqual(asset.current_quantity, 6)
         self.assertIsNotNone(asset.location_fk)
         self.assertEqual(asset.location, asset.location_fk.path)
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
@@ -1202,6 +1228,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
             "room": asset.room,
             "responsible_person": asset.responsible_person,
             "current_user": asset.current_user,
+            "current_quantity": asset.current_quantity,
             "status": asset.status,
             "technical_condition": asset.technical_condition,
             "last_inventory_date": asset.last_inventory_date,
@@ -1254,13 +1281,21 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
             email="approve-update-super@example.com",
             password="test-pass-123",
         )
-        asset = self._create_asset(location_obj=location)
-        change_request = self._update_request(requester, asset)
+        asset = self._create_asset(location_obj=location, current_quantity=2)
+        change_request = self._update_request(
+            requester,
+            asset,
+            payload={
+                "current": self._current_payload(asset),
+                "proposed": self._proposed_payload(asset, current_quantity=7),
+            },
+        )
 
         updated_asset = approve_asset_change_request(change_request, reviewer)
 
         change_request.refresh_from_db()
         self.assertEqual(updated_asset.name, "Approved Update")
+        self.assertEqual(updated_asset.current_quantity, 7)
         self.assertEqual(updated_asset.status, Asset.Status.IN_USE)
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
         self.assertEqual(change_request.reviewed_by, reviewer)
@@ -3441,6 +3476,7 @@ class AssetListApiTests(TestCase):
             name="Record Quantity API Asset",
             inventory_number="RQ-API-001",
             record_quantity=37,
+            current_quantity=37,
             status=Asset.Status.IN_STOCK,
             location="Record Quantity Lab",
         )
@@ -3463,6 +3499,7 @@ class AssetListApiTests(TestCase):
             name="Last Inventory API Asset",
             inventory_number="LI-API-001",
             record_quantity=8,
+            current_quantity=5,
             last_inventory_quantity=5,
             last_inventory_session=session,
             last_inventory_at=applied_at,
@@ -3487,6 +3524,7 @@ class AssetListApiTests(TestCase):
             name="Zero Last Inventory API Asset",
             inventory_number="LI-ZERO-API-001",
             record_quantity=3,
+            current_quantity=0,
             last_inventory_quantity=0,
             status=Asset.Status.IN_STOCK,
             location="Last Inventory Lab",
@@ -3702,6 +3740,7 @@ class AssetExportCsvApiTests(TestCase):
             category="IT",
             purchase_value=Decimal("1234.50"),
             record_quantity=7,
+            current_quantity=3,
             last_inventory_quantity=3,
             purchase_date=date(2024, 5, 1),
         )
@@ -3714,6 +3753,7 @@ class AssetExportCsvApiTests(TestCase):
             category="IT",
             purchase_value=Decimal("2500.00"),
             record_quantity=4,
+            current_quantity=4,
         )
         Asset.objects.create(
             name="Outside Export",
@@ -4833,11 +4873,12 @@ class AssetDetailViewTests(TestCase):
         self.assertContains(response, "Detail Laptop")
         self.assertContains(response, "DETAIL-001")
 
-    def test_detail_view_renders_current_quantity_from_record_quantity_fallback(self):
+    def test_detail_view_renders_current_quantity(self):
         asset = Asset.objects.create(
-            name="Detail Quantity Fallback",
-            inventory_number="DETAIL-QTY-FALLBACK-001",
+            name="Detail Quantity",
+            inventory_number="DETAIL-QTY-001",
             record_quantity=6,
+            current_quantity=4,
             status=Asset.Status.IN_STOCK,
             location="Warehouse",
             category="IT",
@@ -4853,13 +4894,14 @@ class AssetDetailViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "ILOŚĆ")
-        self.assertContains(response, '<div class="detail-value is-mono">6</div>', html=True)
+        self.assertContains(response, '<div class="detail-value is-mono">4</div>', html=True)
 
-    def test_detail_view_renders_current_quantity_from_last_inventory_quantity(self):
+    def test_detail_view_current_quantity_is_independent_from_last_inventory_quantity(self):
         asset = Asset.objects.create(
             name="Detail Quantity Inventory",
             inventory_number="DETAIL-QTY-INVENTORY-001",
             record_quantity=6,
+            current_quantity=5,
             last_inventory_quantity=2,
             status=Asset.Status.IN_STOCK,
             location="Warehouse",
@@ -4876,7 +4918,7 @@ class AssetDetailViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "ILOŚĆ")
-        self.assertContains(response, '<div class="detail-value is-mono">2</div>', html=True)
+        self.assertContains(response, '<div class="detail-value is-mono">5</div>', html=True)
 
     def test_scoped_user_can_view_archived_asset_detail(self):
         location = Location.objects.create(name="Archived Detail Warehouse")
@@ -5258,7 +5300,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
     def test_regular_asset_rejects_partial_withdraw_quantity(self):
-        asset = self._create_asset("WITHDRAW-REGULAR-PARTIAL-001", record_quantity=10)
+        asset = self._create_asset("WITHDRAW-REGULAR-PARTIAL-001", record_quantity=10, current_quantity=10)
 
         response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="3")
 
@@ -5273,11 +5315,12 @@ class AssetWithdrawViewTests(TestCase):
             ["Częściowe wycofanie jest dostępne tylko dla aktywnych środków ilościowych."],
         )
 
-    def test_quantity_asset_can_be_partially_withdrawn_from_record_quantity(self):
+    def test_quantity_asset_partial_withdraw_updates_current_quantity(self):
         asset = self._create_asset(
             "WITHDRAW-QTY-PARTIAL-RECORD-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=10,
+            current_quantity=10,
         )
 
         response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="3")
@@ -5286,7 +5329,7 @@ class AssetWithdrawViewTests(TestCase):
         asset.refresh_from_db()
         self.assertTrue(asset.is_active)
         self.assertEqual(asset.status, Asset.Status.IN_STOCK)
-        self.assertEqual(asset.record_quantity, 7)
+        self.assertEqual(asset.record_quantity, 10)
         self.assertIsNone(asset.last_inventory_quantity)
         self.assertEqual(asset.current_quantity, 7)
         entry = AssetHistoryEntry.objects.get(asset=asset)
@@ -5311,6 +5354,7 @@ class AssetWithdrawViewTests(TestCase):
             "WITHDRAW-QTY-FULL-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=10,
+            current_quantity=10,
         )
 
         response = self._withdraw(asset, Asset.Status.SOLD, withdraw_quantity="10")
@@ -5329,6 +5373,7 @@ class AssetWithdrawViewTests(TestCase):
             "WITHDRAW-QTY-ZERO-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=10,
+            current_quantity=10,
         )
 
         response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="0")
@@ -5345,6 +5390,7 @@ class AssetWithdrawViewTests(TestCase):
             "WITHDRAW-QTY-TOO-MANY-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=10,
+            current_quantity=10,
         )
 
         response = self._withdraw(asset, Asset.Status.LIQUIDATED, withdraw_quantity="11")
@@ -5356,11 +5402,12 @@ class AssetWithdrawViewTests(TestCase):
         self.assertEqual(asset.current_quantity, 10)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
-    def test_partial_withdraw_updates_last_inventory_quantity_when_current_quantity_comes_from_inventory(self):
+    def test_partial_withdraw_does_not_update_legacy_inventory_quantity(self):
         asset = self._create_asset(
             "WITHDRAW-QTY-PARTIAL-INVENTORY-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=15,
+            current_quantity=10,
             last_inventory_quantity=10,
         )
 
@@ -5371,7 +5418,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertTrue(asset.is_active)
         self.assertEqual(asset.status, Asset.Status.IN_STOCK)
         self.assertEqual(asset.record_quantity, 15)
-        self.assertEqual(asset.last_inventory_quantity, 7)
+        self.assertEqual(asset.last_inventory_quantity, 10)
         self.assertEqual(asset.current_quantity, 7)
 
     def test_detail_shows_withdraw_quantity_input_for_quantity_asset_with_multiple_quantity(self):
@@ -5379,6 +5426,7 @@ class AssetWithdrawViewTests(TestCase):
             "WITHDRAW-UI-QTY-001",
             asset_type=Asset.AssetType.QUANTITY,
             record_quantity=5,
+            current_quantity=5,
         )
 
         response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
@@ -5388,7 +5436,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertContains(response, 'max="5"')
 
     def test_detail_hides_withdraw_quantity_input_for_regular_asset(self):
-        asset = self._create_asset("WITHDRAW-UI-FIXED-001", record_quantity=5)
+        asset = self._create_asset("WITHDRAW-UI-FIXED-001", record_quantity=5, current_quantity=5)
 
         response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
 
@@ -5428,6 +5476,7 @@ class AssetUpdateViewTests(TestCase):
             "name": "Updated Asset",
             "inventory_number": asset.inventory_number,
             "asset_type": Asset.AssetType.LOW_VALUE,
+            "current_quantity": str(asset.current_quantity),
             "category": "Updated IT",
             "manufacturer": "Dell",
             "model": "Latitude",
@@ -5480,6 +5529,7 @@ class AssetUpdateViewTests(TestCase):
             "room": asset.room,
             "responsible_person": str(asset.responsible_person_id) if asset.responsible_person_id else "",
             "current_user": str(asset.current_user_id) if asset.current_user_id else "",
+            "current_quantity": str(asset.current_quantity),
             "status": asset.status,
             "technical_condition": asset.technical_condition,
             "last_inventory_date": asset.last_inventory_date.isoformat() if asset.last_inventory_date else "",
@@ -5543,12 +5593,12 @@ class AssetUpdateViewTests(TestCase):
         self.assertContains(response, "Finansowe")
         self.assertContains(response, "Eksploatacja")
 
-    def test_update_form_renders_quantity_as_read_only_display(self):
+    def test_update_form_renders_current_quantity_input(self):
         allowed_location, _ = self._create_location_tree()
         asset = self._create_asset(
             inventory_number="UPDATE-QUANTITY-DISPLAY-001",
             location_obj=allowed_location,
-            record_quantity=9,
+            current_quantity=9,
         )
         user = self._manager_with_location("update-quantity-display", allowed_location)
         self.client.force_login(user)
@@ -5557,9 +5607,10 @@ class AssetUpdateViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Ilość")
-        self.assertContains(response, '<div class="detail-value is-mono">9</div>', html=True)
+        self.assertContains(response, 'type="number" name="current_quantity"')
+        self.assertContains(response, 'value="9"')
 
-    def test_update_form_keeps_quantity_and_active_fields_hidden(self):
+    def test_update_form_keeps_legacy_and_active_fields_hidden(self):
         allowed_location, _ = self._create_location_tree()
         asset = self._create_asset(location_obj=allowed_location)
         user = self._manager_with_location("update-hidden-system-fields", allowed_location)
@@ -5568,9 +5619,9 @@ class AssetUpdateViewTests(TestCase):
         response = self.client.get(reverse("assets:update", kwargs={"pk": asset.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'type="hidden" name="record_quantity"')
         self.assertContains(response, 'type="hidden" name="is_active"')
-        self.assertNotContains(response, 'type="number" name="record_quantity"')
+        self.assertContains(response, 'type="number" name="current_quantity"')
+        self.assertNotContains(response, 'name="record_quantity"')
         self.assertNotContains(response, 'type="checkbox" name="is_active"')
 
     def test_update_form_renders_last_inventory_date_as_read_only_display(self):
@@ -6122,6 +6173,7 @@ class AssetCreateViewTests(TestCase):
             "name": "Created Asset",
             "inventory_number": "CREATE-001",
             "asset_type": Asset.AssetType.FIXED,
+            "current_quantity": "1",
             "status": Asset.Status.IN_STOCK,
             "technical_condition": Asset.TechnicalCondition.GOOD,
             "location_fk": str(location.id),
@@ -6141,7 +6193,7 @@ class AssetCreateViewTests(TestCase):
         user = User.objects.create_user(username="asset-creator", password="test-pass-123")
         self.client.force_login(user)
 
-        response = self.client.post(reverse("assets:create"), data=self._valid_asset_payload())
+        response = self.client.post(reverse("assets:create"), data=self._valid_asset_payload(current_quantity="6"))
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(AssetChangeRequest.objects.exists())
@@ -6149,6 +6201,7 @@ class AssetCreateViewTests(TestCase):
         asset = Asset.objects.get(inventory_number="CREATE-001")
         self.assertEqual(asset.name, "Created Asset")
         self.assertEqual(asset.asset_type, Asset.AssetType.FIXED)
+        self.assertEqual(asset.current_quantity, 6)
         self.assertEqual(asset.status, Asset.Status.IN_STOCK)
         self.assertEqual(asset.technical_condition, Asset.TechnicalCondition.GOOD)
         self.assertIsNotNone(asset.location_fk)
@@ -6160,6 +6213,7 @@ class AssetCreateViewTests(TestCase):
 
         payload = self._valid_asset_payload(
             inventory_number="CREATE-SYSTEM-FIELDS-001",
+            current_quantity="8",
             record_quantity="99",
             last_inventory_date="2026-05-01",
         )
@@ -6168,6 +6222,7 @@ class AssetCreateViewTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         asset = Asset.objects.get(inventory_number="CREATE-SYSTEM-FIELDS-001")
+        self.assertEqual(asset.current_quantity, 8)
         self.assertEqual(asset.record_quantity, 1)
         self.assertTrue(asset.is_active)
         self.assertIsNone(asset.last_inventory_date)
@@ -6231,6 +6286,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(change_request.payload["name"], "Queued Asset")
         self.assertEqual(change_request.payload["inventory_number"], "CREATE-APPROVAL-001")
         self.assertEqual(change_request.payload["asset_type"], Asset.AssetType.FIXED)
+        self.assertEqual(change_request.payload["current_quantity"], 1)
         self.assertEqual(change_request.payload["status"], Asset.Status.IN_STOCK)
         self.assertEqual(change_request.payload["technical_condition"], Asset.TechnicalCondition.GOOD)
         self.assertIn("location_fk", change_request.payload)

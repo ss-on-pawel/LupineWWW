@@ -22,12 +22,7 @@ class AssetForm(forms.ModelForm):
         queryset=Location.objects.none(),
         required=True,
     )
-    record_quantity = forms.IntegerField(
-        label="Ilość ewidencyjna",
-        min_value=0,
-        required=False,
-        initial=1,
-    )
+    current_quantity = forms.IntegerField(label="Ilość", min_value=1, initial=1)
 
     def __init__(self, *args, **kwargs):
         location_queryset = kwargs.pop("location_queryset", None)
@@ -53,7 +48,7 @@ class AssetForm(forms.ModelForm):
             "name",
             "inventory_number",
             "asset_type",
-            "record_quantity",
+            "current_quantity",
             "category",
             "manufacturer",
             "model",
@@ -89,7 +84,7 @@ class AssetForm(forms.ModelForm):
             "warranty_until": forms.DateInput(attrs={"type": "date"}),
             "insurance_until": forms.DateInput(attrs={"type": "date"}),
             "purchase_value": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
-            "record_quantity": forms.NumberInput(attrs={"min": "0"}),
+            "current_quantity": forms.NumberInput(attrs={"min": "1"}),
         }
         help_texts = {
             "inventory_number": "Unikalny numer ewidencyjny składnika majątku.",
@@ -101,9 +96,11 @@ class AssetForm(forms.ModelForm):
         barcode = (self.cleaned_data.get("barcode") or "").strip()
         return barcode
 
-    def clean_record_quantity(self):
-        value = self.cleaned_data.get("record_quantity")
-        return 1 if value is None else value
+    def clean_current_quantity(self):
+        value = self.cleaned_data.get("current_quantity")
+        if value is None:
+            return 1
+        return value
 
     def save(self, commit=True):
         asset = super().save(commit=False)
