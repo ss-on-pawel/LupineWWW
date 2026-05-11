@@ -20,10 +20,10 @@ DEMO_USER_USERNAME = "inventory-demo-user"
 DEMO_ASSET_EXTERNAL_PREFIX = "inventory_demo:"
 
 ASSET_TYPE_SPECS = [
-    ("fixed", "Środek trwały", False, 10),
-    ("low_value", "Wyposażenie / niskocenne", False, 20),
-    ("quantity", "Ilościówka", True, 40),
-    ("intangible", "WNiP", False, 30),
+    ("fixed", "Środek trwały", False, 10, "ST"),
+    ("low_value", "Wyposażenie / niskocenne", False, 20, "WN"),
+    ("quantity", "Ilościówka", True, 40, "IL"),
+    ("intangible", "WNiP", False, 30, "WP"),
 ]
 
 LOCATION_TREE = {
@@ -125,11 +125,12 @@ class Command(BaseCommand):
 
     def _seed_asset_types(self):
         asset_types = {}
-        for code, name, is_quantity_based, sort_order in ASSET_TYPE_SPECS:
+        for code, name, is_quantity_based, sort_order, barcode_prefix in ASSET_TYPE_SPECS:
             asset_type, _created = AssetTypeDictionary.objects.update_or_create(
                 code=code,
                 defaults={
                     "name": name,
+                    "barcode_prefix": barcode_prefix,
                     "is_quantity_based": is_quantity_based,
                     "is_active": True,
                     "sort_order": sort_order,

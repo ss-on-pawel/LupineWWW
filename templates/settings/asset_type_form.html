@@ -97,6 +97,12 @@
                         {{ form.code.errors }}
                     </div>
                     <div class="form-field">
+                        {{ form.barcode_prefix.label_tag }}
+                        {{ form.barcode_prefix }}
+                        {% if form.barcode_prefix.help_text %}<div class="helptext">{{ form.barcode_prefix.help_text }}</div>{% endif %}
+                        {{ form.barcode_prefix.errors }}
+                    </div>
+                    <div class="form-field">
                         {{ form.sort_order.label_tag }}
                         {{ form.sort_order }}
                         {{ form.sort_order.errors }}

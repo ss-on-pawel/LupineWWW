@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -300,6 +301,7 @@ class Asset(models.Model):
 class AssetTypeDictionary(models.Model):
     name = models.CharField(max_length=120, verbose_name="Nazwa")
     code = models.SlugField(max_length=64, unique=True, verbose_name="Kod")
+    barcode_prefix = models.CharField(max_length=3, blank=True, verbose_name="Prefix kodu")
     is_quantity_based = models.BooleanField(default=False, verbose_name="Ilościowy")
     is_active = models.BooleanField(default=True, verbose_name="Aktywny")
     sort_order = models.PositiveIntegerField(default=0, verbose_name="Kolejność")
@@ -314,6 +316,20 @@ class AssetTypeDictionary(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.barcode_prefix:
+            self.barcode_prefix = self.barcode_prefix.strip().upper()
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        prefix = (self.barcode_prefix or "").strip().upper()
+        self.barcode_prefix = prefix
+        if prefix and (len(prefix) not in {2, 3} or not all(ch.isdigit() or "A" <= ch <= "Z" for ch in prefix)):
+            raise ValidationError({
+                "barcode_prefix": "Prefix kodu musi miec 2-3 znaki i zawierac tylko wielkie litery oraz cyfry.",
+            })
 
 
 class AssetChangeRequest(models.Model):

@@ -118,6 +118,7 @@
                         <tr>
                             <th id="settings-table-title" scope="col">Nazwa</th>
                             <th scope="col">Kod</th>
+                            <th scope="col">Prefix kodu</th>
                             <th scope="col">Ilościowy</th>
                             <th scope="col">Aktywny</th>
                             <th scope="col">Kolejność</th>
@@ -129,6 +130,7 @@
                             <tr>
                                 <td data-label="Nazwa">{{ asset_type.name }}</td>
                                 <td data-label="Kod"><span class="settings-code">{{ asset_type.code }}</span></td>
+                                <td data-label="Prefix kodu"><span class="settings-code">{{ asset_type.barcode_prefix|default:"-" }}</span></td>
                                 <td data-label="Ilościowy">{% if asset_type.is_quantity_based %}Tak{% else %}Nie{% endif %}</td>
                                 <td data-label="Aktywny">{% if asset_type.is_active %}Tak{% else %}Nie{% endif %}</td>
                                 <td data-label="Kolejność">{{ asset_type.sort_order }}</td>
@@ -151,7 +153,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6">Brak rodzajów środków.</td>
+                                <td colspan="7">Brak rodzajów środków.</td>
                             </tr>
                         {% endfor %}
                     </tbody>

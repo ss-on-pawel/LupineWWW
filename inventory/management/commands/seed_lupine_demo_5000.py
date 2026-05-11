@@ -28,11 +28,11 @@ DEFAULT_ASSET_COUNT = 5000
 RANDOM_SEED = 3000
 
 ASSET_TYPES = [
-    ("fixed", "Srodek trwaly", False, 10),
-    ("low_value", "Wyposazenie / niskocenne", False, 20),
-    ("intangible", "WNiP", False, 30),
-    ("quantity", "Ilosciowka", True, 40),
-    ("other", "Inne", False, 50),
+    ("fixed", "Srodek trwaly", False, 10, "ST"),
+    ("low_value", "Wyposazenie / niskocenne", False, 20, "WN"),
+    ("intangible", "WNiP", False, 30, "WP"),
+    ("quantity", "Ilosciowka", True, 40, "IL"),
+    ("other", "Inne", False, 50, "IN"),
 ]
 
 CITY_TREE = {
@@ -129,11 +129,12 @@ class Command(BaseCommand):
 
     def _seed_asset_types(self):
         result = {}
-        for code, name, is_quantity_based, sort_order in ASSET_TYPES:
+        for code, name, is_quantity_based, sort_order, barcode_prefix in ASSET_TYPES:
             asset_type, _created = AssetTypeDictionary.objects.update_or_create(
                 code=code,
                 defaults={
                     "name": name,
+                    "barcode_prefix": barcode_prefix,
                     "is_quantity_based": is_quantity_based,
                     "is_active": True,
                     "sort_order": sort_order,

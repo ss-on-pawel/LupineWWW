@@ -46,11 +46,11 @@ simplify_asset_statuses = importlib.import_module(
 class AssetTypeDictionaryModelTests(TestCase):
     def test_default_asset_types_exist_after_migrations(self):
         expected = {
-            "fixed": ("Środek trwały", False, 10, True),
-            "low_value": ("Wyposażenie / niskocenne", False, 20, True),
-            "intangible": ("WNiP", False, 30, True),
-            "quantity": ("Ilościówka", True, 40, True),
-            "other": ("Inne", False, 50, True),
+            "fixed": ("Środek trwały", False, 10, True, "ST"),
+            "low_value": ("Wyposażenie / niskocenne", False, 20, True, "WN"),
+            "intangible": ("WNiP", False, 30, True, "WP"),
+            "quantity": ("Ilościówka", True, 40, True, "IL"),
+            "other": ("Inne", False, 50, True, "IN"),
         }
 
         rows = {
@@ -59,13 +59,14 @@ class AssetTypeDictionaryModelTests(TestCase):
         }
 
         self.assertEqual(set(rows), set(expected))
-        for code, (name, is_quantity_based, sort_order, is_system) in expected.items():
+        for code, (name, is_quantity_based, sort_order, is_system, barcode_prefix) in expected.items():
             with self.subTest(code=code):
                 self.assertEqual(rows[code].name, name)
                 self.assertEqual(rows[code].is_quantity_based, is_quantity_based)
                 self.assertTrue(rows[code].is_active)
                 self.assertEqual(rows[code].sort_order, sort_order)
                 self.assertEqual(rows[code].is_system, is_system)
+                self.assertEqual(rows[code].barcode_prefix, barcode_prefix)
 
     def test_code_is_unique(self):
         with self.assertRaises(IntegrityError):
@@ -602,6 +603,7 @@ class AssetTypeDictionarySettingsViewTests(TestCase):
         data = {
             "name": "Custom type",
             "code": "custom-type",
+            "barcode_prefix": "",
             "is_quantity_based": "",
             "is_active": "on",
             "sort_order": "60",
@@ -632,6 +634,15 @@ class AssetTypeDictionarySettingsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dodaj rodzaj")
 
+    def test_list_shows_barcode_prefix(self):
+        self.client.force_login(self._manager_user())
+
+        response = self.client.get(reverse("settings:asset-types"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Prefix kodu")
+        self.assertContains(response, "ST")
+
     def test_regular_user_cannot_access_list(self):
         user = User.objects.create_user(username="asset-type-user", password="test-pass-123")
         self.client.force_login(user)
@@ -654,6 +665,30 @@ class AssetTypeDictionarySettingsViewTests(TestCase):
         self.assertTrue(asset_type.is_quantity_based)
         self.assertTrue(asset_type.is_active)
         self.assertEqual(asset_type.sort_order, 60)
+
+    def test_create_asset_type_saves_barcode_prefix_uppercase(self):
+        self.client.force_login(self._manager_user())
+
+        response = self.client.post(
+            reverse("settings:asset-type-create"),
+            data=self._form_data(name="Prefix type", code="Prefix Type", barcode_prefix="p9"),
+        )
+
+        self.assertRedirects(response, reverse("settings:asset-types"))
+        asset_type = AssetTypeDictionary.objects.get(code="prefix-type")
+        self.assertEqual(asset_type.barcode_prefix, "P9")
+
+    def test_create_asset_type_rejects_invalid_barcode_prefix(self):
+        self.client.force_login(self._manager_user())
+
+        response = self.client.post(
+            reverse("settings:asset-type-create"),
+            data=self._form_data(name="Bad prefix", code="Bad Prefix", barcode_prefix="A-1"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(AssetTypeDictionary.objects.filter(code="bad-prefix").exists())
+        self.assertContains(response, "Prefix kodu musi miec 2-3 znaki")
 
     def test_update_asset_type(self):
         self.client.force_login(self._manager_user())

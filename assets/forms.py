@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.utils.text import slugify
 
@@ -126,12 +128,19 @@ class AssetForm(forms.ModelForm):
 
 class AssetTypeDictionaryForm(forms.ModelForm):
     code = forms.CharField(label="Kod", max_length=64)
+    barcode_prefix = forms.CharField(
+        label="Prefix kodu",
+        max_length=3,
+        required=False,
+        help_text="2-3 znaki używane później do generowania kodów kreskowych, np. ST260000001.",
+    )
 
     class Meta:
         model = AssetTypeDictionary
         fields = [
             "name",
             "code",
+            "barcode_prefix",
             "is_quantity_based",
             "is_active",
             "sort_order",
@@ -149,3 +158,11 @@ class AssetTypeDictionaryForm(forms.ModelForm):
         if not code:
             raise forms.ValidationError("Kod jest wymagany.")
         return code
+
+    def clean_barcode_prefix(self):
+        prefix = (self.cleaned_data.get("barcode_prefix") or "").strip().upper()
+        if not prefix:
+            return ""
+        if not re.fullmatch(r"[A-Z0-9]{2,3}", prefix):
+            raise forms.ValidationError("Prefix kodu musi miec 2-3 znaki i zawierac tylko wielkie litery oraz cyfry.")
+        return prefix
