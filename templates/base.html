@@ -171,8 +171,22 @@
         }
         .messages li {
             padding: 12px 14px;
-            border: 1px solid rgba(12, 120, 63, 0.16);
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            background: rgba(248, 250, 252, 0.92);
+        }
+        .messages li.success {
+            border-color: rgba(12, 120, 63, 0.16);
             background: rgba(234, 245, 234, 0.92);
+        }
+        .messages li.error {
+            border-color: rgba(193, 18, 31, 0.18);
+            background: rgba(254, 242, 242, 0.92);
+            color: #9f1239;
+        }
+        .messages li.warning {
+            border-color: rgba(161, 98, 7, 0.18);
+            background: rgba(254, 252, 232, 0.92);
+            color: #854d0e;
         }
         .intro {
             margin: 0 0 8px;
@@ -461,7 +475,7 @@
         {% if messages %}
             <ul class="messages">
                 {% for message in messages %}
-                    <li>{{ message }}</li>
+                    <li class="{{ message.tags }}">{{ message }}</li>
                 {% endfor %}
             </ul>
         {% endif %}

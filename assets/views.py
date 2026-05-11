@@ -329,9 +329,12 @@ def _scope_asset_change_request_queryset(queryset, user):
     accessible_location_ids = get_accessible_location_ids(user)
     if accessible_location_ids is None:
         return queryset
+    if not accessible_location_ids:
+        return queryset.none()
+    loc_ids = list(accessible_location_ids)
     return queryset.filter(
-        operation=AssetChangeRequest.Operation.UPDATE,
-        asset__location_fk_id__in=accessible_location_ids,
+        Q(operation=AssetChangeRequest.Operation.UPDATE, asset__location_fk_id__in=loc_ids)
+        | Q(operation=AssetChangeRequest.Operation.CREATE, payload__location_fk__in=loc_ids)
     )
 
 
@@ -582,7 +585,7 @@ def asset_change_approve(request, pk):
     try:
         approve_asset_change_request(change_request, request.user)
     except ValidationError:
-        pass
+        messages.error(request, "Nie udało się zatwierdzić wniosku.")
 
     return redirect("assets:change-detail", pk=change_request.pk)
 
@@ -685,7 +688,7 @@ def asset_change_reject(request, pk):
     try:
         reject_asset_change_request(change_request, request.user, comment)
     except ValidationError:
-        pass
+        messages.error(request, "Nie udało się odrzucić wniosku.")
 
     return redirect("assets:change-detail", pk=change_request.pk)
 
@@ -759,14 +762,17 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
                 "current": serialize_asset_form_payload(current_payload, exclude_system_managed=True),
                 "proposed": serialize_asset_form_payload(form.cleaned_data, exclude_system_managed=True),
             }
-            pending_request = AssetChangeRequest.objects.filter(
+            existing_pending = AssetChangeRequest.objects.filter(
                 operation=AssetChangeRequest.Operation.UPDATE,
                 status=AssetChangeRequest.Status.PENDING,
                 asset=current_asset,
             ).first()
-            if pending_request:
-                pending_request.payload = payload
-                pending_request.save(update_fields=["payload", "updated_at"])
+            if existing_pending and existing_pending.requested_by_id != self.request.user.pk:
+                messages.error(self.request, "Dla tego środka istnieje już oczekujący wniosek innego użytkownika.")
+                return redirect(self.get_success_url())
+            if existing_pending:
+                existing_pending.payload = payload
+                existing_pending.save(update_fields=["payload", "updated_at"])
                 messages.success(self.request, "Oczekująca zmiana została zaktualizowana.")
             else:
                 AssetChangeRequest.objects.create(
@@ -1288,10 +1294,9 @@ def asset_bulk_withdraw_api(request):
     )
 
 
+@login_required
+@require_POST
 def asset_bulk_move_api(request):
-    if request.method != "POST":
-        return JsonResponse({"success": False, "error": "Method not allowed."}, status=405)
-
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except (UnicodeDecodeError, json.JSONDecodeError):

@@ -291,7 +291,7 @@
                 {% for request in change_requests %}
                     <tr>
                         <td>
-                            <input type="checkbox" data-role="change-select" value="{{ request.id }}" aria-label="Zaznacz zgłoszenie {{ request.id }}">
+                            <input type="checkbox" data-role="change-select" value="{{ request.id }}" aria-label="Zaznacz zgłoszenie {{ request.id }}"{% if request.status != "pending" %} disabled{% endif %}>
                         </td>
                         <td><a href="{% url 'assets:change-detail' request.id %}">{{ request.id }}</a></td>
                         <td>
@@ -430,7 +430,7 @@
             }
 
             function getSelectedIds() {
-                return Array.prototype.slice.call(document.querySelectorAll('[data-role="change-select"]:checked')).map(function (checkbox) {
+                return Array.prototype.slice.call(document.querySelectorAll('[data-role="change-select"]:checked:not(:disabled)')).map(function (checkbox) {
                     return Number.parseInt(checkbox.value, 10);
                 }).filter(function (id) {
                     return Number.isInteger(id);
@@ -439,7 +439,7 @@
 
             function updateToolbarState() {
                 var selectedCount = rowCheckboxes.filter(function (checkbox) {
-                    return checkbox.checked;
+                    return checkbox.checked && !checkbox.disabled;
                 }).length;
                 toolbarButtons.forEach(function (button) {
                     button.disabled = selectedCount === 0;
@@ -449,14 +449,17 @@
             if (selectAll && rowCheckboxes.length) {
                 selectAll.addEventListener("change", function () {
                     rowCheckboxes.forEach(function (checkbox) {
-                        checkbox.checked = selectAll.checked;
+                        if (!checkbox.disabled) {
+                            checkbox.checked = selectAll.checked;
+                        }
                     });
                     updateToolbarState();
                 });
 
                 rowCheckboxes.forEach(function (checkbox) {
                     checkbox.addEventListener("change", function () {
-                        selectAll.checked = rowCheckboxes.every(function (item) {
+                        var enabledCheckboxes = rowCheckboxes.filter(function (cb) { return !cb.disabled; });
+                        selectAll.checked = enabledCheckboxes.length > 0 && enabledCheckboxes.every(function (item) {
                             return item.checked;
                         });
                         updateToolbarState();
@@ -486,16 +489,23 @@
                         throw new Error("Request failed");
                     }
                     return response.json();
-                }).then(function () {
+                }).then(function (data) {
+                    var msg = "Zatwierdzono: " + data.approved_count + ".";
+                    if (data.skipped_count) {
+                        msg += " Pominięto: " + data.skipped_count + " (nieoczekujące lub poza zakresem).";
+                    }
+                    alert(msg);
                     window.location.reload();
                 }).catch(function (error) {
                     console.error(error);
+                    alert("Błąd podczas zatwierdzania. Odśwież stronę i spróbuj ponownie.");
                     updateToolbarState();
                 });
             });
 
             if (selectAll && rowCheckboxes.length) {
-                selectAll.checked = rowCheckboxes.every(function (checkbox) {
+                var enabledCheckboxes = rowCheckboxes.filter(function (cb) { return !cb.disabled; });
+                selectAll.checked = enabledCheckboxes.length > 0 && enabledCheckboxes.every(function (checkbox) {
                     return checkbox.checked;
                 });
             }
@@ -567,10 +577,16 @@
                             throw new Error("Request failed");
                         }
                         return response.json();
-                    }).then(function () {
+                    }).then(function (data) {
+                        var msg = "Odrzucono: " + data.rejected + ".";
+                        if (data.skipped) {
+                            msg += " Pominięto: " + data.skipped + " (nieoczekujące lub poza zakresem).";
+                        }
+                        alert(msg);
                         window.location.reload();
                     }).catch(function (error) {
                         console.error(error);
+                        alert("Błąd podczas odrzucania. Odśwież stronę i spróbuj ponownie.");
                         bulkRejectConfirm.disabled = false;
                     });
                 });

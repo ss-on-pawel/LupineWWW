@@ -340,7 +340,7 @@ def approve_asset_change_request(change_request, reviewer):
 
         if locked_request.operation == AssetChangeRequest.Operation.CREATE:
             if not reviewer_is_global:
-                raise PermissionDenied("You do not have permission to approve asset creation without a location.")
+                _validate_reviewer_create_scope(reviewer, locked_request.payload)
 
             form_data = deserialize_asset_payload_for_form(locked_request.payload)
             form = AssetForm(data=form_data)
@@ -475,6 +475,17 @@ def _validate_reviewer_update_scope(reviewer, asset):
         return
     if asset.location_fk_id is None or asset.location_fk_id not in accessible_location_ids:
         raise PermissionDenied("You do not have permission to approve changes for this asset.")
+
+
+def _validate_reviewer_create_scope(reviewer, payload):
+    from accounts.utils import get_accessible_location_ids
+
+    accessible_location_ids = get_accessible_location_ids(reviewer)
+    if accessible_location_ids is None:
+        return
+    location_fk_id = payload.get("location_fk") if isinstance(payload, dict) else None
+    if location_fk_id is None or location_fk_id not in accessible_location_ids:
+        raise PermissionDenied("You do not have permission to approve asset creation for this location.")
 
 
 def _reviewer_has_global_asset_approval_access(reviewer):
