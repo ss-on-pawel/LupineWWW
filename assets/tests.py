@@ -3715,6 +3715,64 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
         self.assertEqual(change_request.review_comment, "")
 
+    def test_bulk_approve_continues_loop_and_returns_partial_result_on_permission_denied(self):
+        from unittest.mock import patch
+
+        requester = User.objects.create_user(username="bulk-approve-pd-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-approve-pd-reviewer")
+        first_request = self._create_request(requester, inventory_number="BULK-APPROVE-PD-001")
+        second_request = self._create_request(requester, inventory_number="BULK-APPROVE-PD-002")
+        self.client.force_login(reviewer)
+
+        call_count = [0]
+
+        def mock_approve(change_request, reviewer):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise PermissionDenied("simulated race condition")
+
+        with patch("assets.views.approve_asset_change_request", side_effect=mock_approve):
+            response = self.client.post(
+                reverse("assets:bulk-approve"),
+                data=json.dumps({"ids": [first_request.pk, second_request.pk]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["approved_count"], 1)
+        self.assertEqual(data["skipped_count"], 1)
+        self.assertEqual(call_count[0], 2)
+
+    def test_bulk_reject_continues_loop_and_returns_partial_result_on_permission_denied(self):
+        from unittest.mock import patch
+
+        requester = User.objects.create_user(username="bulk-reject-pd-requester", password="test-pass-123")
+        reviewer = self._superuser("bulk-reject-pd-reviewer")
+        first_request = self._create_request(requester, inventory_number="BULK-REJECT-PD-001")
+        second_request = self._create_request(requester, inventory_number="BULK-REJECT-PD-002")
+        self.client.force_login(reviewer)
+
+        call_count = [0]
+
+        def mock_reject(change_request, reviewer, comment=""):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise PermissionDenied("simulated race condition")
+
+        with patch("assets.views.reject_asset_change_request", side_effect=mock_reject):
+            response = self.client.post(
+                reverse("assets:bulk-reject"),
+                data=json.dumps({"ids": [first_request.pk, second_request.pk], "comment": "Odrzucono"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["rejected"], 1)
+        self.assertEqual(data["skipped"], 1)
+        self.assertEqual(call_count[0], 2)
+
     def test_superuser_can_reject_with_comment(self):
         requester = User.objects.create_user(username="post-reject-admin-requester", password="test-pass-123")
         reviewer = self._superuser("post-reject-superuser")

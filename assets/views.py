@@ -617,7 +617,7 @@ def asset_change_bulk_approve(request):
     for change_request in queryset:
         try:
             approve_asset_change_request(change_request, request.user)
-        except ValidationError:
+        except (ValidationError, PermissionDenied):
             continue
         approved_count += 1
 
@@ -662,7 +662,7 @@ def asset_change_bulk_reject(request):
     for change_request in queryset:
         try:
             reject_asset_change_request(change_request, request.user, comment)
-        except ValidationError:
+        except (ValidationError, PermissionDenied):
             continue
         rejected_count += 1
 
