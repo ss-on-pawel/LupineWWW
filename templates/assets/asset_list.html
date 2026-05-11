@@ -18,6 +18,10 @@
             overflow: visible;
             font-family: var(--ui-font);
             background: transparent;
+            width: calc(100vw - 32px);
+            max-width: none;
+            margin-left: calc(50% - 50vw + 16px);
+            margin-right: calc(50% - 50vw + 16px);
         }
         .asset-change-summary {
             position: relative;
@@ -45,12 +49,6 @@
         }
         .asset-list-notice[hidden] {
             display: none;
-        }
-        .asset-list-shell[data-work-mode="management"] {
-            width: calc(100vw - 32px);
-            max-width: none;
-            margin-left: calc(50% - 50vw + 16px);
-            margin-right: calc(50% - 50vw + 16px);
         }
         .asset-list-shell[data-mode="dense"] {
             width: calc(100vw - 32px);
@@ -161,10 +159,6 @@
             align-items: stretch;
             margin-bottom: 10px;
         }
-        .asset-list-shell[data-work-mode="management"] .asset-list-workrow {
-            gap: 8px;
-            margin-bottom: 10px;
-        }
         .asset-list-worksegment {
             display: grid;
             grid-template-rows: auto minmax(0, 1fr);
@@ -183,9 +177,6 @@
             flex-wrap: wrap;
             padding: 8px 12px;
             border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-list-worksegment-head {
-            padding: 8px 12px;
         }
         .asset-list-worksegment-head strong {
             display: block;
@@ -206,10 +197,6 @@
             align-content: start;
             gap: 8px;
             min-width: 0;
-            padding: 8px 12px;
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-list-worksegment-body {
-            gap: 6px;
             padding: 8px 12px;
         }
         .asset-list-worksegment--search .asset-list-worksegment-body {
@@ -292,81 +279,6 @@
             border-color: rgba(17, 24, 39, 0.28);
             box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.12);
         }
-        .asset-work-mode {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            min-height: 40px;
-            padding: 0;
-            border: 0;
-            background: transparent;
-            white-space: nowrap;
-        }
-        .asset-work-mode input {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-        }
-        .asset-work-mode-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            height: 40px;
-            padding: 0 8px;
-            border: 0;
-            background: transparent;
-            color: #667085;
-            font-family: var(--ui-font);
-            font-size: 14px;
-            font-weight: 500;
-            letter-spacing: 0.01em;
-            text-transform: none;
-            box-shadow: none;
-            cursor: pointer;
-        }
-        .asset-work-mode-button:hover {
-            color: #475467;
-            background: transparent;
-        }
-        .asset-work-mode-button:focus,
-        .asset-work-mode-button:focus-visible {
-            outline: none;
-            border: 0;
-            background: transparent;
-            box-shadow: none;
-        }
-        .asset-work-mode-button::after {
-            content: "";
-            position: absolute;
-            left: 8px;
-            right: 8px;
-            bottom: 6px;
-            height: 1px;
-            background: transparent;
-            opacity: 0;
-        }
-        .asset-work-mode[data-mode="management"] [data-mode-option="management"] {
-            color: #101828;
-            font-weight: 600;
-        }
-        .asset-work-mode[data-mode="management"] [data-mode-option="management"]::after {
-            background: rgba(193, 18, 31, 0.88);
-            box-shadow: 0 0 4px rgba(193, 18, 31, 0.12);
-            opacity: 1;
-        }
-        .asset-work-mode[data-mode="inventory"] [data-mode-option="management"] {
-            color: #667085;
-        }
-        .asset-work-mode[data-mode="inventory"] [data-mode-option="inventory"] {
-            color: #101828;
-            font-weight: 600;
-        }
-        .asset-work-mode[data-mode="inventory"] [data-mode-option="inventory"]::after {
-            background: rgba(193, 18, 31, 0.88);
-            box-shadow: 0 0 4px rgba(193, 18, 31, 0.12);
-            opacity: 1;
-        }
         .asset-header-controls {
             display: inline-flex;
             align-items: center;
@@ -381,13 +293,6 @@
             gap: 6px;
             flex-wrap: wrap;
             min-width: 0;
-        }
-        .asset-header-mode {
-            display: inline-flex;
-            align-items: center;
-            min-width: 0;
-            padding-left: 12px;
-            border-left: 1px solid rgba(10, 10, 10, 0.1);
         }
         .asset-topbar-action {
             min-height: 34px;
@@ -404,10 +309,6 @@
                 justify-content: flex-start;
                 flex-wrap: wrap;
                 gap: 10px;
-            }
-            .asset-header-mode {
-                padding-left: 0;
-                border-left: 0;
             }
         }
         .asset-nav-label {
@@ -470,11 +371,6 @@
             padding: 8px 0 10px;
             border-bottom: 1px solid var(--line);
             min-width: 0;
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-layout-toolbar-actions {
-            gap: 8px;
-            margin-bottom: 12px;
-            padding: 5px 0 6px;
         }
         .asset-management-toolbar {
             display: flex;
@@ -549,12 +445,6 @@
             gap: 12px;
             margin-left: auto;
             min-width: 0;
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-list-table-tools {
-            margin-bottom: 10px;
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-list-table-tools-cluster {
-            gap: 10px;
         }
         .asset-list-shell[data-mode="dense"] .asset-management-toolbar {
             gap: 8px;
@@ -855,37 +745,11 @@
             text-transform: uppercase;
             text-align: right;
         }
-        .asset-list-shell[data-work-mode="management"] .asset-list-meta {
-            font-size: 0.76rem;
-        }
         .asset-list-shell[data-mode="dense"] .asset-list-meta {
             font-size: 0.76rem;
         }
         .asset-list-meta > div {
             white-space: nowrap;
-        }
-        .asset-list-inventory-banner {
-            margin-bottom: 10px;
-            padding: 8px 12px;
-            border: 1px solid var(--line);
-            background: rgba(248, 250, 252, 0.88);
-            color: #101828;
-            font-family: var(--mono-font);
-            font-size: 0.72rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-list-inventory-banner {
-            margin-bottom: 6px;
-            padding: 6px 10px;
-            font-size: 0.68rem;
-            letter-spacing: 0.1em;
-        }
-        .asset-list-shell[data-mode="dense"] .asset-list-inventory-banner {
-            margin-bottom: 6px;
-            padding: 6px 10px;
-            font-size: 0.68rem;
-            letter-spacing: 0.1em;
         }
         .asset-list-filters {
             position: relative;
@@ -1119,9 +983,6 @@
             -webkit-overflow-scrolling: touch;
             padding-bottom: 18px;
         }
-        .asset-list-shell[data-work-mode="management"] .asset-list-table-wrap {
-            box-shadow: none;
-        }
         .asset-table-sticky-scrollbar {
             position: sticky;
             bottom: 0;
@@ -1176,10 +1037,6 @@
             background: var(--asset-row-bg, #fff);
             font-family: var(--data-font);
         }
-        .asset-list-shell[data-work-mode="management"] .asset-table th,
-        .asset-list-shell[data-work-mode="management"] .asset-table td {
-            padding: 10px 12px;
-        }
         .asset-list-shell[data-mode="dense"] .asset-table th,
         .asset-list-shell[data-mode="dense"] .asset-table td {
             padding: 5px 7px;
@@ -1212,9 +1069,6 @@
             letter-spacing: 0;
             text-transform: uppercase;
             background-clip: padding-box;
-        }
-        .asset-list-shell[data-work-mode="management"] .asset-table thead th {
-            padding: 5px 7px;
         }
         .asset-list-shell[data-mode="dense"] .asset-table thead th {
             height: 30px;
@@ -1401,18 +1255,6 @@
             min-width: 5.5rem;
             max-width: 7.5rem;
         }
-        .asset-table td[data-column-key="terminal"],
-        .asset-table th[data-column-key="terminal"],
-        .asset-table td[data-column-key="odczyt"],
-        .asset-table th[data-column-key="odczyt"],
-        .asset-table td[data-column-key="reczne"],
-        .asset-table th[data-column-key="reczne"],
-        .asset-table td[data-column-key="ilosc_faktyczna"],
-        .asset-table th[data-column-key="ilosc_faktyczna"] {
-            width: 7.5rem;
-            min-width: 6.5rem;
-            max-width: 8.5rem;
-        }
         .asset-table .cell-value {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -1526,13 +1368,6 @@
         }
         .asset-list-shell[data-mode="dense"] .asset-runtime-status-pill {
             border-color: rgba(14, 116, 144, 0.24);
-        }
-        .asset-inventory-manual-input {
-            width: 100%;
-            min-width: 0;
-            min-height: 32px;
-            padding: 6px 8px;
-            box-sizing: border-box;
         }
         .asset-table-empty,
         .asset-table-loading {
@@ -1670,15 +1505,6 @@
 
 {% block app_header_actions %}
     {{ block.super }}
-    <div class="asset-header-mode" aria-label="Tryb widoku ewidencji"{% if asset_list_mode == "archive" %} hidden aria-hidden="true"{% endif %}>
-        <div id="asset-work-mode-shell" class="asset-work-mode" data-mode="management">
-            <label for="asset-work-mode-toggle">
-                <input id="asset-work-mode-toggle" type="checkbox">
-            </label>
-            <button id="asset-work-mode-management" class="asset-work-mode-button" type="button" data-mode-option="management" aria-pressed="true">Zarządzanie</button>
-            <button id="asset-work-mode-inventory" class="asset-work-mode-button" type="button" data-mode-option="inventory" aria-pressed="false">Inwentaryzacja</button>
-        </div>
-    </div>
 {% endblock %}
 
 {% block content %}
@@ -1775,10 +1601,6 @@
                 </section>
             </div>
             <div class="asset-layout-table">
-                <div id="asset-inventory-banner" class="asset-list-inventory-banner" hidden>
-                    INWENTARYZACJA: [brak aktywnej sesji]
-                </div>
-
                 <div class="asset-list-table-tools">
                     <div class="asset-table-tools-left">
                         <button id="asset-management-add" type="button" class="ui-btn ui-btn--success" hidden>Dodaj środek</button>
@@ -2254,7 +2076,6 @@
 
             const storageKeyColumns = "asset-list-columns-v2";
             const storageKeyLayoutMode = "asset-list-mode-v1";
-            const storageKeyWorkMode = "asset-list-work-mode-v1";
             const storageKeyRejectedDismissed = "asset-rejected-dismissed-v1";
             const apiUrl = shell.dataset.apiUrl;
             const exportUrl = shell.dataset.exportUrl;
@@ -2322,22 +2143,6 @@
                 { key: "serial_number", label: "Nr seryjny", visible: false, sortable: true, sticky: false, className: "" },
                 { key: "is_active", label: "Aktywny", visible: false, sortable: true, sticky: false, className: "" }
             ];
-            const inventoryModeColumns = [
-                { key: "terminal", label: "Terminal", visible: true, sortable: false, sticky: false, className: "" },
-                { key: "odczyt", label: "Odczyt", visible: true, sortable: false, sticky: false, className: "" },
-                { key: "reczne", label: "Ręczne", visible: true, sortable: false, sticky: false, className: "" },
-                { key: "ilosc_faktyczna", label: "Ilość faktyczna", visible: true, sortable: false, sticky: false, className: "" }
-            ];
-            const inventoryModeColumnKeys = [
-                "inventory_number",
-                "name",
-                "location",
-                "status",
-                "terminal",
-                "odczyt",
-                "reczne",
-                "ilosc_faktyczna"
-            ];
 
             const labelByKey = {};
             defaultColumns.forEach(function (column) {
@@ -2354,10 +2159,6 @@
                 filterList: document.getElementById("asset-filter-list"),
                 filterEmpty: document.getElementById("asset-filter-empty"),
                 filtersSection: shell.querySelector(".asset-list-filters"),
-                workModeToggle: document.getElementById("asset-work-mode-toggle"),
-                workModeShell: document.getElementById("asset-work-mode-shell"),
-                workModeManagementButton: document.getElementById("asset-work-mode-management"),
-                workModeInventoryButton: document.getElementById("asset-work-mode-inventory"),
                 managementToolbar: document.getElementById("asset-management-toolbar"),
                 managementEditButton: document.getElementById("asset-management-edit"),
                 managementDeleteButton: document.getElementById("asset-management-delete"),
@@ -2378,7 +2179,6 @@
                 listNotice: document.getElementById("asset-list-notice"),
                 columnsPanel: document.getElementById("asset-columns-panel"),
                 columnsOptions: document.getElementById("asset-columns-options"),
-                inventoryBanner: document.getElementById("asset-inventory-banner"),
                 tableWrap: shell.querySelector(".asset-list-table-wrap"),
                 tableHead: document.getElementById("asset-table-head"),
                 tableBody: document.getElementById("asset-table-body"),
@@ -2417,8 +2217,6 @@
                 ordering: "-updated_at",
                 columns: loadColumns(),
                 layoutMode: loadLayoutMode(),
-                mode: loadWorkMode(),
-                inventoryManual: {},
                 lastPayload: null,
                 requestToken: 0,
                 activeController: null
@@ -2426,7 +2224,6 @@
 let searchDebounceId = null;
 
             arrangeSearchAndFiltersLayout();
-            ensureInventoryToolbarActions();
             applyLayoutMode(state.layoutMode);
             syncControls();
             renderFilterRows();
@@ -2487,20 +2284,6 @@ let searchDebounceId = null;
                         }),
                         page: 1
                     });
-                });
-
-                elements.workModeToggle.addEventListener("change", function (event) {
-                    updateState({
-                        mode: event.target.checked ? "inventory" : "management"
-                    });
-                });
-
-                elements.workModeManagementButton.addEventListener("click", function () {
-                    setWorkMode("management");
-                });
-
-                elements.workModeInventoryButton.addEventListener("click", function () {
-                    setWorkMode("inventory");
                 });
 
                 elements.columnsToggle.addEventListener("click", function (event) {
@@ -2599,14 +2382,6 @@ let searchDebounceId = null;
                     selectCurrentMoveLocation();
                 });
 
-                if (elements.extraRecordButton) {
-                    elements.extraRecordButton.addEventListener("click", function () {
-                        if (state.mode === "inventory") {
-                            console.info("Raport różnic");
-                        }
-                    });
-                }
-
                 elements.managementDeleteButton.addEventListener("click", handleDeleteRecordAction);
 
                 elements.managementAddButton.addEventListener("click", handleAddRecordAction);
@@ -2617,11 +2392,6 @@ let searchDebounceId = null;
                         syncToolbarControls();
                         return;
                     }
-                    const input = event.target.closest("[data-role='inventory-manual']");
-                    if (!input) {
-                        return;
-                    }
-                    updateInventoryManualValue(input.dataset.assetId, input.value);
                 });
 
                 elements.tableBody.addEventListener("click", function (event) {
@@ -2672,12 +2442,6 @@ let searchDebounceId = null;
                     ? filterHelpers.sanitizeConditions(filterState, patch.filters)
                     : state.filters;
                 state.ordering = patch.ordering !== undefined ? patch.ordering : state.ordering;
-                state.mode = patch.mode !== undefined ? patch.mode : state.mode;
-                if (isArchiveMode) {
-                    state.mode = "management";
-                } else {
-                    window.localStorage.setItem(storageKeyWorkMode, state.mode);
-                }
                 syncControls();
                 renderFilterRows();
                 fetchAndRender();
@@ -3084,30 +2848,6 @@ let searchDebounceId = null;
                         td.dataset.columnKey = column.key;
                         td.className = buildColumnClassName(column, visibleIndex, visibleColumns);
 
-                        if (column.key === "terminal") {
-                            td.textContent = "-";
-                            tr.appendChild(td);
-                            return;
-                        }
-
-                        if (column.key === "odczyt") {
-                            td.textContent = String(getInventoryReadValue(row));
-                            tr.appendChild(td);
-                            return;
-                        }
-
-                        if (column.key === "reczne") {
-                            td.appendChild(buildInventoryManualInput(row));
-                            tr.appendChild(td);
-                            return;
-                        }
-
-                        if (column.key === "ilosc_faktyczna") {
-                            td.textContent = String(getInventoryActualQuantity(row));
-                            tr.appendChild(td);
-                            return;
-                        }
-
                         if (column.key === "select") {
                             td.innerHTML = '<input type="checkbox" aria-label="Zaznacz środek" data-role="asset-select" data-asset-id="' + row.id + '">';
                         } else if (column.key === "name") {
@@ -3356,19 +3096,6 @@ let searchDebounceId = null;
 
             function applyLayoutMode(mode) {
                 shell.dataset.mode = mode;
-            }
-
-            function loadWorkMode() {
-                if (isArchiveMode) {
-                    return "management";
-                }
-                const stored = window.localStorage.getItem(storageKeyWorkMode);
-                return stored === "inventory" ? "inventory" : "management";
-            }
-
-            function ensureInventoryToolbarActions() {
-                elements.extraRecordField = null;
-                elements.extraRecordButton = null;
             }
 
             function renderMoveTarget() {
@@ -3950,46 +3677,8 @@ let searchDebounceId = null;
                 if (elements.locationFilter.value !== state.location) {
                     elements.locationFilter.value = state.location;
                 }
-                elements.workModeToggle.checked = state.mode === "inventory";
-                elements.workModeShell.dataset.mode = state.mode;
-                elements.workModeManagementButton.setAttribute("aria-pressed", String(state.mode === "management"));
-                elements.workModeInventoryButton.setAttribute("aria-pressed", String(state.mode === "inventory"));
-                shell.dataset.workMode = state.mode;
-                elements.inventoryBanner.hidden = state.mode !== "inventory";
                 syncManagementToolbar();
                 syncToolbarControls();
-            }
-
-            function syncTopbarActions() {
-                return;
-                const isInventoryMode = state.mode === "inventory";
-
-                if (!isInventoryMode) {
-                    elements.topbarColumnsButton.textContent = "Kolumny";
-                    elements.topbarEditButton.textContent = "Edytuj";
-                    elements.topbarDeleteButton.textContent = "Wycofaj";
-                    elements.topbarAddButton.textContent = "Dodaj środek";
-                    elements.topbarExtraButton.hidden = true;
-                    return;
-                }
-
-                elements.topbarColumnsButton.textContent = "▶ Rozpocznij inwentaryzację";
-                elements.topbarEditButton.textContent = "✔ Zatwierdź";
-                elements.topbarDeleteButton.textContent = "✖ Wyczyść";
-                elements.topbarAddButton.textContent = "Spis z natury";
-                elements.topbarExtraButton.textContent = "Raport różnic";
-                elements.topbarExtraButton.hidden = false;
-            }
-
-            function setWorkMode(mode) {
-                if (isArchiveMode) {
-                    return;
-                }
-                if (mode !== "management" && mode !== "inventory") {
-                    return;
-                }
-                elements.workModeToggle.checked = mode === "inventory";
-                elements.workModeToggle.dispatchEvent(new Event("change", { bubbles: true }));
             }
 
             function syncManagementToolbar() {
@@ -4002,25 +3691,18 @@ let searchDebounceId = null;
                     closeMovePopup();
                     return;
                 }
-                elements.managementToolbar.hidden = state.mode !== "management";
-                elements.managementAddButton.hidden = state.mode !== "management";
-                elements.managementDeleteButton.hidden = state.mode !== "management";
-                elements.moveTrigger.hidden = state.mode !== "management";
-                elements.moveTarget.hidden = state.mode !== "management";
-                if (state.mode !== "management") {
-                    closeMovePopup();
-                }
+                elements.managementToolbar.hidden = false;
+                elements.managementAddButton.hidden = false;
+                elements.managementDeleteButton.hidden = false;
+                elements.moveTrigger.hidden = false;
+                elements.moveTarget.hidden = false;
             }
 
             function syncToolbarControls() {
-                if (state.mode === "inventory") {
-                    closeColumnsPanel();
-                }
-                elements.columnsTrigger.hidden = state.mode === "inventory";
-                elements.columnsPanel.hidden = state.mode === "inventory" || elements.columnsPanel.hidden;
+                elements.columnsTrigger.hidden = false;
                 elements.columnsToggle.textContent = "Kolumny";
                 elements.columnsToggle.className = "ui-btn ui-btn--secondary";
-                elements.columnsToggle.disabled = state.mode === "inventory";
+                elements.columnsToggle.disabled = false;
 
                 elements.managementDeleteButton.textContent = "Wycofaj";
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
@@ -4032,55 +3714,28 @@ let searchDebounceId = null;
                 elements.moveTrigger.className = "ui-btn ui-btn--secondary";
                 elements.moveTrigger.disabled = state.moveSubmitting;
                 renderMoveTarget();
-
-                if (elements.extraRecordField) {
-                    elements.extraRecordField.hidden = true;
-                }
-                if (elements.extraRecordButton) {
-                    elements.extraRecordButton.hidden = true;
-                    elements.extraRecordButton.disabled = false;
-                }
-                return;
             }
 
             function handleEditRecordAction() {
-                if (state.mode === "inventory") {
-                    console.info("Zatwierdź");
-                }
             }
 
             function handleDeleteRecordAction() {
                 if (isArchiveMode || state.withdrawSubmitting) {
                     return;
                 }
-                if (state.mode === "management") {
-                    const selectedAssetIds = getSelectedAssetIds();
-                    if (!selectedAssetIds.length) {
-                        syncToolbarControls();
-                        return;
-                    }
-                    submitBulkWithdraw(selectedAssetIds);
+                const selectedAssetIds = getSelectedAssetIds();
+                if (!selectedAssetIds.length) {
+                    syncToolbarControls();
                     return;
                 }
-                if (state.mode === "inventory") {
-                    state.inventoryManual = {};
-                    if (state.lastPayload) {
-                        renderFromPayload(state.lastPayload);
-                    }
-                }
+                submitBulkWithdraw(selectedAssetIds);
             }
 
             function handleAddRecordAction() {
                 if (isArchiveMode) {
                     return;
                 }
-                if (state.mode === "management") {
-                    window.location.assign(createUrl);
-                    return;
-                }
-                if (state.mode === "inventory") {
-                    console.info("Spis z natury");
-                }
+                window.location.assign(createUrl);
             }
 
             function triggerToolbarAction(button) {
@@ -4219,67 +3874,11 @@ let searchDebounceId = null;
             }
 
             function getVisibleColumns() {
-                return getColumnsForMode(state.mode);
-            }
-
-            function getColumnsForMode(mode) {
-                if (mode === "inventory") {
-                    return inventoryModeColumnKeys.map(function (key) {
-                        const column = defaultColumns.find(function (item) {
-                            return item.key === key;
-                        }) || inventoryModeColumns.find(function (item) {
-                            return item.key === key;
-                        });
-                        return column ? Object.assign({}, column, { visible: true }) : null;
-                    }).filter(Boolean);
-                }
-
                 return state.columns.filter(function (column) {
                     return column.visible;
                 });
             }
 
-            function buildInventoryManualInput(row) {
-                const input = document.createElement("input");
-                input.type = "number";
-                input.className = "asset-inventory-manual-input";
-                input.dataset.role = "inventory-manual";
-                input.dataset.assetId = String(row.id);
-                input.value = getInventoryManualValue(row);
-                input.setAttribute("aria-label", "Ręczne dla środka " + (row.name || row.inventory_number || row.id));
-                return input;
-            }
-
-            function getInventoryReadValue() {
-                return 0;
-            }
-
-            function getInventoryManualValue(row) {
-                const manualValue = state.inventoryManual[row.id];
-                return manualValue === undefined ? "" : manualValue;
-            }
-
-            function getInventoryActualQuantity(row) {
-                const manualValue = state.inventoryManual[row.id];
-                return getInventoryReadValue(row) + (manualValue === undefined ? 0 : manualValue);
-            }
-
-            function updateInventoryManualValue(assetId, rawValue) {
-                if (!assetId) {
-                    return;
-                }
-
-                if (rawValue === "") {
-                    delete state.inventoryManual[assetId];
-                } else {
-                    const parsed = Number(rawValue);
-                    state.inventoryManual[assetId] = Number.isFinite(parsed) ? parsed : 0;
-                }
-
-                if (state.lastPayload) {
-                    renderFromPayload(state.lastPayload);
-                }
-            }
 
             function buildColumnClassName(column, visibleIndex, visibleColumns) {
                 const classNames = [];
