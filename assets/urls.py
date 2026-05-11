@@ -15,6 +15,7 @@ from .views import (
     asset_bulk_withdraw_api,
     asset_detail,
     asset_export_csv_api,
+    asset_labels_pdf,
     asset_list_api,
     asset_restore,
     asset_withdraw,
@@ -41,4 +42,5 @@ urlpatterns = [
     path("assets/<int:id>/restore/", asset_restore, name="asset-restore"),
     path("assets/<int:id>/withdraw/", asset_withdraw, name="asset-withdraw"),
     path("assets/<int:id>/", asset_detail, name="detail"),
+    path("assets/labels/pdf/", asset_labels_pdf, name="labels-pdf"),
 ]

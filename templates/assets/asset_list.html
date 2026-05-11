@@ -386,7 +386,8 @@
         .asset-list-shell[data-asset-list-mode="archive"] #asset-management-add,
         .asset-list-shell[data-asset-list-mode="archive"] #asset-management-delete,
         .asset-list-shell[data-asset-list-mode="archive"] #asset-move-trigger,
-        .asset-list-shell[data-asset-list-mode="archive"] #asset-move-target {
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-move-target,
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-print-labels {
             display: none !important;
         }
         .asset-management-toolbar-group {
@@ -1605,6 +1606,7 @@
                         <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Wycofaj</button>
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
+                        <button id="asset-print-labels" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Drukuj etykiety</button>
                     </div>
                     <div class="asset-list-table-tools-cluster">
                         <div class="asset-list-meta">
@@ -2162,6 +2164,7 @@
                 managementDeleteButton: document.getElementById("asset-management-delete"),
                 managementAddButton: document.getElementById("asset-management-add"),
                 moveTrigger: document.getElementById("asset-move-trigger"),
+                printLabelsButton: document.getElementById("asset-print-labels"),
                 moveTarget: document.getElementById("asset-move-target"),
                 movePopup: document.getElementById("asset-move-popup"),
                 moveSearch: document.getElementById("asset-move-search"),
@@ -2383,6 +2386,14 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.addEventListener("click", handleDeleteRecordAction);
 
                 elements.managementAddButton.addEventListener("click", handleAddRecordAction);
+
+                elements.printLabelsButton.addEventListener("click", function () {
+                    const ids = getSelectedAssetIds();
+                    if (!ids.length) {
+                        return;
+                    }
+                    window.open("/assets/labels/pdf/?ids=" + ids.join(","), "_blank");
+                });
 
                 elements.tableBody.addEventListener("change", function (event) {
                     const selectedAsset = event.target.closest("[data-role='asset-select']");
@@ -3686,6 +3697,7 @@ let searchDebounceId = null;
                     elements.managementDeleteButton.hidden = true;
                     elements.moveTrigger.hidden = true;
                     elements.moveTarget.hidden = true;
+                    elements.printLabelsButton.hidden = true;
                     closeMovePopup();
                     return;
                 }
@@ -3694,6 +3706,7 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.hidden = false;
                 elements.moveTrigger.hidden = false;
                 elements.moveTarget.hidden = false;
+                elements.printLabelsButton.hidden = false;
             }
 
             function syncToolbarControls() {
@@ -3705,6 +3718,7 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.textContent = "Wycofaj";
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
                 elements.managementDeleteButton.disabled = state.withdrawSubmitting || getSelectedAssetIds().length < 1;
+                elements.printLabelsButton.disabled = getSelectedAssetIds().length < 1;
 
                 elements.managementAddButton.textContent = "Dodaj środek";
                 elements.managementAddButton.className = "ui-btn ui-btn--success";

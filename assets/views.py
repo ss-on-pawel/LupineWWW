@@ -9,7 +9,7 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.core.paginator import EmptyPage, Paginator
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q, Subquery
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -1229,6 +1229,35 @@ def _parse_asset_id_list_payload(payload):
         asset_ids.append(asset_id)
 
     return set(asset_ids), None
+
+
+@login_required
+@require_GET
+def asset_labels_pdf(request):
+    from .labels import generate_labels_pdf
+    from locations.models import OrganizationSettings
+
+    raw = request.GET.get("ids", "").strip()
+    if not raw:
+        return HttpResponse("Nie podano identyfikatorów.", status=400)
+
+    try:
+        ids = [int(i) for i in raw.split(",") if i.strip()]
+    except ValueError:
+        return HttpResponse("Nieprawidłowe parametry.", status=400)
+
+    if not ids or len(ids) > 200:
+        return HttpResponse("Nieprawidłowa liczba identyfikatorów.", status=400)
+
+    assets = list(Asset.objects.filter(id__in=ids, is_active=True).order_by("id"))
+    if not assets:
+        return HttpResponse("Brak środków do wydruku.", status=404)
+
+    org = OrganizationSettings.get()
+    org_short_name = org.short_name or org.full_name or "LUPINE"
+
+    buffer = generate_labels_pdf(assets, org_short_name)
+    return FileResponse(buffer, content_type="application/pdf", filename="etykiety.pdf")
 
 
 @login_required

@@ -7766,3 +7766,72 @@ class BackfillAssetLocationFkCommandTests(TestCase):
         self.assertIn("Bez dopasowania: 1", stdout.getvalue())
         self.assertIn("Pozostaje bez location_fk: 1", stdout.getvalue())
 
+
+class AssetLabelsPdfViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="labels-test-user", password="test-pass-123")
+        self.location = Location.objects.create(name="Magazyn etykiet")
+        self.asset = Asset.objects.create(
+            name="Drukarka etykiet",
+            inventory_number="LBL-001",
+            barcode="ST260000001",
+            status=Asset.Status.ACTIVE,
+            location=self.location.path,
+            location_fk=self.location,
+        )
+        self.url = reverse("assets:labels-pdf")
+
+    def test_view_requires_login(self):
+        response = self.client.get(self.url, {"ids": str(self.asset.id)})
+        self.assertEqual(response.status_code, 302)
+
+    def test_view_returns_pdf(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"ids": str(self.asset.id)})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_empty_ids_returns_400(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"ids": ""})
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_ids_returns_400(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"ids": "abc,def"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_no_ids_param_returns_400(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 400)
+
+
+class GenerateLabelsPdfTests(TestCase):
+    def _make_asset(self, name, barcode, inventory_number):
+        location = Location.objects.create(name=f"Loc-{barcode}")
+        return Asset.objects.create(
+            name=name,
+            inventory_number=inventory_number,
+            barcode=barcode,
+            status=Asset.Status.ACTIVE,
+            location=location.path,
+            location_fk=location,
+        )
+
+    def test_pdf_not_empty(self):
+        from .labels import generate_labels_pdf
+        asset = self._make_asset("Biurko", "ST260000010", "INW-010")
+        buffer = generate_labels_pdf([asset], "GMINA")
+        self.assertGreater(len(buffer.getvalue()), 0)
+
+    def test_correct_number_of_pages(self):
+        from .labels import generate_labels_pdf
+        asset1 = self._make_asset("Biurko", "ST260000020", "INW-020")
+        asset2 = self._make_asset("Krzesło", "ST260000021", "INW-021")
+        buffer = generate_labels_pdf([asset1, asset2], "GMINA")
+        raw = buffer.getvalue()
+        # /Type /Pages = parent node (1); /Type /Page = individual pages (N)
+        page_count = raw.count(b"/Type /Page") - raw.count(b"/Type /Pages")
+        self.assertEqual(page_count, 2)
+
