@@ -337,7 +337,7 @@
         }
         .asset-list-heading {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: space-between;
             gap: 16px;
             margin-bottom: 10px;
@@ -1540,9 +1540,7 @@
                 <div class="asset-list-heading">
                     <div>
                         <h1>{{ page_title|default:"Ewidencja środków" }}</h1>
-                        {% if asset_list_description %}
-                            <p>{{ asset_list_description }}</p>
-                        {% endif %}
+                        <p>{{ asset_list_description|default:"Przeglądaj, filtruj i zarządzaj składnikami majątku w ewidencji." }}</p>
                     </div>
                     <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
                         {{ asset_mode_switch_label }}
@@ -1597,7 +1595,7 @@
                         </div>
                     </div>
                     <div id="asset-filter-list" class="asset-filter-list"></div>
-                    <div id="asset-filter-empty" class="asset-filter-empty">Brak dodatkowych warunków. Dodaj filtr, aby zawęzić dane po stronie backendu.</div>
+                    <div id="asset-filter-empty" class="asset-filter-empty">Nie dodano jeszcze filtrów. Kliknij „Dodaj filtr", aby zawęzić listę.</div>
                 </section>
             </div>
             <div class="asset-layout-table">
