@@ -96,6 +96,21 @@ class AssetForm(forms.ModelForm):
 
     def clean_barcode(self):
         barcode = (self.cleaned_data.get("barcode") or "").strip()
+        if not barcode:
+            return ""
+
+        barcode_query = Asset.objects.filter(barcode=barcode)
+        if self.instance and self.instance.pk:
+            barcode_query = barcode_query.exclude(pk=self.instance.pk)
+        if barcode_query.exists():
+            raise forms.ValidationError("Składnik o tym kodzie kreskowym już istnieje.")
+
+        if Asset.objects.filter(inventory_number=barcode).exists():
+            raise forms.ValidationError("Kod kreskowy nie może być taki sam jak istniejący numer inwentarzowy.")
+
+        if Location.objects.filter(code=barcode).exists():
+            raise forms.ValidationError("Kod kreskowy nie może być taki sam jak kod lokalizacji.")
+
         return barcode
 
     def clean_current_quantity(self):
@@ -103,6 +118,27 @@ class AssetForm(forms.ModelForm):
         if value is None:
             return 1
         return value
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.instance and self.instance.pk:
+            return cleaned_data
+
+        if cleaned_data.get("barcode"):
+            return cleaned_data
+
+        asset_type_code = cleaned_data.get("asset_type") or ""
+        if not asset_type_code:
+            self.add_error("asset_type", "Wybierz rodzaj środka, aby wygenerować kod kreskowy.")
+            return cleaned_data
+
+        asset_type = AssetTypeDictionary.objects.filter(code=asset_type_code).first()
+        if asset_type is not None and not (asset_type.barcode_prefix or "").strip():
+            self.add_error(
+                "asset_type",
+                "Wybrany rodzaj środka nie ma skonfigurowanego prefixu kodu kreskowego.",
+            )
+        return cleaned_data
 
     def save(self, commit=True):
         asset = super().save(commit=False)
@@ -116,6 +152,16 @@ class AssetForm(forms.ModelForm):
             asset.last_inventory_date = None
 
         if commit:
+            if not asset.pk and not asset.barcode:
+                from .services import generate_unique_asset_barcode
+
+                if asset.asset_type and not asset.asset_type_ref_id:
+                    asset.asset_type_ref = AssetTypeDictionary.objects.filter(code=asset.asset_type).first()
+
+                asset.barcode = generate_unique_asset_barcode(
+                    asset_type_ref=asset.asset_type_ref,
+                    asset_type=asset.asset_type,
+                )
             asset.save()
             self.save_m2m()
         return asset

@@ -5,6 +5,9 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.db import models, transaction
 from django.utils import timezone
 
+ASSET_BARCODE_SEQUENCE_MAX_NUMBER = 9_999_999
+ASSET_BARCODE_SEQUENCE_WIDTH = 7
+
 
 def _format_empty(value):
     return "" if value is None else str(value)
@@ -54,6 +57,52 @@ def _format_choice(asset, field_name):
     if value in (None, ""):
         return ""
     return getattr(asset, f"get_{field_name}_display")()
+
+
+def generate_unique_asset_barcode(*, asset_type_ref=None, asset_type="", generated_at=None):
+    from locations.models import Location
+
+    from .models import Asset, AssetBarcodeSequence, AssetTypeDictionary
+
+    asset_type_dictionary = asset_type_ref
+    if asset_type_dictionary is None and asset_type:
+        asset_type_dictionary = AssetTypeDictionary.objects.filter(code=asset_type).first()
+
+    prefix = ""
+    if asset_type_dictionary is not None:
+        prefix = (asset_type_dictionary.barcode_prefix or "").strip().upper()
+
+    if not prefix:
+        raise ValidationError("Rodzaj środka nie ma skonfigurowanego prefixu kodu kreskowego.")
+
+    generated_at = generated_at or timezone.now()
+    year = generated_at.year
+    year_suffix = f"{year % 100:02d}"
+
+    with transaction.atomic():
+        sequence, _created = (
+            AssetBarcodeSequence.objects
+            .select_for_update()
+            .get_or_create(prefix=prefix, year=year, defaults={"next_number": 1})
+        )
+
+        while sequence.next_number <= ASSET_BARCODE_SEQUENCE_MAX_NUMBER:
+            barcode = f"{prefix}{year_suffix}{sequence.next_number:0{ASSET_BARCODE_SEQUENCE_WIDTH}d}"
+            sequence.next_number += 1
+            sequence.save(update_fields=["next_number", "updated_at"])
+            if _asset_barcode_candidate_exists(Asset=Asset, Location=Location, barcode=barcode):
+                continue
+            return barcode
+
+    raise ValidationError("Wyczerpano pulę kodów kreskowych dla tego prefixu i roku.")
+
+
+def _asset_barcode_candidate_exists(*, Asset, Location, barcode):
+    return (
+        Asset.objects.filter(barcode=barcode).exists()
+        or Asset.objects.filter(inventory_number=barcode).exists()
+        or Location.objects.filter(code=barcode).exists()
+    )
 
 
 ASSET_HISTORY_FIELD_SPECS = {

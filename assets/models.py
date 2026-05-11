@@ -332,6 +332,28 @@ class AssetTypeDictionary(models.Model):
             })
 
 
+class AssetBarcodeSequence(models.Model):
+    prefix = models.CharField(max_length=3, verbose_name="Prefix")
+    year = models.PositiveSmallIntegerField(verbose_name="Rok")
+    next_number = models.PositiveIntegerField(default=1, verbose_name="Następny numer")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data utworzenia")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Data aktualizacji")
+
+    class Meta:
+        ordering = ["prefix", "year"]
+        verbose_name = "Licznik kodów kreskowych"
+        verbose_name_plural = "Liczniki kodów kreskowych"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["prefix", "year"],
+                name="asset_barcode_seq_unique_prefix_year",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.prefix}/{self.year}: {self.next_number}"
+
+
 class AssetChangeRequest(models.Model):
     class Operation(models.TextChoices):
         CREATE = "create", "Create"

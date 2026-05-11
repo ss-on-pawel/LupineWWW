@@ -23,11 +23,12 @@ from inventory.models import InventorySession, InventorySnapshotItem
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
-from .models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
+from .models import Asset, AssetBarcodeSequence, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
     get_asset_withdraw_capabilities,
+    generate_unique_asset_barcode,
     reject_asset_change_request,
     serialize_asset_form_payload,
     user_requires_asset_change_approval,
@@ -480,6 +481,123 @@ class AssetLocationSyncModelTests(TestCase):
         self.assertIsNone(asset.location_fk)
 
 
+class AssetBarcodeGeneratorTests(TestCase):
+    def _generated_at(self, year):
+        return timezone.make_aware(datetime(year, 1, 15, 10, 0, 0))
+
+    def test_generator_creates_first_barcode_for_prefix_and_year(self):
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        barcode = generate_unique_asset_barcode(
+            asset_type_ref=asset_type,
+            generated_at=self._generated_at(2026),
+        )
+
+        self.assertEqual(barcode, "ST260000001")
+        sequence = AssetBarcodeSequence.objects.get(prefix="ST", year=2026)
+        self.assertEqual(sequence.next_number, 2)
+
+    def test_generator_increments_for_same_prefix_and_year(self):
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+        generated_at = self._generated_at(2026)
+
+        first = generate_unique_asset_barcode(asset_type_ref=asset_type, generated_at=generated_at)
+        second = generate_unique_asset_barcode(asset_type_ref=asset_type, generated_at=generated_at)
+
+        self.assertEqual(first, "ST260000001")
+        self.assertEqual(second, "ST260000002")
+
+    def test_generator_uses_separate_counter_for_other_prefix(self):
+        fixed_type = AssetTypeDictionary.objects.get(code="fixed")
+        low_value_type = AssetTypeDictionary.objects.get(code="low_value")
+        generated_at = self._generated_at(2026)
+
+        fixed_barcode = generate_unique_asset_barcode(asset_type_ref=fixed_type, generated_at=generated_at)
+        low_value_barcode = generate_unique_asset_barcode(asset_type_ref=low_value_type, generated_at=generated_at)
+
+        self.assertEqual(fixed_barcode, "ST260000001")
+        self.assertEqual(low_value_barcode, "WN260000001")
+
+    def test_generator_resets_counter_for_new_year(self):
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        old_year_barcode = generate_unique_asset_barcode(
+            asset_type_ref=asset_type,
+            generated_at=self._generated_at(2026),
+        )
+        new_year_barcode = generate_unique_asset_barcode(
+            asset_type_ref=asset_type,
+            generated_at=self._generated_at(2027),
+        )
+
+        self.assertEqual(old_year_barcode, "ST260000001")
+        self.assertEqual(new_year_barcode, "ST270000001")
+
+    def test_generator_skips_existing_asset_barcode_collision(self):
+        Asset.objects.create(
+            name="Existing barcode collision",
+            inventory_number="COLLISION-BARCODE-001",
+            barcode="ST260000001",
+        )
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        barcode = generate_unique_asset_barcode(
+            asset_type_ref=asset_type,
+            generated_at=self._generated_at(2026),
+        )
+
+        self.assertEqual(barcode, "ST260000002")
+
+    def test_generator_skips_inventory_number_collision(self):
+        Asset.objects.create(
+            name="Existing inventory collision",
+            inventory_number="ST260000001",
+        )
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        barcode = generate_unique_asset_barcode(
+            asset_type_ref=asset_type,
+            generated_at=self._generated_at(2026),
+        )
+
+        self.assertEqual(barcode, "ST260000002")
+
+    def test_generator_skips_location_code_collision(self):
+        Location.objects.create(name="Barcode collision location", code="ST260000001")
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+        barcode = generate_unique_asset_barcode(
+            asset_type_ref=asset_type,
+            generated_at=self._generated_at(2026),
+        )
+
+        self.assertEqual(barcode, "ST260000002")
+
+    def test_generator_rejects_asset_type_without_prefix(self):
+        asset_type = AssetTypeDictionary.objects.create(
+            name="No prefix type",
+            code="no-prefix",
+            is_active=True,
+            sort_order=90,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Rodzaj środka nie ma skonfigurowanego prefixu kodu kreskowego.",
+        ):
+            generate_unique_asset_barcode(asset_type_ref=asset_type, generated_at=self._generated_at(2026))
+
+    def test_generator_rejects_exhausted_sequence(self):
+        asset_type = AssetTypeDictionary.objects.get(code="fixed")
+        AssetBarcodeSequence.objects.create(prefix="ST", year=2026, next_number=10_000_000)
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Wyczerpano pulę kodów kreskowych dla tego prefixu i roku.",
+        ):
+            generate_unique_asset_barcode(asset_type_ref=asset_type, generated_at=self._generated_at(2026))
+
+
 class AssetFormAssetTypeDictionaryTests(TestCase):
     def _valid_form_data(self, **overrides):
         location, _ = Location.objects.get_or_create(name="Form dictionary location")
@@ -549,6 +667,105 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
 
         self.assertEqual(asset.asset_type_ref.code, "low_value")
 
+    def test_form_save_generates_barcode_for_new_asset_without_barcode(self):
+        form = AssetForm(data=self._valid_form_data(inventory_number="FORM-GEN-001", barcode=""))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+
+        expected_year = timezone.now().year % 100
+        self.assertEqual(asset.barcode, f"ST{expected_year:02d}0000001")
+        self.assertEqual(asset.asset_type_ref.code, "fixed")
+
+    def test_form_save_generates_next_barcode_for_same_prefix_and_year(self):
+        first_form = AssetForm(data=self._valid_form_data(inventory_number="FORM-GEN-SEQ-001", barcode=""))
+        second_form = AssetForm(data=self._valid_form_data(inventory_number="FORM-GEN-SEQ-002", barcode=""))
+
+        self.assertTrue(first_form.is_valid(), first_form.errors)
+        self.assertTrue(second_form.is_valid(), second_form.errors)
+        first_asset = first_form.save()
+        second_asset = second_form.save()
+
+        expected_year = timezone.now().year % 100
+        self.assertEqual(first_asset.barcode, f"ST{expected_year:02d}0000001")
+        self.assertEqual(second_asset.barcode, f"ST{expected_year:02d}0000002")
+
+    def test_form_save_preserves_manual_barcode(self):
+        form = AssetForm(data=self._valid_form_data(inventory_number="FORM-MANUAL-001", barcode="MANUAL-CODE-001"))
+
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+
+        self.assertEqual(asset.barcode, "MANUAL-CODE-001")
+        self.assertFalse(AssetBarcodeSequence.objects.exists())
+
+    def test_form_update_does_not_generate_new_barcode(self):
+        location, _ = Location.objects.get_or_create(name="Form update location")
+        asset = Asset.objects.create(
+            name="Update barcode asset",
+            inventory_number="FORM-UPD-BARCODE-001",
+            asset_type=Asset.AssetType.FIXED,
+            barcode="KEEP-ME-001",
+            location_fk=location,
+            location=location.path,
+            status=Asset.Status.ACTIVE,
+        )
+        form = AssetForm(
+            data=self._valid_form_data(
+                name="Updated barcode asset",
+                inventory_number=asset.inventory_number,
+                barcode=asset.barcode,
+                location_fk=str(location.id),
+            ),
+            instance=asset,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        updated_asset = form.save()
+
+        self.assertEqual(updated_asset.barcode, "KEEP-ME-001")
+        self.assertFalse(AssetBarcodeSequence.objects.exists())
+
+    def test_form_rejects_manual_barcode_matching_inventory_number(self):
+        Asset.objects.create(name="Inventory collision asset", inventory_number="MANUAL-COLLISION-INV")
+        form = AssetForm(data=self._valid_form_data(inventory_number="FORM-MANUAL-INV-001", barcode="MANUAL-COLLISION-INV"))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("barcode", form.errors)
+
+    def test_form_rejects_manual_barcode_matching_location_code(self):
+        Location.objects.create(name="Manual barcode collision location", code="MANUAL-COLLISION-LOC")
+        form = AssetForm(data=self._valid_form_data(inventory_number="FORM-MANUAL-LOC-001", barcode="MANUAL-COLLISION-LOC"))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("barcode", form.errors)
+
+    def test_form_without_asset_type_and_barcode_adds_asset_type_error(self):
+        form = AssetForm(data=self._valid_form_data(inventory_number="FORM-NO-TYPE-001", asset_type="", barcode=""))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("asset_type", form.errors)
+        self.assertIn(
+            "Wybierz rodzaj środka, aby wygenerować kod kreskowy.",
+            form.errors["asset_type"],
+        )
+
+    def test_form_without_barcode_requires_asset_type_prefix(self):
+        AssetTypeDictionary.objects.create(
+            name="No prefix form type",
+            code="no-prefix-form",
+            is_active=True,
+            sort_order=95,
+        )
+        form = AssetForm(data=self._valid_form_data(inventory_number="FORM-NO-PREFIX-001", asset_type="no-prefix-form", barcode=""))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("asset_type", form.errors)
+        self.assertIn(
+            "Wybrany rodzaj środka nie ma skonfigurowanego prefixu kodu kreskowego.",
+            form.errors["asset_type"],
+        )
+
     def test_form_save_keeps_asset_type_as_code(self):
         form = AssetForm(data=self._valid_form_data(asset_type="quantity"))
 
@@ -561,6 +778,7 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
         AssetTypeDictionary.objects.create(
             name="Custom active type",
             code="custom-active-type",
+            barcode_prefix="CT",
             is_active=True,
             sort_order=70,
         )
