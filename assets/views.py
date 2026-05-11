@@ -1359,11 +1359,12 @@ def asset_bulk_move_api(request):
             )
         )
 
-    updated_count = movable_assets.update(
-        location=target_location.path,
-        location_fk=target_location,
-    )
-    AssetHistoryEntry.objects.bulk_create(history_entries)
+    with transaction.atomic():
+        updated_count = movable_assets.update(
+            location=target_location.path,
+            location_fk=target_location,
+        )
+        AssetHistoryEntry.objects.bulk_create(history_entries)
 
     return JsonResponse(
         {

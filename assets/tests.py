@@ -5055,6 +5055,29 @@ class AssetBulkMoveApiTests(TestCase):
 
         self.assertEqual(response.status_code, 405)
 
+    def test_bulk_move_location_not_updated_when_history_fails(self):
+        from unittest.mock import patch
+
+        original_location = self.asset_one.location
+        original_location_fk = self.asset_one.location_fk
+
+        with patch.object(
+            AssetHistoryEntry.objects, "bulk_create", side_effect=RuntimeError("simulated failure")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("assets:api-bulk-move"),
+                    data={
+                        "asset_ids": [self.asset_one.id],
+                        "target_location_id": self.target_location.id,
+                    },
+                    content_type="application/json",
+                )
+
+        self.asset_one.refresh_from_db()
+        self.assertEqual(self.asset_one.location, original_location)
+        self.assertEqual(self.asset_one.location_fk, original_location_fk)
+
 
 class AssetBulkMoveApiAccessTests(TestCase):
     @classmethod
