@@ -3937,6 +3937,37 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         self.assertEqual(change_request.review_comment, "Already approved")
         self.assertIn("Nie udało się odrzucić wniosku.", self._messages(response))
 
+    def test_approve_view_shows_error_message_when_service_raises_permission_denied(self):
+        from unittest.mock import patch
+
+        requester = User.objects.create_user(username="post-approve-pd-view-requester", password="test-pass-123")
+        reviewer = self._superuser("post-approve-pd-view-reviewer")
+        change_request = self._create_request(requester, inventory_number="POST-APPROVE-PD-VIEW-001")
+        self.client.force_login(reviewer)
+
+        with patch("assets.views.approve_asset_change_request", side_effect=PermissionDenied("race condition")):
+            response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        self.assertIn("Nie udało się zatwierdzić wniosku.", self._messages(response))
+
+    def test_reject_view_shows_error_message_when_service_raises_permission_denied(self):
+        from unittest.mock import patch
+
+        requester = User.objects.create_user(username="post-reject-pd-view-requester", password="test-pass-123")
+        reviewer = self._superuser("post-reject-pd-view-reviewer")
+        change_request = self._create_request(requester, inventory_number="POST-REJECT-PD-VIEW-001")
+        self.client.force_login(reviewer)
+
+        with patch("assets.views.reject_asset_change_request", side_effect=PermissionDenied("race condition")):
+            response = self.client.post(
+                reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
+                {"comment": "Odrzucono"},
+            )
+
+        self.assertRedirects(response, reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
+        self.assertIn("Nie udało się odrzucić wniosku.", self._messages(response))
+
 
 class AssetListApiTests(TestCase):
     @classmethod

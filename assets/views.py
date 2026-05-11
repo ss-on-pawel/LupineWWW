@@ -584,7 +584,7 @@ def asset_change_approve(request, pk):
 
     try:
         approve_asset_change_request(change_request, request.user)
-    except ValidationError:
+    except (ValidationError, PermissionDenied):
         messages.error(request, "Nie udało się zatwierdzić wniosku.")
 
     return redirect("assets:change-detail", pk=change_request.pk)
@@ -687,7 +687,7 @@ def asset_change_reject(request, pk):
 
     try:
         reject_asset_change_request(change_request, request.user, comment)
-    except ValidationError:
+    except (ValidationError, PermissionDenied):
         messages.error(request, "Nie udało się odrzucić wniosku.")
 
     return redirect("assets:change-detail", pk=change_request.pk)
