@@ -2,6 +2,28 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+class OrganizationSettings(models.Model):
+    full_name = models.CharField(max_length=255, blank=True, verbose_name="Pełna nazwa organizacji")
+    short_name = models.CharField(max_length=64, blank=True, verbose_name="Krótka nazwa / skrót")
+    report_footer = models.TextField(blank=True, verbose_name="Stopka raportów i dokumentów")
+
+    class Meta:
+        verbose_name = "Dane organizacji"
+        verbose_name_plural = "Dane organizacji"
+
+    def __str__(self) -> str:
+        return self.short_name or "Organizacja"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls) -> "OrganizationSettings":
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={"full_name": "", "short_name": "", "report_footer": ""})
+        return obj
+
+
 class Location(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nazwa")
     code = models.CharField(

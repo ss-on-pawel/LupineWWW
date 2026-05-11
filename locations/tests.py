@@ -4,7 +4,67 @@ from django.urls import reverse
 from accounts.models import UserProfile
 from users.models import User
 
-from .models import Location
+from .models import Location, OrganizationSettings
+
+
+class OrganizationSettingsModelTests(TestCase):
+    def test_get_creates_default_if_not_exists(self):
+        self.assertEqual(OrganizationSettings.objects.count(), 0)
+        org = OrganizationSettings.get()
+        self.assertEqual(OrganizationSettings.objects.count(), 1)
+        self.assertEqual(org.pk, 1)
+
+    def test_get_returns_existing_record(self):
+        OrganizationSettings.objects.create(pk=1, full_name="Firma X", short_name="FX")
+        org = OrganizationSettings.get()
+        self.assertEqual(org.full_name, "Firma X")
+        self.assertEqual(OrganizationSettings.objects.count(), 1)
+
+    def test_singleton_enforced_on_save(self):
+        OrganizationSettings.objects.create(pk=1, full_name="Stara", short_name="S")
+        new = OrganizationSettings(full_name="Nowa", short_name="N")
+        new.save()
+        self.assertEqual(OrganizationSettings.objects.count(), 1)
+        self.assertEqual(OrganizationSettings.objects.get().full_name, "Nowa")
+
+    def test_str_returns_short_name(self):
+        org = OrganizationSettings(short_name="GMINA")
+        self.assertEqual(str(org), "GMINA")
+
+    def test_str_returns_fallback_when_short_name_empty(self):
+        org = OrganizationSettings(short_name="")
+        self.assertEqual(str(org), "Organizacja")
+
+
+class OrganizationSettingsViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="org-test-user", password="test-pass-123")
+        self.url = reverse("locations:organization-settings")
+
+    def test_view_requires_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/", response["Location"])
+
+    def test_view_renders(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dane organizacji")
+        self.assertContains(response, "full_name")
+
+    def test_view_saves_data(self):
+        self.client.force_login(self.user)
+        response = self.client.post(self.url, {
+            "full_name": "Urząd Gminy Przykładowo",
+            "short_name": "UGP",
+            "report_footer": "ul. Testowa 1",
+        })
+        self.assertEqual(response.status_code, 302)
+        org = OrganizationSettings.objects.get(pk=1)
+        self.assertEqual(org.full_name, "Urząd Gminy Przykładowo")
+        self.assertEqual(org.short_name, "UGP")
+        self.assertEqual(org.report_footer, "ul. Testowa 1")
 
 
 class LocationOptionsApiTests(TestCase):

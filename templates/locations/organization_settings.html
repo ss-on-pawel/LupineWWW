@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Dane organizacji{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .location-form-page {
+            display: grid;
+            gap: 10px;
+        }
+        .location-form-header {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .location-form-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .location-form-title {
+            margin: 0;
+            font-size: 1.55rem;
+            line-height: 1.15;
+            letter-spacing: 0;
+        }
+        .location-form-description {
+            margin: 0;
+            max-width: 680px;
+            color: var(--app-muted);
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+        .location-form-shell {
+            max-width: 760px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
+            padding: 16px;
+        }
+        .location-form {
+            display: grid;
+            gap: 16px;
+        }
+        .location-form-section {
+            display: grid;
+            gap: 14px;
+        }
+        .location-form-label {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .location-form-field {
+            display: grid;
+            gap: 8px;
+        }
+        .location-form-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-top: 2px;
+        }
+        @media (max-width: 700px) {
+            .location-form-shell {
+                margin-left: -16px;
+                margin-right: -16px;
+                border-left: 0;
+                border-right: 0;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="location-form-page">
+        <header class="location-form-header">
+            <p class="location-form-kicker">Lokalizacje</p>
+            <h1 class="location-form-title">Dane organizacji</h1>
+            <p class="location-form-description">Globalna konfiguracja danych organizacji używanych w etykietach, raportach i eksportach.</p>
+        </header>
+
+        <section class="location-form-shell" aria-labelledby="org-form-title">
+            <form class="location-form" method="post">
+                {% csrf_token %}
+                <div class="location-form-section">
+                    <p class="location-form-label" id="org-form-title">Dane organizacji</p>
+
+                    <div class="location-form-field">
+                        <label for="{{ form.full_name.id_for_label }}">{{ form.full_name.label }}</label>
+                        {{ form.full_name }}
+                        {% if form.full_name.errors %}{{ form.full_name.errors }}{% endif %}
+                    </div>
+
+                    <div class="location-form-field">
+                        <label for="{{ form.short_name.id_for_label }}">{{ form.short_name.label }}</label>
+                        {{ form.short_name }}
+                        {% if form.short_name.errors %}{{ form.short_name.errors }}{% endif %}
+                    </div>
+
+                    <div class="location-form-field">
+                        <label for="{{ form.report_footer.id_for_label }}">{{ form.report_footer.label }}</label>
+                        {{ form.report_footer }}
+                        {% if form.report_footer.errors %}{{ form.report_footer.errors }}{% endif %}
+                    </div>
+                </div>
+
+                <div class="location-form-actions">
+                    <button class="ui-btn ui-btn--primary" type="submit">Zapisz</button>
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'locations:list' %}">Anuluj</a>
+                </div>
+            </form>
+        </section>
+    </section>
+{% endblock %}

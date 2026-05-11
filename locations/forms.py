@@ -1,6 +1,15 @@
 from django import forms
 
-from .models import Location
+from .models import Location, OrganizationSettings
+
+
+class OrganizationSettingsForm(forms.ModelForm):
+    class Meta:
+        model = OrganizationSettings
+        fields = ["full_name", "short_name", "report_footer"]
+        widgets = {
+            "report_footer": forms.Textarea(attrs={"rows": 3}),
+        }
 
 
 class LocationForm(forms.ModelForm):

@@ -8,6 +8,7 @@ from .views import (
     location_list,
     location_options_api,
     location_update,
+    organization_settings,
 )
 
 
@@ -21,4 +22,5 @@ urlpatterns = [
     path("lokalizacje/<int:id>/edytuj/", location_update, name="update"),
     path("lokalizacje/<int:id>/usun/", location_delete, name="delete"),
     path("lokalizacje/<int:id>/", location_detail, name="detail"),
+    path("ustawienia/organizacja/", organization_settings, name="organization-settings"),
 ]

@@ -9,8 +9,8 @@ from django.urls import reverse
 from accounts.utils import get_accessible_location_ids
 from assets.models import Asset
 
-from .forms import LocationForm
-from .models import Location
+from .forms import LocationForm, OrganizationSettingsForm
+from .models import Location, OrganizationSettings
 
 
 @login_required
@@ -182,6 +182,24 @@ def location_options_api(request):
     rows.sort(key=lambda item: (item["path"].lower(), item["id"]))
 
     return JsonResponse({"locations": rows})
+
+
+@login_required
+def organization_settings(request):
+    org = OrganizationSettings.get()
+    form = OrganizationSettingsForm(request.POST or None, instance=org)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Dane organizacji zostały zapisane.")
+        return redirect("locations:organization-settings")
+    return render(
+        request,
+        "locations/organization_settings.html",
+        {
+            "page_title": "Dane organizacji",
+            "form": form,
+        },
+    )
 
 
 def _get_location(id):
