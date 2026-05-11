@@ -976,13 +976,13 @@ class UserRequiresAssetChangeApprovalTests(TestCase):
 
         self.assertFalse(user_requires_asset_change_approval(user))
 
-    def test_approver_does_not_require_approval(self):
+    def test_user_with_approver_flag_and_approval_required_still_requires_approval(self):
         user = User.objects.create_user(username="approval-approver", password="test-pass-123")
         user.profile.can_approve_asset_changes = True
         user.profile.asset_changes_require_approval = True
         user.profile.save(update_fields=["can_approve_asset_changes", "asset_changes_require_approval"])
 
-        self.assertFalse(user_requires_asset_change_approval(user))
+        self.assertTrue(user_requires_asset_change_approval(user))
 
     def test_user_with_approval_disabled_does_not_require_approval(self):
         user = User.objects.create_user(username="approval-disabled", password="test-pass-123")
@@ -7350,10 +7350,8 @@ class AssetUpdateViewTests(TestCase):
         detail_response = self.client.get(reverse("assets:detail", kwargs={"id": asset.pk}))
         self.assertEqual(detail_response.status_code, 200)
 
-    def test_superuser_and_approver_update_asset_without_queue(self):
+    def test_superuser_updates_asset_without_queue(self):
         allowed_location, _ = self._create_location_tree()
-        users = []
-
         superuser = User.objects.create_superuser(
             username="update-bypass-superuser",
             email="update-bypass-superuser@example.com",
@@ -7361,33 +7359,21 @@ class AssetUpdateViewTests(TestCase):
         )
         superuser.profile.asset_changes_require_approval = True
         superuser.profile.save(update_fields=["asset_changes_require_approval"])
-        users.append(("superuser", superuser))
+        asset = self._create_asset(
+            inventory_number="UPDATE-BYPASS-001",
+            location_obj=allowed_location,
+            name="Bypass Original",
+        )
+        self.client.force_login(superuser)
 
-        approver = User.objects.create_user(username="update-bypass-approver", password="test-pass-123")
-        approver.profile.can_approve_asset_changes = True
-        approver.profile.asset_changes_require_approval = True
-        approver.profile.save(update_fields=["can_approve_asset_changes", "asset_changes_require_approval"])
-        approver.profile.allowed_locations.add(allowed_location)
-        users.append(("approver", approver))
+        response = self.client.post(
+            reverse("assets:update", kwargs={"pk": asset.pk}),
+            data=self._valid_update_payload(asset, name="Bypass Saved"),
+        )
 
-        for index, (label, user) in enumerate(users, start=1):
-            asset = self._create_asset(
-                inventory_number=f"UPDATE-BYPASS-{index:03d}",
-                location_obj=allowed_location,
-                name=f"Bypass Original {index}",
-            )
-            with self.subTest(label=label):
-                self.client.force_login(user)
-                response = self.client.post(
-                    reverse("assets:update", kwargs={"pk": asset.pk}),
-                    data=self._valid_update_payload(asset, name=f"Bypass Saved {index}"),
-                )
-                self.client.logout()
-
-                asset.refresh_from_db()
-                self.assertEqual(response.status_code, 302)
-                self.assertEqual(asset.name, f"Bypass Saved {index}")
-
+        asset.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(asset.name, "Bypass Saved")
         self.assertFalse(AssetChangeRequest.objects.exists())
 
     def test_admin_role_with_approval_required_updates_asset_directly(self):
@@ -7575,9 +7561,7 @@ class AssetCreateViewTests(TestCase):
         change_request = AssetChangeRequest.objects.get()
         self.assertNotIn("malicious_field", change_request.payload)
 
-    def test_superuser_and_approver_create_asset_without_queue(self):
-        users = []
-
+    def test_superuser_creates_asset_without_queue(self):
         superuser = User.objects.create_superuser(
             username="asset-create-superuser",
             email="asset-create-superuser@example.com",
@@ -7585,27 +7569,35 @@ class AssetCreateViewTests(TestCase):
         )
         superuser.profile.asset_changes_require_approval = True
         superuser.profile.save(update_fields=["asset_changes_require_approval"])
-        users.append(("superuser", superuser))
+        self.client.force_login(superuser)
 
-        approver = User.objects.create_user(username="asset-create-approver", password="test-pass-123")
-        approver.profile.can_approve_asset_changes = True
-        approver.profile.asset_changes_require_approval = True
-        approver.profile.save(update_fields=["can_approve_asset_changes", "asset_changes_require_approval"])
-        users.append(("approver", approver))
+        response = self.client.post(
+            reverse("assets:create"),
+            data=self._valid_asset_payload(inventory_number="CREATE-BYPASS-001"),
+        )
 
-        for index, (label, user) in enumerate(users, start=1):
-            with self.subTest(label=label):
-                self.client.force_login(user)
-                response = self.client.post(
-                    reverse("assets:create"),
-                    data=self._valid_asset_payload(inventory_number=f"CREATE-BYPASS-{index:03d}"),
-                )
-                self.client.logout()
-
-                self.assertEqual(response.status_code, 302)
-                self.assertTrue(Asset.objects.filter(inventory_number=f"CREATE-BYPASS-{index:03d}").exists())
-
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Asset.objects.filter(inventory_number="CREATE-BYPASS-001").exists())
         self.assertFalse(AssetChangeRequest.objects.exists())
+
+    def test_user_with_approver_flag_and_approval_required_creates_queue_not_asset(self):
+        user = User.objects.create_user(username="asset-create-user-flag", password="test-pass-123")
+        user.profile.can_approve_asset_changes = True
+        user.profile.asset_changes_require_approval = True
+        user.profile.save(update_fields=["can_approve_asset_changes", "asset_changes_require_approval"])
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("assets:create"),
+            data=self._valid_asset_payload(inventory_number="CREATE-USER-FLAG-001"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Asset.objects.filter(inventory_number="CREATE-USER-FLAG-001").exists())
+        self.assertEqual(AssetChangeRequest.objects.filter(
+            operation=AssetChangeRequest.Operation.CREATE,
+            status=AssetChangeRequest.Status.PENDING,
+        ).count(), 1)
 
     def test_admin_role_with_approval_required_creates_asset_directly(self):
         user = User.objects.create_user(username="asset-create-admin-approval-required", password="test-pass-123")

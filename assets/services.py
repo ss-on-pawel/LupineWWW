@@ -272,7 +272,7 @@ def user_requires_asset_change_approval(user) -> bool:
     if profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}:
         return False
 
-    if profile.can_approve_asset_changes:
+    if profile.role != profile.Role.USER and profile.can_approve_asset_changes:
         return False
 
     return profile.asset_changes_require_approval
