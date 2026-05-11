@@ -1520,21 +1520,28 @@ class ImportInventoryScanTextTests(TestCase):
         observed = InventoryObservedItem.objects.get(asset=self.out_of_scope_asset)
         self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OUT_OF_SCOPE)
 
-    def test_barcode_has_priority_over_inventory_number(self):
+    def test_scan_matches_asset_by_barcode(self):
         barcode_asset = self._create_asset("IMPORT-BARCODE-ASSET", self.child, barcode="IMPORT-CONFLICT-001")
-        inventory_number_asset = self._create_asset("IMPORT-CONFLICT-001", self.child, barcode="BC-CONFLICT-INVENTORY")
+        other_asset = self._create_asset("IMPORT-CONFLICT-001", self.child, barcode="BC-CONFLICT-INVENTORY")
 
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nIMPORT-CONFLICT-001")
 
         self.assertTrue(InventoryObservedItem.objects.filter(asset=barcode_asset).exists())
-        self.assertFalse(InventoryObservedItem.objects.filter(asset=inventory_number_asset).exists())
+        self.assertFalse(InventoryObservedItem.objects.filter(asset=other_asset).exists())
 
-    def test_inventory_number_fallback_works(self):
+    def test_scan_by_inventory_number_does_not_match_asset(self):
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nIMPORT-IN-001")
 
-        observed = InventoryObservedItem.objects.get(asset=self.in_scope_asset)
-        self.assertEqual(observed.code, "IMPORT-IN-001")
-        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OK)
+        self.assertFalse(InventoryObservedItem.objects.filter(asset=self.in_scope_asset).exists())
+
+    def test_multiple_assets_can_share_inventory_number(self):
+        asset1 = self._create_asset("SHARED-INV-001", self.child, barcode="BC-SHARED-001")
+        asset2 = self._create_asset("SHARED-INV-001", self.child, barcode="BC-SHARED-002")
+
+        import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-SHARED-001")
+
+        self.assertTrue(InventoryObservedItem.objects.filter(asset=asset1).exists())
+        self.assertFalse(InventoryObservedItem.objects.filter(asset=asset2).exists())
 
     def test_multiple_scans_of_same_asset_keep_one_observed_item(self):
         import_inventory_scan_text(f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN\nBC-IMPORT-IN")

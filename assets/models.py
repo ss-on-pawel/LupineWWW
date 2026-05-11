@@ -28,10 +28,6 @@ class Asset(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nazwa")
     inventory_number = models.CharField(
         max_length=100,
-        unique=True,
-        error_messages={
-            "unique": "Składnik o tym numerze inwentarzowym już istnieje.",
-        },
         verbose_name="Numer inwentarzowy",
     )
     asset_type = models.CharField(

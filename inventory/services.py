@@ -141,10 +141,7 @@ def _get_location_by_code(code: str):
 
 
 def _get_asset_by_scan_code(code: str):
-    asset = Asset.objects.filter(barcode=code, is_active=True).order_by("id").first()
-    if asset is not None:
-        return asset
-    return Asset.objects.filter(inventory_number=code, is_active=True).order_by("id").first()
+    return Asset.objects.filter(barcode=code, is_active=True).order_by("id").first()
 
 
 def _resolve_observed_status(session: InventorySession, asset: Asset, current_location: Location | None) -> str:

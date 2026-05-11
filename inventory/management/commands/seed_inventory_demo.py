@@ -193,9 +193,10 @@ class Command(BaseCommand):
             location = location_cycle[(index - 1) % len(location_cycle)]
             asset_type = asset_types[type_cycle[(index - 1) % len(type_cycle)]]
             asset, _created = Asset.objects.update_or_create(
-                inventory_number=inventory_number,
+                external_id=f"{DEMO_ASSET_EXTERNAL_PREFIX}{inventory_number}",
                 defaults={
                     "name": name,
+                    "inventory_number": inventory_number,
                     "asset_type": asset_type.code,
                     "asset_type_ref": asset_type,
                     "record_quantity": 1,
@@ -206,7 +207,6 @@ class Command(BaseCommand):
                     "location_fk": location,
                     "status": Asset.Status.ACTIVE,
                     "technical_condition": Asset.TechnicalCondition.GOOD,
-                    "external_id": f"{DEMO_ASSET_EXTERNAL_PREFIX}{inventory_number}",
                     "is_active": True,
                 },
             )
@@ -227,9 +227,10 @@ class Command(BaseCommand):
             inventory_number = f"TEST-QTY-{index:04d}"
             location = location_cycle[(index - 1) % len(location_cycle)]
             asset, _created = Asset.objects.update_or_create(
-                inventory_number=inventory_number,
+                external_id=f"{DEMO_ASSET_EXTERNAL_PREFIX}{inventory_number}",
                 defaults={
                     "name": name,
+                    "inventory_number": inventory_number,
                     "asset_type": quantity_type.code,
                     "asset_type_ref": quantity_type,
                     "record_quantity": record_quantities[(index - 1) % len(record_quantities)],
@@ -240,7 +241,6 @@ class Command(BaseCommand):
                     "location_fk": location,
                     "status": Asset.Status.ACTIVE,
                     "technical_condition": Asset.TechnicalCondition.GOOD,
-                    "external_id": f"{DEMO_ASSET_EXTERNAL_PREFIX}{inventory_number}",
                     "is_active": True,
                 },
             )

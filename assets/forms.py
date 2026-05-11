@@ -89,7 +89,7 @@ class AssetForm(forms.ModelForm):
             "current_quantity": forms.NumberInput(attrs={"min": "1"}),
         }
         help_texts = {
-            "inventory_number": "Unikalny numer ewidencyjny składnika majątku.",
+            "inventory_number": "Numer ewidencyjny/księgowy. Może być wspólny dla wielu składników majątku.",
             "barcode": "Pole opcjonalne. Jeśli zostanie podane, musi być unikalne.",
             "purchase_value": "Kwota brutto lub netto zgodnie z przyjętą polityką ewidencji.",
         }
