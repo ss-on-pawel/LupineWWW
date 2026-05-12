@@ -7835,3 +7835,119 @@ class GenerateLabelsPdfTests(TestCase):
         page_count = raw.count(b"/Type /Page") - raw.count(b"/Type /Pages")
         self.assertEqual(page_count, 2)
 
+
+class AssetLtDocumentViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.location_a = Location.objects.create(name="LT Warszawa")
+        cls.location_b = Location.objects.create(name="LT Krakow")
+
+        cls.archived_asset = Asset.objects.create(
+            name="Biurko archiwalne",
+            inventory_number="LT-INW-001",
+            barcode="LT-BC-001",
+            status=Asset.Status.LIQUIDATED,
+            location=cls.location_a.path,
+            location_fk=cls.location_a,
+            is_active=False,
+        )
+        cls.active_asset = Asset.objects.create(
+            name="Monitor aktywny",
+            inventory_number="LT-INW-002",
+            barcode="LT-BC-002",
+            status=Asset.Status.ACTIVE,
+            location=cls.location_a.path,
+            location_fk=cls.location_a,
+            is_active=True,
+        )
+        cls.archived_other_location = Asset.objects.create(
+            name="Szafa archiwalna",
+            inventory_number="LT-INW-003",
+            barcode="LT-BC-003",
+            status=Asset.Status.LIQUIDATED,
+            location=cls.location_b.path,
+            location_fk=cls.location_b,
+            is_active=False,
+        )
+
+        cls.admin_user = User.objects.create_superuser(
+            username="lt-admin", password="pass123"
+        )
+        cls.scoped_user = User.objects.create_user(
+            username="lt-scoped", password="pass123"
+        )
+        cls.scoped_user.profile.role = UserProfile.Role.MANAGER
+        cls.scoped_user.profile.save()
+        cls.scoped_user.profile.allowed_locations.add(cls.location_a)
+
+    def _url(self, *ids):
+        return reverse("assets:archive-lt") + "?ids=" + ",".join(str(i) for i in ids)
+
+    def test_anonymous_redirects_to_login(self):
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response["Location"])
+
+    def test_active_asset_excluded_from_lt(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        self.assertEqual(response.status_code, 404)
+
+    def test_archived_asset_appears_in_lt(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "LT-INW-001")
+        self.assertContains(response, "Biurko archiwalne")
+
+    def test_active_and_archived_mixed_only_archived_shown(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(
+            self._url(self.archived_asset.pk, self.active_asset.pk)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "LT-INW-001")
+        self.assertNotContains(response, "LT-INW-002")
+
+    def test_scoped_user_sees_asset_in_allowed_location(self):
+        self.client.force_login(self.scoped_user)
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "LT-INW-001")
+
+    def test_scoped_user_cannot_see_asset_outside_scope(self):
+        self.client.force_login(self.scoped_user)
+        response = self.client.get(self._url(self.archived_other_location.pk))
+        self.assertEqual(response.status_code, 404)
+
+    def test_template_contains_lt_title(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertContains(response, "LT — Likwidacja")
+
+    def test_template_contains_signature_sections(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertContains(response, "Sporządził")
+        self.assertContains(response, "Zatwierdził")
+
+    def test_template_contains_remarks_section(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertContains(response, "Uwagi")
+
+    def test_no_ids_returns_400(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("assets:archive-lt"))
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_ids_returns_400(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.get(reverse("assets:archive-lt") + "?ids=abc,xyz")
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_post_request(self):
+        self.client.force_login(self.admin_user)
+        response = self.client.post(self._url(self.archived_asset.pk))
+        self.assertEqual(response.status_code, 405)
+

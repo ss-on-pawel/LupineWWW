@@ -390,6 +390,12 @@
         .asset-list-shell[data-asset-list-mode="archive"] #asset-print-labels {
             display: none !important;
         }
+        #asset-generate-lt {
+            display: none;
+        }
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-generate-lt {
+            display: inline-flex;
+        }
         .asset-management-toolbar-group {
             display: inline-flex;
             align-items: center;
@@ -1607,6 +1613,7 @@
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
                         <button id="asset-print-labels" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Drukuj etykiety</button>
+                        <button id="asset-generate-lt" type="button" class="ui-btn ui-btn--secondary" disabled>Generuj LT</button>
                     </div>
                     <div class="asset-list-table-tools-cluster">
                         <div class="asset-list-meta">
@@ -2165,6 +2172,7 @@
                 managementAddButton: document.getElementById("asset-management-add"),
                 moveTrigger: document.getElementById("asset-move-trigger"),
                 printLabelsButton: document.getElementById("asset-print-labels"),
+                ltButton: document.getElementById("asset-generate-lt"),
                 moveTarget: document.getElementById("asset-move-target"),
                 movePopup: document.getElementById("asset-move-popup"),
                 moveSearch: document.getElementById("asset-move-search"),
@@ -2393,6 +2401,14 @@ let searchDebounceId = null;
                         return;
                     }
                     window.open("/assets/labels/pdf/?ids=" + ids.join(","), "_blank");
+                });
+
+                elements.ltButton.addEventListener("click", function () {
+                    const ids = getSelectedAssetIds();
+                    if (!ids.length) {
+                        return;
+                    }
+                    window.open("/assets/archive/lt/?ids=" + ids.join(","), "_blank");
                 });
 
                 elements.tableBody.addEventListener("change", function (event) {
@@ -3719,6 +3735,7 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
                 elements.managementDeleteButton.disabled = state.withdrawSubmitting || getSelectedAssetIds().length < 1;
                 elements.printLabelsButton.disabled = getSelectedAssetIds().length < 1;
+                elements.ltButton.disabled = getSelectedAssetIds().length < 1;
 
                 elements.managementAddButton.textContent = "Dodaj środek";
                 elements.managementAddButton.className = "ui-btn ui-btn--success";

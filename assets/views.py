@@ -1261,6 +1261,42 @@ def asset_labels_pdf(request):
 
 
 @login_required
+@require_GET
+def asset_lt_document(request):
+    from locations.models import OrganizationSettings
+
+    raw = request.GET.get("ids", "").strip()
+    if not raw:
+        return HttpResponse("Nie podano identyfikatorów.", status=400)
+
+    try:
+        ids = [int(i) for i in raw.split(",") if i.strip()]
+    except ValueError:
+        return HttpResponse("Nieprawidłowe parametry.", status=400)
+
+    if not ids or len(ids) > 200:
+        return HttpResponse("Nieprawidłowa liczba identyfikatorów.", status=400)
+
+    queryset = Asset.objects.filter(id__in=ids, is_active=False).select_related(
+        "asset_type_ref", "location_fk"
+    )
+
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None:
+        queryset = queryset.filter(location_fk_id__in=location_ids)
+
+    assets = list(queryset.order_by("id"))
+    if not assets:
+        return HttpResponse("Brak archiwalnych środków do wygenerowania LT.", status=404)
+
+    return render(request, "assets/asset_lt.html", {
+        "assets": assets,
+        "org": OrganizationSettings.get(),
+        "generated_at": timezone.now(),
+    })
+
+
+@login_required
 @require_POST
 def asset_bulk_withdraw_api(request):
     if not _user_can_bulk_withdraw_assets(request.user):
