@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Użytkownicy{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .user-list-page {
+            display: grid;
+            gap: 10px;
+        }
+        .user-list-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+            flex-wrap: wrap;
+        }
+        .user-list-header-text {
+            display: grid;
+            gap: 4px;
+        }
+        .user-list-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .user-list-title {
+            margin: 0;
+            font-size: 1.55rem;
+            line-height: 1.15;
+        }
+        .user-table-shell {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
+            overflow-x: auto;
+        }
+        .role-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 0 8px;
+            background: rgba(17, 24, 39, 0.06);
+            color: #243244;
+            font-size: 0.8rem;
+            font-family: var(--mono-font);
+            letter-spacing: 0.06em;
+        }
+        .role-badge--admin {
+            background: rgba(193, 18, 31, 0.07);
+            color: #9f1239;
+        }
+        .role-badge--manager {
+            background: rgba(14, 116, 144, 0.07);
+            color: #155e75;
+        }
+        .active-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #15803d;
+        }
+        .active-dot--no {
+            background: rgba(15, 23, 42, 0.22);
+        }
+        .locations-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .location-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            font-size: 0.8rem;
+            color: var(--app-muted);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="user-list-page">
+        <header class="user-list-header">
+            <div class="user-list-header-text">
+                <p class="user-list-kicker">Administracja</p>
+                <h1 class="user-list-title">Użytkownicy</h1>
+            </div>
+            <a class="ui-btn ui-btn--primary" href="{% url 'accounts:user-create' %}">Nowy użytkownik</a>
+        </header>
+
+        <div class="user-table-shell">
+            {% if users %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Login</th>
+                            <th>Imię i nazwisko</th>
+                            <th>Rola</th>
+                            <th>Lokalizacje</th>
+                            <th>Aktywny</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                            <tr>
+                                <td data-label="Login">
+                                    <code>{{ u.username }}</code>
+                                </td>
+                                <td data-label="Imię i nazwisko">
+                                    {% if u.get_full_name %}
+                                        {{ u.get_full_name }}
+                                    {% else %}
+                                        <span class="muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td data-label="Rola">
+                                    {% if u.profile.role == "admin" %}
+                                        <span class="role-badge role-badge--admin">{{ u.profile.get_role_display }}</span>
+                                    {% elif u.profile.role == "manager" %}
+                                        <span class="role-badge role-badge--manager">{{ u.profile.get_role_display }}</span>
+                                    {% else %}
+                                        <span class="role-badge">{{ u.profile.get_role_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td data-label="Lokalizacje">
+                                    {% with locs=u.profile.allowed_locations.all %}
+                                        {% if u.profile.role == "admin" %}
+                                            <span class="muted">globalny</span>
+                                        {% elif locs %}
+                                            <div class="locations-list">
+                                                {% for loc in locs %}
+                                                    <span class="location-tag">{{ loc.name }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        {% else %}
+                                            <span class="muted">—</span>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
+                                <td data-label="Aktywny">
+                                    {% if u.is_active %}
+                                        <span class="active-dot" title="Aktywny"></span>
+                                    {% else %}
+                                        <span class="active-dot active-dot--no" title="Nieaktywny"></span>
+                                    {% endif %}
+                                </td>
+                                <td style="white-space:nowrap;">
+                                    <div style="display:flex;gap:6px;flex-wrap:nowrap;">
+                                        <a class="ui-btn ui-btn--secondary" style="min-height:32px;font-size:0.82rem;padding:0 10px;" href="{% url 'accounts:user-edit' u.pk %}">Edytuj</a>
+                                        <form method="post" action="{% url 'accounts:user-reset-password' u.pk %}" style="margin:0;">
+                                            {% csrf_token %}
+                                            <button class="ui-btn ui-btn--secondary" type="submit" style="min-height:32px;font-size:0.82rem;padding:0 10px;">Reset hasła</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="padding:24px;margin:0;color:var(--app-muted);">Brak użytkowników.</p>
+            {% endif %}
+        </div>
+    </section>
+{% endblock %}

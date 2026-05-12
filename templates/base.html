@@ -456,6 +456,9 @@
             <div class="app-header-actions">
                 {% block app_header_actions %}
                     {% if request.user.is_authenticated %}
+                        {% if request.user.is_superuser or request.user.is_staff or request.user.profile.role == "admin" %}
+                            <a class="ui-btn ui-btn--secondary" href="{% url 'accounts:user-create' %}" title="Dodaj użytkownika" style="padding:0 10px;min-height:36px;font-size:0.88rem;font-weight:700;">+</a>
+                        {% endif %}
                         <span class="app-user-badge">{{ request.user.get_username }}</span>
                         <form class="app-inline-form" method="post" action="{% url 'accounts:logout' %}">
                             {% csrf_token %}

@@ -13,6 +13,7 @@ PAGE_H = 30 * mm
 MARGIN = 1.5 * mm
 
 _MAX_NAME_CHARS = 34
+_BARCODE_MARGIN_X = 3.5 * mm
 
 
 def generate_labels_pdf(assets, org_short_name: str) -> io.BytesIO:
@@ -35,27 +36,34 @@ def _draw_label(c, asset, org_short_name: str) -> None:
 
 
 def _draw_org_name(c, org_short_name: str) -> None:
-    c.setFont("Helvetica", 5)
+    c.setFont("Helvetica", 4)
     c.setFillColorRGB(0.3, 0.3, 0.3)
-    c.drawCentredString(PAGE_W / 2, PAGE_H - MARGIN - 1.5 * mm, org_short_name)
+    c.drawCentredString(PAGE_W / 2, PAGE_H - MARGIN - 0.5 * mm, org_short_name)
     c.setFillColorRGB(0, 0, 0)
 
 
 def _draw_barcode(c, barcode_value: str) -> None:
     barcode = Code128(
         barcode_value,
-        barWidth=0.55 * mm,
-        barHeight=13 * mm,
+        barWidth=0.4 * mm,
+        barHeight=17 * mm,
         humanReadable=False,
         quiet=True,
     )
-    x = (PAGE_W - barcode.width) / 2
+    max_w = PAGE_W - 2 * _BARCODE_MARGIN_X
     y = 9 * mm
-    barcode.drawOn(c, x, y)
+    if barcode.width > max_w:
+        scale_x = max_w / barcode.width
+        c.saveState()
+        c.transform(scale_x, 0, 0, 1, _BARCODE_MARGIN_X, y)
+        barcode.drawOn(c, 0, 0)
+        c.restoreState()
+    else:
+        barcode.drawOn(c, (PAGE_W - barcode.width) / 2, y)
 
 
 def _draw_barcode_text(c, barcode_value: str) -> None:
-    c.setFont("Courier", 7)
+    c.setFont("Courier", 6)
     c.drawCentredString(PAGE_W / 2, 7 * mm, barcode_value)
 
 

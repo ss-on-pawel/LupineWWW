@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}Nowy użytkownik{% else %}Edycja: {{ edited_user.username }}{% endif %}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .user-form-page {
+            display: grid;
+            gap: 10px;
+        }
+        .user-form-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+            flex-wrap: wrap;
+        }
+        .user-form-header-text {
+            display: grid;
+            gap: 6px;
+        }
+        .user-form-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .user-form-title {
+            margin: 0;
+            font-size: 1.55rem;
+            line-height: 1.15;
+        }
+        .user-form-shell {
+            max-width: 760px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
+            padding: 16px;
+        }
+        .user-form {
+            display: grid;
+            gap: 20px;
+        }
+        .user-form-section {
+            display: grid;
+            gap: 14px;
+        }
+        .user-form-section-label {
+            margin: 0 0 2px;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .user-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px 20px;
+        }
+        .user-form-field {
+            display: grid;
+            gap: 6px;
+        }
+        .user-form-field label {
+            font-weight: 600;
+            font-size: 0.88rem;
+        }
+        .user-form-helptext {
+            font-size: 0.82rem;
+            color: var(--app-muted);
+        }
+        .user-form-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-top: 4px;
+        }
+        .field-full {
+            grid-column: 1 / -1;
+        }
+        .location-checks {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 7px;
+        }
+        .location-checks li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 28px;
+            cursor: pointer;
+        }
+        .location-checks li label {
+            font-weight: 400;
+            cursor: pointer;
+        }
+        @media (max-width: 700px) {
+            .user-form-shell {
+                margin-left: -16px;
+                margin-right: -16px;
+                border-left: 0;
+                border-right: 0;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="user-form-page">
+        <header class="user-form-header">
+            <div class="user-form-header-text">
+                <p class="user-form-kicker">Administracja</p>
+                <h1 class="user-form-title">
+                    {% if is_create %}Nowy użytkownik{% else %}Edycja: {{ edited_user.username }}{% endif %}
+                </h1>
+            </div>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'accounts:user-list' %}">Wszyscy użytkownicy</a>
+        </header>
+
+        <div class="user-form-shell">
+            <form class="user-form" method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <ul class="errorlist">
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+
+                <div class="user-form-section">
+                    <p class="user-form-section-label">Dane podstawowe</p>
+                    <div class="user-form-grid">
+                        <div class="user-form-field">
+                            <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+                            {{ form.username }}
+                            {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                        </div>
+                        <div class="user-form-field">
+                            <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                            {{ form.email }}
+                            {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                        </div>
+                        <div class="user-form-field">
+                            <label for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>
+                            {{ form.first_name }}
+                            {% if form.first_name.errors %}<ul class="errorlist">{% for e in form.first_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                        </div>
+                        <div class="user-form-field">
+                            <label for="{{ form.last_name.id_for_label }}">{{ form.last_name.label }}</label>
+                            {{ form.last_name }}
+                            {% if form.last_name.errors %}<ul class="errorlist">{% for e in form.last_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if is_create %}
+                <div class="user-form-section">
+                    <p class="user-form-section-label">Hasło</p>
+                    <div class="user-form-grid">
+                        <div class="user-form-field">
+                            <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                            {{ form.password }}
+                            {% if form.password.errors %}<ul class="errorlist">{% for e in form.password.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="user-form-section">
+                    <p class="user-form-section-label">Uprawnienia</p>
+                    <div class="user-form-grid">
+                        <div class="user-form-field">
+                            <label for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>
+                            {{ form.role }}
+                            {% if form.role.errors %}<ul class="errorlist">{% for e in form.role.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                            <span class="user-form-helptext">admin i manager mogą zatwierdzać zmiany środków.</span>
+                        </div>
+                        <div class="user-form-field" style="align-items:flex-start;">
+                            <label>{{ form.is_active.label }}</label>
+                            <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+                                {{ form.is_active }}
+                                <span>Konto aktywne</span>
+                            </label>
+                            {% if form.is_active.errors %}<ul class="errorlist">{% for e in form.is_active.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                        </div>
+                        <div class="user-form-field field-full">
+                            <label>{{ form.allowed_locations.label }}</label>
+                            {% if form.allowed_locations.errors %}<ul class="errorlist">{% for e in form.allowed_locations.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                            <ul class="location-checks">
+                                {% for checkbox in form.allowed_locations %}
+                                    <li>{{ checkbox.tag }} <label for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label></li>
+                                {% empty %}
+                                    <li><span class="user-form-helptext">Brak zdefiniowanych lokalizacji.</span></li>
+                                {% endfor %}
+                            </ul>
+                            <span class="user-form-helptext">Korzenie dostępu. Dziedziczenie obejmuje wszystkie lokalizacje podrzędne. Dla roli admin ignorowane (dostęp globalny).</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="user-form-actions">
+                    <button class="ui-btn ui-btn--primary" type="submit">
+                        {% if is_create %}Utwórz użytkownika{% else %}Zapisz zmiany{% endif %}
+                    </button>
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'accounts:user-list' %}">Anuluj</a>
+                </div>
+            </form>
+        </div>
+    </section>
+{% endblock %}

@@ -183,7 +183,7 @@ class Command(BaseCommand):
             "manager": {
                 "username": "demo.manager",
                 "email": "demo.manager@lupine.local",
-                "is_staff": True,
+                "is_staff": False,
                 "is_superuser": False,
                 "role": UserProfile.Role.MANAGER,
                 "can_approve": True,

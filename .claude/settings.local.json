@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\kosso\\\\LupineWWW\" -Directory)",
+      "Bash(Select-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\kosso\\\\LupineWWW\" -Depth 1 | Where-Object {$_.PSIsContainer} | Select-Object -ExpandProperty Name)",
+      "PowerShell(python manage.py makemigrations locations --name add_organization_settings 2>&1)",
+      "PowerShell(python manage.py check 2>&1)",
+      "PowerShell(python manage.py migrate 2>&1 | Select-Object -Last 5)",
+      "PowerShell(python manage.py test locations -v 2 2>&1 | Select-Object -Last 30)",
+      "PowerShell(python manage.py test assets inventory locations -v 0 2>&1 | Select-Object -Last 8)",
+      "PowerShell(pip install *)",
+      "PowerShell(python -c \"import reportlab; print\\(reportlab.Version\\)\")",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\kosso\\\\LupineWWW\\\\assets\\\\tests.py\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(python manage.py test assets.tests.AssetLabelsPdfViewTests assets.tests.GenerateLabelsPdfTests -v 2 2>&1 | Select-Object -Last 25)",
+      "PowerShell(python manage.py test assets.tests.AssetLabelsPdfViewTests assets.tests.GenerateLabelsPdfTests -v 2 2>&1 | Select-Object -Last 15)",
+      "PowerShell(Get-Content *)",
+      "Bash(jq --version)",
+      "Bash(bash ~/.claude/statusline-command.sh)"
+    ]
+  }
+}
