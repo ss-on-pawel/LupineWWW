@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}Import środków{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .import-page {
+            display: grid;
+            gap: 20px;
+            max-width: 760px;
+        }
+
+        /* ── Nagłówek ─────────────────────────────────────── */
+        .import-header {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .import-kicker {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .import-title {
+            margin: 0;
+            font-size: 1.55rem;
+            line-height: 1.15;
+        }
+        .import-description {
+            margin: 0;
+            color: var(--app-muted);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        /* ── Alert błędów ─────────────────────────────────── */
+        .import-alert {
+            padding: 10px 14px;
+            border: 1px solid rgba(193, 18, 31, 0.2);
+            background: rgba(254, 242, 242, 0.92);
+        }
+        .import-alert p {
+            margin: 0 0 3px;
+            color: #9f1239;
+            font-size: 0.9rem;
+        }
+        .import-alert p:last-child { margin-bottom: 0; }
+
+        /* ── Sekcja (formularz i raport) ──────────────────── */
+        .import-section {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .import-section-head {
+            padding: 9px 16px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            background: rgba(248, 250, 252, 0.7);
+        }
+        .import-section-label {
+            margin: 0;
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--app-muted);
+        }
+        .import-section-body {
+            padding: 20px 16px;
+            display: grid;
+            gap: 20px;
+        }
+
+        /* ── Formularz ────────────────────────────────────── */
+        .import-form {
+            display: grid;
+            gap: 20px;
+        }
+        .import-params-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 20px;
+        }
+        .import-field {
+            display: grid;
+            gap: 5px;
+        }
+        .import-label {
+            display: block;
+            font-family: var(--mono-font);
+            font-size: 0.72rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--app-text);
+            margin-bottom: 1px;
+        }
+        .import-note {
+            margin: 0;
+            color: var(--app-muted);
+            font-size: 0.84rem;
+            line-height: 1.5;
+        }
+        .import-note--error { color: #9f1239; }
+
+        /* ── Upload ───────────────────────────────────────── */
+        .import-upload-wrap {
+            display: grid;
+            gap: 6px;
+        }
+        .import-upload-box {
+            padding: 16px 14px;
+            border: 1px dashed rgba(15, 23, 42, 0.22);
+            background: rgba(248, 250, 252, 0.6);
+        }
+        .import-upload-box input[type="file"] {
+            width: 100%;
+            font-family: var(--mono-font);
+            font-size: 0.86rem;
+            color: var(--app-text);
+        }
+
+        /* ── Format pliku (specyfikacja kolumn) ───────────── */
+        .import-spec {
+            display: grid;
+            gap: 7px;
+        }
+        .import-spec-cols {
+            display: flex;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(248, 250, 252, 0.7);
+            overflow-x: auto;
+        }
+        .import-spec-col {
+            flex: 1 1 0;
+            min-width: 0;
+            padding: 6px 10px;
+            border-right: 1px solid rgba(15, 23, 42, 0.08);
+            font-family: var(--mono-font);
+            font-size: 0.78rem;
+            color: var(--app-text);
+            white-space: nowrap;
+        }
+        .import-spec-col:last-child { border-right: none; }
+        .import-spec-req { color: var(--app-accent); }
+
+        /* ── Akcje ────────────────────────────────────────── */
+        .import-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-top: 2px;
+        }
+
+        /* ── Raport — pasek wyników ───────────────────────── */
+        .import-result-strip {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .import-result-cell {
+            padding: 14px 18px;
+            border-right: 1px solid rgba(15, 23, 42, 0.08);
+            display: grid;
+            gap: 4px;
+        }
+        .import-result-cell:last-child { border-right: none; }
+        .import-result-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.02em;
+        }
+        .import-result-meta {
+            font-family: var(--mono-font);
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--app-muted);
+        }
+        .import-result-cell--ok .import-result-value   { color: #166534; }
+        .import-result-cell--error .import-result-value { color: #9f1239; }
+
+        /* ── Raport — tabela błędów ───────────────────────── */
+        .import-errors-block {
+            display: grid;
+            gap: 8px;
+        }
+
+        /* ── Overlay ──────────────────────────────────────── */
+        .import-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.72);
+            backdrop-filter: blur(4px);
+        }
+        .import-overlay.is-visible { display: flex; }
+        .import-overlay-box {
+            padding: 16px 28px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            background: rgba(255, 255, 255, 0.98);
+            font-family: var(--mono-font);
+            font-size: 0.84rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--app-muted);
+        }
+
+        /* ── Mobile ───────────────────────────────────────── */
+        @media (max-width: 640px) {
+            .import-params-grid {
+                grid-template-columns: 1fr;
+            }
+            .import-result-strip {
+                grid-template-columns: 1fr;
+            }
+            .import-result-cell {
+                border-right: none;
+                border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            }
+            .import-result-cell:last-child { border-bottom: none; }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <section class="import-page">
+
+        <header class="import-header">
+            <p class="import-kicker">Ewidencja</p>
+            <h1 class="import-title">Import środków</h1>
+            <p class="import-description">Jednorazowe zasiedlenie systemu danymi klienta z pliku XLSX. Błędne wiersze są pomijane i raportowane — pozostałe importowane.</p>
+        </header>
+
+        {% if form_errors %}
+            <div class="import-alert" role="alert">
+                {% for error in form_errors %}
+                    <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if not report %}
+            <section class="import-section">
+                <div class="import-section-head">
+                    <p class="import-section-label">Parametry importu</p>
+                </div>
+                <div class="import-section-body">
+                    <form class="import-form" method="post" enctype="multipart/form-data" id="import-form" novalidate>
+                        {% csrf_token %}
+
+                        <div class="import-params-grid">
+                            <div class="import-field">
+                                <label class="import-label" for="root_location">Root / Filia</label>
+                                <select name="root_location" id="root_location" required>
+                                    <option value="">— wybierz —</option>
+                                    {% for loc in root_locations %}
+                                        <option value="{{ loc.pk }}">{{ loc.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if not root_locations %}
+                                    <p class="import-note import-note--error">Brak aktywnych lokalizacji głównych. Dodaj lokalizację przed importem.</p>
+                                {% else %}
+                                    <p class="import-note">Lokalizacja nadrzędna — nowe ścieżki z pliku będą tworzone pod tym rootem.</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="import-field">
+                                <label class="import-label" for="asset_type">Rodzaj środka</label>
+                                <select name="asset_type" id="asset_type" required>
+                                    <option value="">— wybierz —</option>
+                                    {% for at in asset_types %}
+                                        <option value="{{ at.pk }}">{{ at.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <p class="import-note">Wszystkie importowane środki otrzymają ten rodzaj i wygenerowany automatycznie barcode.</p>
+                            </div>
+                        </div>
+
+                        <div class="import-upload-wrap">
+                            <label class="import-label" for="import_file">Plik XLSX</label>
+                            <div class="import-upload-box">
+                                <input type="file" name="import_file" id="import_file" accept=".xlsx" required>
+                            </div>
+                            <p class="import-note">Jeden wiersz = jeden środek. Błędne wiersze są pomijane i wyświetlane w raporcie.</p>
+                        </div>
+
+                        <div class="import-spec">
+                            <p class="import-label">Format pliku</p>
+                            <div class="import-spec-cols" aria-label="Kolumny pliku importu">
+                                <span class="import-spec-col">Numer inwentarzowy</span>
+                                <span class="import-spec-col">Nazwa <span class="import-spec-req" aria-label="wymagane">*</span></span>
+                                <span class="import-spec-col">Ilość</span>
+                                <span class="import-spec-col">Wartość</span>
+                                <span class="import-spec-col">Lokalizacja <span class="import-spec-req" aria-label="wymagane">*</span></span>
+                            </div>
+                            <p class="import-note">Lokalizacja = ścieżka względem wybranego roota, np. <code>Budynek A/Pokój 1</code> &mdash; separator: <code>/</code></p>
+                        </div>
+
+                        <div class="import-actions">
+                            <button class="ui-btn ui-btn--primary" type="submit" id="import-submit-btn">Importuj</button>
+                            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import-template' %}">Pobierz szablon</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        {% endif %}
+
+        {% if report %}
+            <section class="import-section">
+                <div class="import-section-head">
+                    <p class="import-section-label">Wynik operacji</p>
+                </div>
+                <div class="import-section-body">
+
+                    <div class="import-result-strip">
+                        <div class="import-result-cell {% if report.imported_count > 0 %}import-result-cell--ok{% endif %}">
+                            <span class="import-result-value">{{ report.imported_count }}</span>
+                            <span class="import-result-meta">środków</span>
+                        </div>
+                        <div class="import-result-cell">
+                            <span class="import-result-value">{{ report.created_locations_count }}</span>
+                            <span class="import-result-meta">lokalizacji</span>
+                        </div>
+                        <div class="import-result-cell {% if report.error_rows %}import-result-cell--error{% endif %}">
+                            <span class="import-result-value">{{ report.error_rows|length }}</span>
+                            <span class="import-result-meta">błędów</span>
+                        </div>
+                    </div>
+
+                    {% if report.error_rows %}
+                        <div class="import-errors-block">
+                            <p class="import-label">Błędy wierszy</p>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:80px;">Wiersz</th>
+                                        <th>Błąd</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for err in report.error_rows %}
+                                        <tr>
+                                            <td>{{ err.row }}</td>
+                                            <td>{{ err.message }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+
+                    <div class="import-actions">
+                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import' %}">Nowy import</a>
+                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Przejdź do ewidencji</a>
+                    </div>
+
+                </div>
+            </section>
+        {% endif %}
+
+    </section>
+
+    <div class="import-overlay" id="import-overlay">
+        <div class="import-overlay-box">Importowanie danych...</div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        (function () {
+            var form = document.getElementById("import-form");
+            var overlay = document.getElementById("import-overlay");
+            if (form && overlay) {
+                form.addEventListener("submit", function () {
+                    if (form.checkValidity()) {
+                        overlay.classList.add("is-visible");
+                    }
+                });
+            }
+        }());
+    </script>
+{% endblock %}

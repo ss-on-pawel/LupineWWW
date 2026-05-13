@@ -7951,3 +7951,351 @@ class AssetLtDocumentViewTests(TestCase):
         response = self.client.post(self._url(self.archived_asset.pk))
         self.assertEqual(response.status_code, 405)
 
+
+# ─── Importer tests ───────────────────────────────────────────────────────────
+
+import io as _io
+import openpyxl as _openpyxl
+from django.core.files.uploadedfile import SimpleUploadedFile
+from .importer import (
+    parse_import_xlsx,
+    resolve_location_path,
+    import_assets_from_rows,
+    _validate_row,
+)
+
+
+def _make_xlsx_upload(rows, filename="test.xlsx"):
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Numer inwentarzowy", "Nazwa", "Ilość", "Wartość", "Lokalizacja"])
+    for row in rows:
+        ws.append(row)
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return SimpleUploadedFile(
+        filename,
+        buf.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _make_xlsx_bytes(rows):
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Numer inwentarzowy", "Nazwa", "Ilość", "Wartość", "Lokalizacja"])
+    for row in rows:
+        ws.append(row)
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+class ImporterParseTests(TestCase):
+    def test_parse_returns_data_rows(self):
+        buf = _make_xlsx_bytes([["INW-001", "Laptop", "1", "1000.00", "Sala A"]])
+        rows = parse_import_xlsx(buf)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Laptop")
+        self.assertEqual(rows[0]["inventory_number"], "INW-001")
+        self.assertEqual(rows[0]["quantity"], "1")
+        self.assertEqual(rows[0]["value"], "1000.00")
+        self.assertEqual(rows[0]["location_path"], "Sala A")
+
+    def test_parse_skips_empty_rows(self):
+        buf = _make_xlsx_bytes([
+            ["INW-001", "Laptop", "1", "", "Sala A"],
+            [None, None, None, None, None],
+            ["INW-002", "Krzesło", "2", "", "Sala B"],
+        ])
+        rows = parse_import_xlsx(buf)
+        self.assertEqual(len(rows), 2)
+
+    def test_parse_skips_comment_rows(self):
+        buf = _make_xlsx_bytes([
+            ["# To jest komentarz", "", "", "", ""],
+            ["INW-001", "Laptop", "1", "", "Sala A"],
+        ])
+        rows = parse_import_xlsx(buf)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Laptop")
+
+    def test_parse_row_number_is_correct(self):
+        buf = _make_xlsx_bytes([["INW-001", "Laptop", "1", "", "Sala A"]])
+        rows = parse_import_xlsx(buf)
+        self.assertEqual(rows[0]["row_number"], 2)
+
+    def test_parse_optional_fields_default_to_empty(self):
+        buf = _make_xlsx_bytes([["", "Laptop", "", "", "Sala A"]])
+        rows = parse_import_xlsx(buf)
+        self.assertEqual(rows[0]["inventory_number"], "")
+        self.assertEqual(rows[0]["quantity"], "")
+        self.assertEqual(rows[0]["value"], "")
+
+
+class ImporterValidateRowTests(TestCase):
+    def _row(self, **kwargs):
+        base = {
+            "row_number": 2,
+            "inventory_number": "",
+            "name": "Laptop",
+            "quantity": "1",
+            "value": "",
+            "location_path": "Sala A",
+        }
+        base.update(kwargs)
+        return base
+
+    def test_valid_row_has_no_errors(self):
+        self.assertEqual(_validate_row(self._row()), [])
+
+    def test_missing_name_is_error(self):
+        errors = _validate_row(self._row(name=""))
+        self.assertIn("Brak nazwy", errors)
+
+    def test_missing_location_is_error(self):
+        errors = _validate_row(self._row(location_path=""))
+        self.assertIn("Brak lokalizacji", errors)
+
+    def test_double_slash_location_is_error(self):
+        errors = _validate_row(self._row(location_path="Sala A//Pokój 1"))
+        self.assertTrue(any("Niepoprawna lokalizacja" in e for e in errors))
+
+    def test_invalid_quantity_text_is_error(self):
+        errors = _validate_row(self._row(quantity="abc"))
+        self.assertTrue(any("ilość" in e.lower() for e in errors))
+
+    def test_invalid_quantity_float_is_error(self):
+        errors = _validate_row(self._row(quantity="1.5"))
+        self.assertTrue(any("ilość" in e.lower() for e in errors))
+
+    def test_zero_quantity_is_error(self):
+        errors = _validate_row(self._row(quantity="0"))
+        self.assertTrue(any("większa od zera" in e for e in errors))
+
+    def test_quantity_1_0_is_valid(self):
+        self.assertEqual(_validate_row(self._row(quantity="1.0")), [])
+
+    def test_invalid_value_is_error(self):
+        errors = _validate_row(self._row(value="nie-liczba"))
+        self.assertTrue(any("wartość" in e.lower() for e in errors))
+
+    def test_empty_value_is_valid(self):
+        self.assertEqual(_validate_row(self._row(value="")), [])
+
+
+class ResolveLocationPathTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="ResolveTestRoot")
+
+    def test_creates_single_segment(self):
+        loc, new_ids = resolve_location_path(self.root, "Sala A")
+        self.assertEqual(loc.name, "Sala A")
+        self.assertEqual(loc.parent, self.root)
+        self.assertIn(loc.pk, new_ids)
+
+    def test_creates_nested_segments(self):
+        loc, new_ids = resolve_location_path(self.root, "Budynek A/Piętro 1/Pokój 12")
+        self.assertEqual(loc.name, "Pokój 12")
+        self.assertEqual(len(new_ids), 3)
+
+    def test_reuses_existing_location(self):
+        existing = Location.objects.create(name="Sala B", parent=self.root)
+        loc, new_ids = resolve_location_path(self.root, "Sala B")
+        self.assertEqual(loc.pk, existing.pk)
+        self.assertNotIn(loc.pk, new_ids)
+
+    def test_partial_create_reuses_existing_parent(self):
+        existing = Location.objects.create(name="Budynek B", parent=self.root)
+        loc, new_ids = resolve_location_path(self.root, "Budynek B/Pokój 5")
+        self.assertEqual(loc.name, "Pokój 5")
+        self.assertNotIn(existing.pk, new_ids)
+        self.assertIn(loc.pk, new_ids)
+
+    def test_strips_whitespace_from_segments(self):
+        loc, _ = resolve_location_path(self.root, " Sala C ")
+        self.assertEqual(loc.name, "Sala C")
+
+
+class ImportAssetsFromRowsTests(TestCase):
+    def setUp(self):
+        self.root = Location.objects.create(name="ImportTestRoot")
+        self.asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+    def _rows(self, data):
+        return [
+            {
+                "row_number": i + 2,
+                "inventory_number": r[0],
+                "name": r[1],
+                "quantity": r[2],
+                "value": r[3],
+                "location_path": r[4],
+            }
+            for i, r in enumerate(data)
+        ]
+
+    def test_imports_valid_row(self):
+        rows = self._rows([["INW-001", "Laptop A", "1", "", "Sala"]])
+        result = import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        self.assertEqual(result["imported_count"], 1)
+        self.assertEqual(result["error_rows"], [])
+        self.assertTrue(Asset.objects.filter(name="Laptop A").exists())
+
+    def test_partial_success_invalid_row_skipped(self):
+        rows = self._rows([
+            ["INW-001", "Laptop válido", "1", "", "Sala"],
+            ["INW-002", "", "1", "", "Sala"],  # brak nazwy
+        ])
+        result = import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        self.assertEqual(result["imported_count"], 1)
+        self.assertEqual(len(result["error_rows"]), 1)
+        self.assertEqual(result["error_rows"][0]["row"], 3)
+
+    def test_creates_missing_locations(self):
+        rows = self._rows([["", "Laptop B", "1", "", "Hala/Pokój 3"]])
+        before = Location.objects.count()
+        result = import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        self.assertEqual(result["imported_count"], 1)
+        self.assertEqual(result["created_locations_count"], 2)
+        self.assertEqual(Location.objects.count(), before + 2)
+
+    def test_generates_barcode(self):
+        rows = self._rows([["", "Laptop C", "1", "", "Sala"]])
+        import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        asset = Asset.objects.get(name="Laptop C")
+        self.assertNotEqual(asset.barcode, "")
+
+    def test_invalid_quantity_in_row_is_error(self):
+        rows = self._rows([["", "Laptop D", "abc", "", "Sala"]])
+        result = import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        self.assertEqual(result["imported_count"], 0)
+        self.assertEqual(len(result["error_rows"]), 1)
+        self.assertIn("ilość", result["error_rows"][0]["message"].lower())
+
+    def test_empty_location_in_row_is_error(self):
+        rows = self._rows([["", "Laptop E", "1", "", ""]])
+        result = import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        self.assertEqual(result["imported_count"], 0)
+        self.assertIn("lokalizacji", result["error_rows"][0]["message"].lower())
+
+    def test_records_history_entry(self):
+        rows = self._rows([["", "Laptop F", "1", "", "Sala"]])
+        import_assets_from_rows(rows, root_location=self.root, asset_type_ref=self.asset_type)
+        asset = Asset.objects.get(name="Laptop F")
+        self.assertTrue(
+            AssetHistoryEntry.objects.filter(
+                asset=asset,
+                event_type=AssetHistoryEntry.EventType.CREATED,
+            ).exists()
+        )
+
+    def test_failed_barcode_does_not_create_location(self):
+        at_no_prefix = AssetTypeDictionary.objects.create(
+            name="TestNoPrefix", code="no-prefix-test", barcode_prefix="", sort_order=99
+        )
+        rows = self._rows([["", "Laptop G", "1", "", "NowaSalaOrphan"]])
+        before = Location.objects.count()
+        result = import_assets_from_rows(rows, root_location=self.root, asset_type_ref=at_no_prefix)
+        self.assertEqual(result["imported_count"], 0)
+        self.assertEqual(len(result["error_rows"]), 1)
+        self.assertEqual(Location.objects.count(), before)
+
+
+class AssetImportViewTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_user("import_admin", password="pass")
+        self.admin_user.profile.role = UserProfile.Role.ADMIN
+        self.admin_user.profile.save()
+        self.regular_user = User.objects.create_user("import_user", password="pass")
+        self.root = Location.objects.create(name="ViewTestRoot")
+        self.asset_type = AssetTypeDictionary.objects.get(code="fixed")
+
+    def _import_url(self):
+        return reverse("assets:import")
+
+    def _template_url(self):
+        return reverse("assets:import-template")
+
+    def test_requires_login(self):
+        resp = self.client.get(self._import_url())
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+
+    def test_admin_can_access(self):
+        self.client.force_login(self.admin_user)
+        resp = self.client.get(self._import_url())
+        self.assertEqual(resp.status_code, 200)
+
+    def test_regular_user_is_forbidden(self):
+        self.client.force_login(self.regular_user)
+        resp = self.client.get(self._import_url())
+        self.assertEqual(resp.status_code, 403)
+
+    def test_template_download_returns_xlsx(self):
+        self.client.force_login(self.admin_user)
+        resp = self.client.get(self._template_url())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn("szablon_importu.xlsx", resp["Content-Disposition"])
+
+    def test_template_download_forbidden_for_user(self):
+        self.client.force_login(self.regular_user)
+        resp = self.client.get(self._template_url())
+        self.assertEqual(resp.status_code, 403)
+
+    def test_import_creates_assets(self):
+        self.client.force_login(self.admin_user)
+        upload = _make_xlsx_upload([["INW-V1", "Laptop View", "1", "", "Sala"]])
+        resp = self.client.post(self._import_url(), {
+            "root_location": self.root.pk,
+            "asset_type": self.asset_type.pk,
+            "import_file": upload,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(Asset.objects.filter(name="Laptop View").exists())
+
+    def test_import_creates_locations(self):
+        self.client.force_login(self.admin_user)
+        before = Location.objects.count()
+        upload = _make_xlsx_upload([["", "Monitor View", "1", "", "Nowa Sala"]])
+        self.client.post(self._import_url(), {
+            "root_location": self.root.pk,
+            "asset_type": self.asset_type.pk,
+            "import_file": upload,
+        })
+        self.assertEqual(Location.objects.count(), before + 1)
+
+    def test_import_generates_barcodes(self):
+        self.client.force_login(self.admin_user)
+        upload = _make_xlsx_upload([["", "Drukarka View", "1", "", "Sala"]])
+        self.client.post(self._import_url(), {
+            "root_location": self.root.pk,
+            "asset_type": self.asset_type.pk,
+            "import_file": upload,
+        })
+        asset = Asset.objects.filter(name="Drukarka View").first()
+        self.assertIsNotNone(asset)
+        self.assertNotEqual(asset.barcode, "")
+
+    def test_import_report_shows_row_errors(self):
+        self.client.force_login(self.admin_user)
+        upload = _make_xlsx_upload([
+            ["INW-OK", "Klawiatura", "1", "", "Sala"],
+            ["INW-ERR", "Mysz", "xyz", "", "Sala"],
+        ])
+        resp = self.client.post(self._import_url(), {
+            "root_location": self.root.pk,
+            "asset_type": self.asset_type.pk,
+            "import_file": upload,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Niepoprawna ilość")
+        self.assertEqual(Asset.objects.filter(name="Klawiatura").count(), 1)
+        self.assertEqual(Asset.objects.filter(name="Mysz").count(), 0)
+

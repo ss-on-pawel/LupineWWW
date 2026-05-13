@@ -15,6 +15,8 @@ from .views import (
     asset_bulk_withdraw_api,
     asset_detail,
     asset_export_csv_api,
+    asset_import,
+    asset_import_template,
     asset_labels_pdf,
     asset_list_api,
     asset_lt_document,
@@ -45,4 +47,6 @@ urlpatterns = [
     path("assets/<int:id>/", asset_detail, name="detail"),
     path("assets/labels/pdf/", asset_labels_pdf, name="labels-pdf"),
     path("assets/archive/lt/", asset_lt_document, name="archive-lt"),
+    path("assets/import/", asset_import, name="import"),
+    path("assets/import/template/", asset_import_template, name="import-template"),
 ]

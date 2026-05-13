@@ -30,6 +30,7 @@ from .services import (
     user_requires_asset_change_approval,
 )
 from inventory.models import InventorySession, InventorySnapshotItem
+from .importer import build_import_template_xlsx, import_assets_from_rows, parse_import_xlsx
 from locations.models import Location
 
 
@@ -1494,3 +1495,113 @@ def _resolve_asset_ordering(raw_ordering):
     field = raw_ordering[1:] if is_desc else raw_ordering
     resolved = allowed_fields.get(field, "updated_at")
     return f"-{resolved}" if is_desc else resolved
+
+
+def _user_can_import_assets(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        profile = user.profile
+    except ObjectDoesNotExist:
+        return False
+    return profile.pk is not None and profile.role == profile.Role.ADMIN
+
+
+@login_required
+def asset_import(request):
+    if not _user_can_import_assets(request.user):
+        raise PermissionDenied
+
+    root_locations = Location.objects.filter(parent=None, is_active=True).order_by("name")
+    asset_types = (
+        AssetTypeDictionary.objects
+        .filter(is_active=True)
+        .exclude(barcode_prefix="")
+        .order_by("sort_order", "name")
+    )
+
+    context = {
+        "page_title": "Import środków",
+        "root_locations": root_locations,
+        "asset_types": asset_types,
+        "report": None,
+        "form_errors": [],
+    }
+
+    if request.method != "POST":
+        return render(request, "assets/import_assets.html", context)
+
+    form_errors = []
+    root_location = None
+    asset_type_ref = None
+
+    root_id = request.POST.get("root_location", "").strip()
+    asset_type_id = request.POST.get("asset_type", "").strip()
+    import_file = request.FILES.get("import_file")
+
+    if not root_id:
+        form_errors.append("Wybierz lokalizację root / filię.")
+    else:
+        try:
+            root_location = Location.objects.get(pk=root_id, is_active=True)
+        except Location.DoesNotExist:
+            form_errors.append("Wybrana lokalizacja nie istnieje.")
+
+    if not asset_type_id:
+        form_errors.append("Wybierz rodzaj środka.")
+    else:
+        try:
+            asset_type_ref = AssetTypeDictionary.objects.get(pk=asset_type_id, is_active=True)
+            if not asset_type_ref.barcode_prefix:
+                form_errors.append(
+                    f'Rodzaj "{asset_type_ref.name}" nie ma prefiksu kodu kreskowego.'
+                )
+                asset_type_ref = None
+        except AssetTypeDictionary.DoesNotExist:
+            form_errors.append("Wybrany rodzaj środka nie istnieje.")
+
+    if not import_file:
+        form_errors.append("Wybierz plik XLSX.")
+    elif not import_file.name.lower().endswith(".xlsx"):
+        form_errors.append("Plik musi być w formacie .xlsx.")
+        import_file = None
+
+    if form_errors:
+        context["form_errors"] = form_errors
+        return render(request, "assets/import_assets.html", context)
+
+    try:
+        rows = parse_import_xlsx(import_file)
+    except Exception as exc:
+        context["form_errors"] = [f"Nie udało się odczytać pliku: {exc}"]
+        return render(request, "assets/import_assets.html", context)
+
+    if not rows:
+        context["form_errors"] = ["Plik nie zawiera żadnych danych do importu."]
+        return render(request, "assets/import_assets.html", context)
+
+    report = import_assets_from_rows(
+        rows,
+        root_location=root_location,
+        asset_type_ref=asset_type_ref,
+        operator=request.user,
+    )
+    context["report"] = report
+    context["selected_root"] = root_location
+    context["selected_asset_type"] = asset_type_ref
+    return render(request, "assets/import_assets.html", context)
+
+
+@login_required
+def asset_import_template(request):
+    if not _user_can_import_assets(request.user):
+        raise PermissionDenied
+    buf = build_import_template_xlsx()
+    response = HttpResponse(
+        buf.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="szablon_importu.xlsx"'
+    return response
