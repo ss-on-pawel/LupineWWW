@@ -3048,3 +3048,74 @@ class MobileScannerTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(InventoryObservedItem.objects.filter(session=self.session_b, code="SCAN-MOB-001").count(), 0)
+
+
+class SessionStatsApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="stats-test-user", password="test-pass", is_superuser=True)
+        cls.root = Location.objects.create(name="StatsRoot")
+        cls.child = Location.objects.create(name="StatsChild", parent=cls.root)
+        cls.asset = Asset.objects.create(
+            name="Stats Asset",
+            inventory_number="INV-STATS-001",
+            asset_type=Asset.AssetType.FIXED,
+            barcode="SCAN-STATS-001",
+            location_fk=cls.child,
+            location=cls.child.path,
+            status=Asset.Status.ACTIVE,
+            current_quantity=1,
+        )
+        cls.session = start_inventory_session(
+            created_by=cls.user,
+            root_locations=[cls.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def _stats_url(self):
+        return reverse("inventory:session-stats-api", kwargs={"pk": self.session.pk})
+
+    def test_requires_login(self):
+        self.client.logout()
+        response = self.client.get(self._stats_url())
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_returns_ok_and_summary_keys(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._stats_url())
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        expected_keys = {
+            "snapshot_total", "read_count", "matching_count", "shortage_count", "surplus_count",
+            "no_read_count", "wrong_location_count", "found_out_of_scope_count", "unknown_code_count",
+            "manual_confirmation_count", "quantity_difference_count", "problem_count",
+        }
+        self.assertEqual(set(data["summary"].keys()), expected_keys)
+
+    def test_snapshot_total_matches_session_assets(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._stats_url())
+        data = response.json()
+        self.assertEqual(data["summary"]["snapshot_total"], self.session.snapshot_items.count())
+
+    def test_no_read_count_equals_snapshot_total_before_any_scans(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._stats_url())
+        data = response.json()
+        summary = data["summary"]
+        self.assertEqual(summary["no_read_count"], summary["snapshot_total"])
+        self.assertEqual(summary["read_count"], 0)
+
+    def test_404_for_nonexistent_session(self):
+        self.client.force_login(self.user)
+        response = self.client.get("/inventory/99999999/stats/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_problem_count_equals_sum_of_problem_types(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._stats_url())
+        data = response.json()
+        s = data["summary"]
+        expected_problem_count = s["wrong_location_count"] + s["found_out_of_scope_count"] + s["unknown_code_count"]
+        self.assertEqual(s["problem_count"], expected_problem_count)

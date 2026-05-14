@@ -571,7 +571,7 @@
             <div class="inv-mobile-scan-block">
                 <p class="inv-mobile-scan-label">Skaner mobilny</p>
                 <div class="inv-mobile-scan-input-row">
-                    <input class="inv-mobile-scan-url" id="mobile-scan-url-input" type="text" value="{{ mobile_scan_url }}" readonly>
+                    <input class="inv-mobile-scan-url" id="mobile-scan-url-input" type="text" value="{{ mobile_scan_url }}" title="{{ mobile_scan_url }}" readonly>
                     <button class="ui-btn ui-btn--secondary inv-mobile-scan-copy" id="btn-copy-mobile-url" type="button">Kopiuj</button>
                 </div>
             </div>
@@ -1120,6 +1120,10 @@
             var btn = document.getElementById('btn-copy-mobile-url');
             var input = document.getElementById('mobile-scan-url-input');
             if (!btn || !input) return;
+            // Show token end (right side of URL) by default
+            input.scrollLeft = input.scrollWidth;
+            // Auto-select full URL on focus so user can copy manually
+            input.addEventListener('focus', function () { input.select(); });
             btn.addEventListener('click', function () {
                 navigator.clipboard.writeText(input.value).then(function () {
                     btn.textContent = 'Skopiowano';
@@ -1133,4 +1137,44 @@
             });
         }());
     </script>
+    {% if not is_session_closed %}
+    <script>
+        (function () {
+            var statsUrl = "{% url 'inventory:session-stats-api' session.pk %}";
+
+            function setSummaryValues(summary) {
+                Object.keys(summary).forEach(function (key) {
+                    document.querySelectorAll('[data-summary-value="' + key + '"]').forEach(function (el) {
+                        el.textContent = String(summary[key]);
+                    });
+                });
+            }
+
+            function pollStats() {
+                fetch(statsUrl, { credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        if (data && data.ok && data.summary) {
+                            setSummaryValues(data.summary);
+                        }
+                    })
+                    .catch(function () {});
+            }
+
+            var pollTimer = null;
+            function startPolling() {
+                if (pollTimer) return;
+                pollTimer = setInterval(pollStats, 8000);
+            }
+            function stopPolling() {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) { stopPolling(); } else { startPolling(); }
+            });
+            startPolling();
+        }());
+    </script>
+    {% endif %}
 {% endblock %}

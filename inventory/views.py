@@ -727,6 +727,24 @@ def _parse_positive_int(raw_value, default):
     return value if value > 0 else default
 
 
+@login_required
+def session_stats_api(request, pk):
+    session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=pk)
+    analysis = _build_inventory_session_analysis(session)
+    stat_keys = [
+        "snapshot_total", "read_count", "matching_count", "shortage_count", "surplus_count",
+        "no_read_count", "wrong_location_count", "found_out_of_scope_count", "unknown_code_count",
+        "manual_confirmation_count", "quantity_difference_count",
+    ]
+    summary = {key: analysis.get(key, 0) for key in stat_keys}
+    summary["problem_count"] = (
+        summary["wrong_location_count"]
+        + summary["found_out_of_scope_count"]
+        + summary["unknown_code_count"]
+    )
+    return JsonResponse({"ok": True, "summary": summary})
+
+
 @csrf_exempt
 @require_POST
 def scan_file_import_api(request):

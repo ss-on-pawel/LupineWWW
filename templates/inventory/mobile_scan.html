@@ -35,12 +35,12 @@
 
     #location-bar {
       background: #1e2a1e;
-      padding: 8px 14px;
-      font-size: 0.82rem;
+      padding: 11px 14px;
+      font-size: 0.95rem;
       color: #aaa;
       flex-shrink: 0;
     }
-    #location-bar strong { color: #6effa0; font-weight: 600; }
+    #location-bar strong { color: #6effa0; font-weight: 700; font-size: 1.1rem; }
     #current-location-text { word-break: break-word; }
 
     #scanner-wrap {
@@ -92,32 +92,33 @@
 
     #last-scan-bar {
       background: #1a1a1a;
-      padding: 8px 14px;
-      font-size: 0.82rem;
+      padding: 11px 14px;
+      font-size: 0.95rem;
       border-top: 1px solid #2a2a2a;
       flex-shrink: 0;
     }
     #last-scan-bar .label { color: #888; }
-    #last-code { color: #fff; font-weight: 600; font-family: monospace; }
-    #last-type { color: #aaa; font-size: 0.75rem; }
+    #last-code { color: #fff; font-weight: 700; font-family: monospace; font-size: 1.25rem; line-height: 1.2; }
+    #last-type { color: #aaa; font-size: 0.9rem; }
 
     #status-bar {
       background: #151515;
-      padding: 8px 14px;
+      padding: 11px 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.78rem;
+      font-size: 0.92rem;
       color: #888;
       border-top: 1px solid #222;
       flex-shrink: 0;
     }
-    #scan-counter { color: #ddd; }
-    #sync-indicator { display: flex; align-items: center; gap: 5px; }
+    #scan-counter { color: #ddd; font-size: 1rem; }
+    #sync-indicator { display: flex; align-items: center; gap: 6px; }
     #sync-dot {
-      width: 8px; height: 8px;
+      width: 10px; height: 10px;
       border-radius: 50%;
       background: #6effa0;
+      flex-shrink: 0;
     }
     #sync-dot.offline { background: #ff6e6e; }
     #sync-dot.pending { background: #ffa500; }
