@@ -1,6 +1,12 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+
+def _generate_mobile_scan_token():
+    return secrets.token_urlsafe(48)
 
 
 class InventorySession(models.Model):
@@ -30,6 +36,12 @@ class InventorySession(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="applied_inventory_sessions",
+    )
+    mobile_scan_token = models.CharField(
+        max_length=64,
+        unique=True,
+        default=_generate_mobile_scan_token,
+        editable=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

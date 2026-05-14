@@ -25,11 +25,76 @@
         }
 
         .inventory-session-header {
-            display: grid;
-            gap: 7px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            flex-wrap: wrap;
             padding: 14px 16px;
             border: 1px solid rgba(15, 23, 42, 0.1);
             background: rgba(255, 255, 255, 0.88);
+        }
+
+        .inv-header-main {
+            display: grid;
+            gap: 7px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .inv-mobile-scan-block {
+            display: grid;
+            gap: 5px;
+            align-self: flex-start;
+            min-width: 200px;
+            max-width: 320px;
+            flex-shrink: 0;
+        }
+
+        .inv-mobile-scan-label {
+            margin: 0;
+            color: var(--app-muted);
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.69rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .inv-mobile-scan-input-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .inv-mobile-scan-url {
+            flex: 1;
+            min-width: 0;
+            padding: 5px 8px;
+            border: 1px solid rgba(15, 23, 42, 0.15);
+            border-radius: 3px;
+            background: #f8fafc;
+            color: #475467;
+            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+            font-size: 0.69rem;
+            outline: none;
+            cursor: text;
+        }
+
+        .inv-mobile-scan-copy {
+            flex-shrink: 0;
+            padding: 5px 10px;
+            font-size: 0.78rem;
+            line-height: 1.4;
+            min-height: unset;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 600px) {
+            .inv-mobile-scan-block {
+                width: 100%;
+                max-width: none;
+            }
         }
 
         .inventory-session-kicker {
@@ -495,12 +560,21 @@
     <section class="inventory-page">
         <div class="inventory-layout-shell">
         <header class="inventory-session-header">
-            <p class="inventory-session-kicker">Inwentaryzacje</p>
-            <div class="inventory-session-title-row">
-                <h1>{{ session.number }}</h1>
-                <span class="inventory-status-pill-session">{{ session_status_display_pl }}</span>
+            <div class="inv-header-main">
+                <p class="inventory-session-kicker">Inwentaryzacje</p>
+                <div class="inventory-session-title-row">
+                    <h1>{{ session.number }}</h1>
+                    <span class="inventory-status-pill-session">{{ session_status_display_pl }}</span>
+                </div>
+                <p class="inventory-session-description">Sesja robocza spisu z bieżącym postępem, zakresem i akcjami workflow.</p>
             </div>
-            <p class="inventory-session-description">Sesja robocza spisu z bieżącym postępem, zakresem i akcjami workflow.</p>
+            <div class="inv-mobile-scan-block">
+                <p class="inv-mobile-scan-label">Skaner mobilny</p>
+                <div class="inv-mobile-scan-input-row">
+                    <input class="inv-mobile-scan-url" id="mobile-scan-url-input" type="text" value="{{ mobile_scan_url }}" readonly>
+                    <button class="ui-btn ui-btn--secondary inv-mobile-scan-copy" id="btn-copy-mobile-url" type="button">Kopiuj</button>
+                </div>
+            </div>
         </header>
 
         <section class="inventory-session-meta-grid" aria-label="Metadane sesji">
@@ -1040,5 +1114,23 @@
             });
             updateInventorySummary();
         })();
+    </script>
+    <script>
+        (function () {
+            var btn = document.getElementById('btn-copy-mobile-url');
+            var input = document.getElementById('mobile-scan-url-input');
+            if (!btn || !input) return;
+            btn.addEventListener('click', function () {
+                navigator.clipboard.writeText(input.value).then(function () {
+                    btn.textContent = 'Skopiowano';
+                    setTimeout(function () { btn.textContent = 'Kopiuj'; }, 2000);
+                }).catch(function () {
+                    input.select();
+                    document.execCommand('copy');
+                    btn.textContent = 'Skopiowano';
+                    setTimeout(function () { btn.textContent = 'Kopiuj'; }, 2000);
+                });
+            });
+        }());
     </script>
 {% endblock %}

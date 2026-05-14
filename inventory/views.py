@@ -10,7 +10,8 @@ from django.contrib.auth.views import redirect_to_login
 from django.db import transaction
 from django.db.models import Count
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -28,7 +29,7 @@ from .models import (
     InventorySessionManualConfirmation,
     InventorySessionManualQuantity,
 )
-from .services import import_inventory_scan_text, start_inventory_session
+from .services import import_inventory_scan_text, record_mobile_scan, start_inventory_session
 
 
 class InventorySessionListView(LoginRequiredMixin, ListView):
@@ -135,6 +136,8 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
 
         context.update(analysis)
         context["page_title"] = session.number
+        mobile_scan_path = reverse("inventory:mobile-scan", kwargs={"token": session.mobile_scan_token})
+        context["mobile_scan_url"] = self.request.build_absolute_uri(mobile_scan_path)
         return context
 
 
@@ -833,3 +836,51 @@ def _get_location_subtree_ids(root_locations) -> set[int]:
         location_ids.add(location_id)
         pending_ids.extend(children_by_parent_id.get(location_id, ()))
     return location_ids
+
+
+def mobile_scan_view(request, token):
+    session = get_object_or_404(InventorySession, mobile_scan_token=token)
+    locations = list(
+        Location.objects.filter(is_active=True)
+        .order_by("code")
+        .values("code", "name")
+    )
+    for loc in locations:
+        obj = Location.objects.filter(code=loc["code"]).first()
+        loc["path"] = obj.path if obj else loc["name"]
+
+    scan_count = InventoryObservedItem.objects.filter(session=session).count()
+    context = {
+        "session": session,
+        "session_data": {
+            "session_number": session.number,
+            "session_status": session.status,
+            "scan_count": scan_count,
+            "token": token,
+            "api_url": reverse("inventory:mobile-scan-api", kwargs={"token": token}),
+            "locations": locations,
+        },
+    }
+    return render(request, "inventory/mobile_scan.html", context)
+
+
+@csrf_exempt
+@require_POST
+def mobile_scan_api(request, token):
+    session = get_object_or_404(InventorySession, mobile_scan_token=token)
+    if session.status != InventorySession.Status.ACTIVE:
+        return JsonResponse({"ok": False, "error": "Session is closed."}, status=400)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid JSON."}, status=400)
+
+    code = str(data.get("code", "")).strip()
+    if not code:
+        return JsonResponse({"ok": False, "error": "Missing code."}, status=400)
+
+    current_location_code = data.get("current_location_code") or None
+    result = record_mobile_scan(session, code, current_location_code)
+    result["scan_count"] = InventoryObservedItem.objects.filter(session=session).count()
+    return JsonResponse(result)

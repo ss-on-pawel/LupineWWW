@@ -11,6 +11,8 @@ from .views import (
     apply_inventory_session_to_assets,
     manual_confirmation_api,
     manual_quantity_api,
+    mobile_scan_api,
+    mobile_scan_view,
     scan_file_import_api,
 )
 
@@ -29,4 +31,6 @@ urlpatterns = [
     path("inventory/<int:pk>/sheet/", InventorySessionSheetView.as_view(), name="session-sheet"),
     path("inventory/<int:pk>/close/", InventorySessionCloseView.as_view(), name="session-close"),
     path("inventory/<int:pk>/apply-to-assets/", apply_inventory_session_to_assets, name="session-apply-to-assets"),
+    path("inventory/mobile-scan/<str:token>/", mobile_scan_view, name="mobile-scan"),
+    path("inventory/mobile-scan/<str:token>/api/scan/", mobile_scan_api, name="mobile-scan-api"),
 ]

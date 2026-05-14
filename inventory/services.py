@@ -134,6 +134,49 @@ def import_inventory_scan_text(raw_text: str, uploaded_by=None) -> InventoryScan
     return batch
 
 
+@transaction.atomic
+def record_mobile_scan(session: "InventorySession", code: str, current_location_code: str | None) -> dict:
+    """Record a single barcode scan from the mobile scanner endpoint."""
+    now = timezone.now()
+    current_location = None
+    if current_location_code:
+        current_location = _get_location_by_code(current_location_code)
+
+    asset = _get_asset_by_scan_code(code)
+    if asset is None:
+        InventoryObservedItem.objects.create(
+            session=session,
+            asset=None,
+            code=code,
+            scanned_location=current_location,
+            status=InventoryObservedItem.Status.UNKNOWN_CODE,
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+        return {"ok": True, "type": "unknown", "status": InventoryObservedItem.Status.UNKNOWN_CODE}
+
+    status = _resolve_observed_status(session, asset, current_location)
+    observed_item, created = InventoryObservedItem.objects.get_or_create(
+        session=session,
+        asset=asset,
+        defaults={
+            "code": code,
+            "scanned_location": current_location,
+            "status": status,
+            "first_seen_at": now,
+            "last_seen_at": now,
+        },
+    )
+    if not created:
+        observed_item.code = code
+        observed_item.scanned_location = current_location
+        observed_item.status = status
+        observed_item.last_seen_at = now
+        observed_item.save(update_fields=["code", "scanned_location", "status", "last_seen_at"])
+
+    return {"ok": True, "type": "asset", "status": status}
+
+
 def _get_location_by_code(code: str):
     if not code.startswith("LOC-"):
         return None

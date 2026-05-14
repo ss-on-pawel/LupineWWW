@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Skaner — {{ session.number }}</title>
+  {{ session_data|json_script:"session-data" }}
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #111; color: #f0f0f0; font-family: system-ui, sans-serif; overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+
+    #app-header {
+      background: #1a1a1a;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    #app-header h1 { font-size: 1rem; font-weight: 700; color: #fff; }
+    #session-status-pill {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    #session-status-pill.active { background: #1a6b2e; color: #6effa0; }
+    #session-status-pill.closed { background: #5a2020; color: #ffaaaa; }
+
+    #location-bar {
+      background: #1e2a1e;
+      padding: 8px 14px;
+      font-size: 0.82rem;
+      color: #aaa;
+      flex-shrink: 0;
+    }
+    #location-bar strong { color: #6effa0; font-weight: 600; }
+    #current-location-text { word-break: break-word; }
+
+    #scanner-wrap {
+      flex: 1;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+      min-height: 0;
+    }
+    #scanner-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    #scanner-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    #scanner-frame {
+      width: 70%;
+      max-width: 300px;
+      aspect-ratio: 3 / 2;
+      border: 2px solid rgba(110, 255, 160, 0.7);
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+    }
+    #scanner-hint {
+      position: absolute;
+      bottom: 10px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.6);
+    }
+    #scanner-flash {
+      position: absolute;
+      inset: 0;
+      background: rgba(110, 255, 160, 0.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    #scanner-flash.active { opacity: 1; }
+
+    #last-scan-bar {
+      background: #1a1a1a;
+      padding: 8px 14px;
+      font-size: 0.82rem;
+      border-top: 1px solid #2a2a2a;
+      flex-shrink: 0;
+    }
+    #last-scan-bar .label { color: #888; }
+    #last-code { color: #fff; font-weight: 600; font-family: monospace; }
+    #last-type { color: #aaa; font-size: 0.75rem; }
+
+    #status-bar {
+      background: #151515;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      color: #888;
+      border-top: 1px solid #222;
+      flex-shrink: 0;
+    }
+    #scan-counter { color: #ddd; }
+    #sync-indicator { display: flex; align-items: center; gap: 5px; }
+    #sync-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #6effa0;
+    }
+    #sync-dot.offline { background: #ff6e6e; }
+    #sync-dot.pending { background: #ffa500; }
+
+    #camera-start-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      gap: 16px;
+      z-index: 10;
+    }
+    #camera-start-screen p { color: #aaa; font-size: 0.9rem; text-align: center; padding: 0 20px; }
+    #btn-start-camera {
+      background: #c1121f;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 14px 28px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #btn-start-camera:active { background: #a00e18; }
+
+    #error-screen {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      gap: 12px;
+      z-index: 11;
+    }
+    #error-screen p { color: #ff8888; text-align: center; padding: 0 20px; font-size: 0.9rem; }
+    #btn-retry {
+      background: #333;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    #closed-banner {
+      display: none;
+      background: #5a2020;
+      color: #ffaaaa;
+      text-align: center;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<header id="app-header">
+  <h1>{{ session.number }}</h1>
+  <span id="session-status-pill" class="{% if session.status == 'active' %}active{% else %}closed{% endif %}">
+    {% if session.status == 'active' %}Aktywna{% else %}Zamknięta{% endif %}
+  </span>
+</header>
+
+<div id="closed-banner">Sesja zamknięta — tryb tylko do odczytu</div>
+
+<div id="location-bar">
+  Lokalizacja: <strong id="current-location-text">—</strong>
+</div>
+
+<div id="scanner-wrap">
+  <video id="scanner-video" autoplay muted playsinline></video>
+  <div id="scanner-overlay">
+    <div id="scanner-frame"></div>
+    <div id="scanner-hint">Skieruj kamerę na kod kreskowy lub QR</div>
+  </div>
+  <div id="scanner-flash"></div>
+
+  <div id="camera-start-screen">
+    <p>Naciśnij przycisk, aby uruchomić kamerę i rozpocząć skanowanie.</p>
+    <button id="btn-start-camera">Uruchom kamerę</button>
+  </div>
+
+  <div id="error-screen">
+    <p id="error-message">Nie można uruchomić kamery.</p>
+    <button id="btn-retry">Spróbuj ponownie</button>
+  </div>
+</div>
+
+<div id="last-scan-bar">
+  <span class="label">Ostatni skan: </span>
+  <span id="last-code">—</span>
+  <br>
+  <span id="last-type"></span>
+</div>
+
+<div id="status-bar">
+  <span id="scan-counter">Skany: <strong id="scan-count-val">0</strong></span>
+  <span id="sync-indicator">
+    <span id="sync-dot"></span>
+    <span id="sync-label">Online</span>
+    <span id="pending-info" style="display:none">· oczekuje: <strong id="pending-num">0</strong></span>
+  </span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const SESSION_DATA = JSON.parse(document.getElementById('session-data').textContent);
+  const { session_number, session_status, scan_count: initialCount, api_url, locations } = SESSION_DATA;
+
+  const locationCodes = new Set(locations.map(l => l.code));
+  const locationByCode = {};
+  locations.forEach(l => { locationByCode[l.code] = l; });
+
+  let currentLocationCode = null;
+  let scanCount = initialCount;
+  let pendingCount = 0;
+  let syncing = false;
+  let lastScannedAt = 0;
+  const DEBOUNCE_MS = 2000;
+
+  // DOM refs
+  const elLocation = document.getElementById('current-location-text');
+  const elLastCode = document.getElementById('last-code');
+  const elLastType = document.getElementById('last-type');
+  const elScanCount = document.getElementById('scan-count-val');
+  const elSyncDot = document.getElementById('sync-dot');
+  const elSyncLabel = document.getElementById('sync-label');
+  const elPendingInfo = document.getElementById('pending-info');
+  const elPendingNum = document.getElementById('pending-num');
+  const elFlash = document.getElementById('scanner-flash');
+  const elClosed = document.getElementById('closed-banner');
+  const elStartScreen = document.getElementById('camera-start-screen');
+  const elErrorScreen = document.getElementById('error-screen');
+  const elErrorMsg = document.getElementById('error-message');
+
+  if (session_status !== 'active') {
+    elClosed.style.display = 'block';
+  }
+
+  elScanCount.textContent = scanCount;
+
+  // ─── IndexedDB ────────────────────────────────────────────────
+  const DB_NAME = 'lupine-scanner-v1';
+  const STORE = 'pending';
+  let db = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = e => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains(STORE)) {
+          d.createObjectStore(STORE, { autoIncrement: true, keyPath: 'id' });
+        }
+      };
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function dbAdd(record) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const req = store.add(record);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function dbGetAll() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const store = tx.objectStore(STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const results = (req.result || []).filter(r => r.token === SESSION_DATA.token);
+        resolve(results);
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function dbDelete(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+  // ─── Sync ─────────────────────────────────────────────────────
+  async function syncPending() {
+    if (syncing || !navigator.onLine) return;
+    const items = await dbGetAll();
+    if (items.length === 0) return;
+    syncing = true;
+    for (const item of items) {
+      try {
+        const resp = await fetch(api_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: item.code, current_location_code: item.location_code }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          await dbDelete(item.id);
+          pendingCount = Math.max(0, pendingCount - 1);
+          if (data.scan_count !== undefined) {
+            scanCount = data.scan_count;
+            elScanCount.textContent = scanCount;
+          }
+        } else {
+          break;
+        }
+      } catch {
+        break;
+      }
+    }
+    syncing = false;
+    updateSyncUI();
+  }
+
+  function updateSyncUI() {
+    const online = navigator.onLine;
+    elSyncDot.className = '';
+    if (!online) {
+      elSyncDot.classList.add('offline');
+      elSyncLabel.textContent = 'Offline';
+    } else if (pendingCount > 0) {
+      elSyncDot.classList.add('pending');
+      elSyncLabel.textContent = 'Synchronizacja…';
+    } else {
+      elSyncLabel.textContent = 'Online';
+    }
+    if (pendingCount > 0) {
+      elPendingInfo.style.display = 'inline';
+      elPendingNum.textContent = pendingCount;
+    } else {
+      elPendingInfo.style.display = 'none';
+    }
+  }
+
+  window.addEventListener('online', () => { updateSyncUI(); syncPending(); });
+  window.addEventListener('offline', updateSyncUI);
+  setInterval(syncPending, 5000);
+
+  // ─── Scan handler ─────────────────────────────────────────────
+  async function handleScan(code) {
+    const now = Date.now();
+    if (now - lastScannedAt < DEBOUNCE_MS) return;
+    lastScannedAt = now;
+
+    flash();
+
+    if (locationCodes.has(code)) {
+      currentLocationCode = code;
+      const loc = locationByCode[code];
+      elLocation.textContent = loc.path || loc.name || code;
+      elLastCode.textContent = code;
+      elLastType.textContent = 'Lokalizacja — zmieniono';
+      return;
+    }
+
+    elLastCode.textContent = code;
+    elLastType.textContent = 'Skanowanie…';
+
+    const entry = { token: SESSION_DATA.token, code, location_code: currentLocationCode };
+
+    if (navigator.onLine) {
+      try {
+        const resp = await fetch(api_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, current_location_code: currentLocationCode }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.scan_count !== undefined) {
+            scanCount = data.scan_count;
+            elScanCount.textContent = scanCount;
+          }
+          elLastType.textContent = formatResultType(data);
+          updateSyncUI();
+          return;
+        }
+      } catch { /* fall through to buffer */ }
+    }
+
+    await dbAdd(entry);
+    pendingCount++;
+    elLastType.textContent = 'Zapisano w buforze';
+    updateSyncUI();
+  }
+
+  function formatResultType(data) {
+    if (data.type === 'location') return 'Lokalizacja';
+    if (data.type === 'unknown') return 'Nieznany kod';
+    const labels = {
+      found_ok: 'Środek — lokalizacja OK',
+      found_other_location: 'Środek — inna lokalizacja',
+      found_out_of_scope: 'Środek — poza zakresem',
+      unknown_code: 'Nieznany kod',
+    };
+    return labels[data.status] || 'Środek';
+  }
+
+  function flash() {
+    elFlash.classList.add('active');
+    setTimeout(() => elFlash.classList.remove('active'), 150);
+  }
+
+  // ─── Camera / ZXing ───────────────────────────────────────────
+  let codeReader = null;
+  let scanControls = null;
+
+  async function startCamera() {
+    elStartScreen.style.display = 'none';
+    elErrorScreen.style.display = 'none';
+    try {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      const videoEl = document.getElementById('scanner-video');
+      scanControls = await codeReader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        videoEl,
+        (result, err) => {
+          if (result) handleScan(result.getText());
+        }
+      );
+    } catch (err) {
+      elErrorMsg.textContent = 'Błąd kamery: ' + (err.message || err);
+      elErrorScreen.style.display = 'flex';
+    }
+  }
+
+  document.getElementById('btn-start-camera').addEventListener('click', startCamera);
+  document.getElementById('btn-retry').addEventListener('click', () => {
+    if (scanControls) { try { scanControls.stop(); } catch {} scanControls = null; }
+    startCamera();
+  });
+
+  // ─── Init ─────────────────────────────────────────────────────
+  openDB().then(d => {
+    db = d;
+    dbGetAll().then(items => {
+      pendingCount = items.length;
+      updateSyncUI();
+      if (pendingCount > 0) syncPending();
+    });
+  }).catch(err => {
+    console.warn('IndexedDB unavailable:', err);
+  });
+
+  updateSyncUI();
+}());
+</script>
+</body>
+</html>
