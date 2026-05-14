@@ -1,7 +1,16 @@
+import os
+import uuid
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+
+
+def _attachment_upload_path(instance, filename):
+    basename = os.path.basename(filename)
+    prefix = uuid.uuid4().hex[:8]
+    return f"assets/attachments/{instance.asset_id}/{prefix}_{basename}"
 
 
 class Asset(models.Model):
@@ -433,3 +442,34 @@ class AssetHistoryEntry(models.Model):
 
     def __str__(self) -> str:
         return f"{self.asset_id}: {self.description}"
+
+
+class AssetAttachment(models.Model):
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        verbose_name="Środek",
+    )
+    file = models.FileField(upload_to=_attachment_upload_path, verbose_name="Plik")
+    title = models.CharField(max_length=255, verbose_name="Tytuł")
+    original_filename = models.CharField(max_length=255, verbose_name="Oryginalna nazwa pliku")
+    content_type = models.CharField(max_length=120, verbose_name="Typ MIME")
+    size_bytes = models.PositiveIntegerField(verbose_name="Rozmiar (bajty)")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="uploaded_attachments",
+        verbose_name="Dodany przez",
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Data dodania")
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+        verbose_name = "Załącznik"
+        verbose_name_plural = "Załączniki"
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.original_filename})"

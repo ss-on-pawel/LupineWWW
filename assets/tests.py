@@ -8299,3 +8299,114 @@ class AssetImportViewTests(TestCase):
         self.assertEqual(Asset.objects.filter(name="Klawiatura").count(), 1)
         self.assertEqual(Asset.objects.filter(name="Mysz").count(), 0)
 
+
+class AssetAttachmentViewTests(TestCase):
+    def setUp(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.SimpleUploadedFile = SimpleUploadedFile
+
+        self.location = Location.objects.create(name="Biuro", code="BIU", is_active=True)
+        self.asset_type = AssetTypeDictionary.objects.get(code="fixed")
+        self.asset = Asset.objects.create(
+            name="Laptop Test",
+            inventory_number="LT-001",
+            barcode="LTBC001",
+            asset_type="fixed",
+            asset_type_ref=self.asset_type,
+            location_fk=self.location,
+        )
+        self.superuser = User.objects.create_superuser(username="su_att", password="pass")
+        self.manager = User.objects.create_user(username="mgr_att", password="pass")
+        self.manager.profile.role = UserProfile.Role.MANAGER
+        self.manager.profile.allowed_locations.add(self.location)
+        self.manager.profile.save(update_fields=["role"])
+        self.regular = User.objects.create_user(username="usr_att", password="pass")
+
+    def _make_file(self, name="doc.pdf", content=b"test", content_type="application/pdf"):
+        return self.SimpleUploadedFile(name, content, content_type=content_type)
+
+    def _upload_url(self):
+        return reverse("assets:attachment-upload", kwargs={"asset_id": self.asset.pk})
+
+    def _download_url(self, att_id):
+        return reverse("assets:attachment-download", kwargs={"asset_id": self.asset.pk, "attachment_id": att_id})
+
+    def _delete_url(self, att_id):
+        return reverse("assets:attachment-delete", kwargs={"asset_id": self.asset.pk, "attachment_id": att_id})
+
+    def test_upload_creates_attachment(self):
+        self.client.force_login(self.superuser)
+        resp = self.client.post(self._upload_url(), {
+            "title": "Faktura",
+            "file": self._make_file(),
+        })
+        self.assertRedirects(resp, reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        from .models import AssetAttachment
+        att = AssetAttachment.objects.get(asset=self.asset)
+        self.assertEqual(att.title, "Faktura")
+        self.assertEqual(att.original_filename, "doc.pdf")
+        self.assertEqual(att.uploaded_by, self.superuser)
+
+    def test_download_authenticated_superuser(self):
+        from .models import AssetAttachment
+        att = AssetAttachment.objects.create(
+            asset=self.asset,
+            title="Test",
+            original_filename="doc.pdf",
+            content_type="application/pdf",
+            size_bytes=4,
+            uploaded_by=self.superuser,
+            file=self._make_file(),
+        )
+        self.client.force_login(self.superuser)
+        resp = self.client.get(self._download_url(att.pk))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_download_outside_scope_returns_404(self):
+        from .models import AssetAttachment
+        att = AssetAttachment.objects.create(
+            asset=self.asset,
+            title="Test",
+            original_filename="doc.pdf",
+            content_type="application/pdf",
+            size_bytes=4,
+            uploaded_by=self.superuser,
+            file=self._make_file(),
+        )
+        # regular user has role=USER and no allowed_locations → empty scope
+        self.client.force_login(self.regular)
+        resp = self.client.get(self._download_url(att.pk))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_delete_by_manager_removes_record_and_file(self):
+        from .models import AssetAttachment
+        att = AssetAttachment.objects.create(
+            asset=self.asset,
+            title="Test",
+            original_filename="doc.pdf",
+            content_type="application/pdf",
+            size_bytes=4,
+            uploaded_by=self.superuser,
+            file=self._make_file(),
+        )
+        self.client.force_login(self.manager)
+        resp = self.client.post(self._delete_url(att.pk))
+        self.assertRedirects(resp, reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        self.assertFalse(AssetAttachment.objects.filter(pk=att.pk).exists())
+
+    def test_delete_by_regular_user_forbidden(self):
+        from .models import AssetAttachment
+        att = AssetAttachment.objects.create(
+            asset=self.asset,
+            title="Test",
+            original_filename="doc.pdf",
+            content_type="application/pdf",
+            size_bytes=4,
+            uploaded_by=self.superuser,
+            file=self._make_file(),
+        )
+        self.client.force_login(self.regular)
+        resp = self.client.post(self._delete_url(att.pk))
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(AssetAttachment.objects.filter(pk=att.pk).exists())
+

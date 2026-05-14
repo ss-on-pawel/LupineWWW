@@ -7,6 +7,9 @@ from .views import (
     AssetCreateView,
     AssetListView,
     AssetUpdateView,
+    asset_attachment_delete,
+    asset_attachment_download,
+    asset_attachment_upload,
     asset_change_approve,
     asset_change_bulk_approve,
     asset_change_bulk_reject,
@@ -49,4 +52,7 @@ urlpatterns = [
     path("assets/archive/lt/", asset_lt_document, name="archive-lt"),
     path("assets/import/", asset_import, name="import"),
     path("assets/import/template/", asset_import_template, name="import-template"),
+    path("assets/<int:asset_id>/attachments/upload/", asset_attachment_upload, name="attachment-upload"),
+    path("assets/<int:asset_id>/attachments/<int:attachment_id>/download/", asset_attachment_download, name="attachment-download"),
+    path("assets/<int:asset_id>/attachments/<int:attachment_id>/delete/", asset_attachment_delete, name="attachment-delete"),
 ]

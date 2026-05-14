@@ -336,6 +336,39 @@
                 grid-column: auto;
             }
         }
+        .attach-upload-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            padding: 14px 0 4px;
+        }
+        .attach-title-input {
+            flex: 1 1 200px;
+            min-height: 38px;
+            padding: 0 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 0.9rem;
+            color: #111927;
+            background: rgba(255,255,255,0.9);
+        }
+        .attach-title-input:focus {
+            outline: 2px solid rgba(15, 76, 129, 0.22);
+            outline-offset: 2px;
+        }
+        .attach-file-input {
+            flex: 1 1 180px;
+            font-size: 0.88rem;
+            color: #425466;
+        }
+        .attach-actions-cell {
+            white-space: nowrap;
+        }
+        .asset-attachments-table td {
+            vertical-align: middle;
+        }
     </style>
 {% endblock %}
 
@@ -600,6 +633,68 @@
                         </div>
                     {% else %}
                         <p class="asset-history-empty">Brak historii środka.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-dokumenty">
+                    <span class="section-icon">▶</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Pliki</span>
+                        <span class="section-title-text">Dokumenty / Załączniki</span>
+                    </div>
+                </button>
+                <div class="section-body is-hidden" id="sekcja-dokumenty">
+                    <form method="post" enctype="multipart/form-data" action="{% url 'assets:attachment-upload' asset.id %}">
+                        {% csrf_token %}
+                        <div class="attach-upload-row">
+                            <input class="attach-title-input" type="text" name="title" placeholder="Tytuł dokumentu" maxlength="255" required>
+                            <input class="attach-file-input" type="file" name="file" required>
+                            <button class="ui-btn ui-btn--primary" type="submit">Dodaj</button>
+                        </div>
+                    </form>
+                    {% if attachments %}
+                        <div class="asset-history-table-wrap" style="margin-top: 16px;">
+                            <table class="asset-history-table asset-attachments-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tytuł</th>
+                                        <th>Plik</th>
+                                        <th>Rozmiar</th>
+                                        <th>Dodany przez</th>
+                                        <th>Data</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for att in attachments %}
+                                        <tr>
+                                            <td>{{ att.title }}</td>
+                                            <td class="asset-history-value">{{ att.original_filename }}</td>
+                                            <td class="asset-history-value">{{ att.size_bytes|filesizeformat }}</td>
+                                            <td>
+                                                {% if att.uploaded_by %}
+                                                    {% firstof att.uploaded_by.get_full_name att.uploaded_by.get_username %}
+                                                {% else %}—{% endif %}
+                                            </td>
+                                            <td class="asset-history-date">{{ att.uploaded_at|date:"Y-m-d H:i" }}</td>
+                                            <td class="attach-actions-cell">
+                                                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:attachment-download' asset.id att.id %}" target="_blank">Otwórz</a>
+                                                {% if can_delete_attachment %}
+                                                    <form method="post" action="{% url 'assets:attachment-delete' asset.id att.id %}" style="display:inline;" onsubmit="return window.confirm('Usunąć załącznik?');">
+                                                        {% csrf_token %}
+                                                        <button class="ui-btn ui-btn--danger" type="submit">Usuń</button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="asset-history-empty">Brak załączników.</p>
                     {% endif %}
                 </div>
             </section>

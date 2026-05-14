@@ -172,6 +172,11 @@ class AssetForm(forms.ModelForm):
         return exclude
 
 
+class AssetAttachmentForm(forms.Form):
+    title = forms.CharField(label="Tytuł", max_length=255)
+    file = forms.FileField(label="Plik")
+
+
 class AssetTypeDictionaryForm(forms.ModelForm):
     code = forms.CharField(label="Kod", max_length=64)
     barcode_prefix = forms.CharField(

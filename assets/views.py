@@ -16,9 +16,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
+import urllib.parse
+
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
-from .forms import AssetForm, AssetTypeDictionaryForm
-from .models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
+from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm
+from .models import Asset, AssetAttachment, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     capture_asset_history_values,
@@ -818,12 +820,14 @@ def asset_detail(request, id):
         asset_id_snapshot=asset.pk,
         session__status=InventorySession.Status.ACTIVE,
     ).exists()
+    attachments = asset.attachments.select_related("uploaded_by").order_by("-uploaded_at")
     return render(
         request,
         "assets/asset_detail.html",
         {
             "asset": asset,
             "can_restore_asset": (not asset.is_active) and _user_can_restore_asset(request.user),
+            "can_delete_attachment": _user_can_restore_asset(request.user),
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "withdraw_capabilities": get_asset_withdraw_capabilities(asset),
             "history_entries": history_entries,
@@ -834,6 +838,8 @@ def asset_detail(request, id):
                 (Asset.Status.LIQUIDATED, dict(Asset.Status.choices)[Asset.Status.LIQUIDATED]),
             ],
             "page_title": "Karta środka",
+            "attachments": attachments,
+            "attachment_form": AssetAttachmentForm(),
         },
     )
 
@@ -945,6 +951,70 @@ def asset_withdraw(request, id):
         field_name="is_active",
     )
     messages.success(request, "Środek został wycofany z aktywnej Ewidencji.")
+    return redirect("assets:detail", id=asset.pk)
+
+
+@login_required
+@require_POST
+def asset_attachment_upload(request, asset_id):
+    asset = get_object_or_404(Asset, pk=asset_id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    form = AssetAttachmentForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, "Nie udało się dodać załącznika: nieprawidłowe dane.")
+        return redirect("assets:detail", id=asset.pk)
+
+    uploaded_file = form.cleaned_data["file"]
+    AssetAttachment.objects.create(
+        asset=asset,
+        file=uploaded_file,
+        title=form.cleaned_data["title"],
+        original_filename=uploaded_file.name,
+        content_type=uploaded_file.content_type or "application/octet-stream",
+        size_bytes=uploaded_file.size,
+        uploaded_by=request.user,
+    )
+    messages.success(request, "Załącznik został dodany.")
+    return redirect("assets:detail", id=asset.pk)
+
+
+@login_required
+def asset_attachment_download(request, asset_id, attachment_id):
+    asset = get_object_or_404(Asset, pk=asset_id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    attachment = get_object_or_404(AssetAttachment, pk=attachment_id, asset=asset)
+    try:
+        file_handle = attachment.file.open("rb")
+    except FileNotFoundError:
+        raise Http404
+
+    encoded_name = urllib.parse.quote(attachment.original_filename, safe="")
+    response = FileResponse(file_handle, content_type=attachment.content_type)
+    response["Content-Disposition"] = f"inline; filename*=UTF-8''{encoded_name}"
+    return response
+
+
+@login_required
+@require_POST
+def asset_attachment_delete(request, asset_id, attachment_id):
+    if not _user_can_restore_asset(request.user):
+        raise PermissionDenied
+
+    asset = get_object_or_404(Asset, pk=asset_id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    attachment = get_object_or_404(AssetAttachment, pk=attachment_id, asset=asset)
+    attachment.file.delete(save=False)
+    attachment.delete()
+    messages.success(request, "Załącznik został usunięty.")
     return redirect("assets:detail", id=asset.pk)
 
 
