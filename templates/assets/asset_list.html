@@ -1552,6 +1552,9 @@
                     <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
                         {{ asset_mode_switch_label }}
                     </a>
+                    {% if request.user.is_superuser or request.user.profile.role == "admin" %}
+                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import' %}">Import XLSX</a>
+                    {% endif %}
                 </div>
             </div>
             <div class="asset-layout-toolbar">
