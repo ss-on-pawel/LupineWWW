@@ -1376,12 +1376,43 @@
         .asset-list-shell[data-mode="dense"] .asset-runtime-status-pill {
             border-color: rgba(14, 116, 144, 0.24);
         }
+        .asset-info-pill {
+            display: inline-flex;
+            align-items: center;
+            height: 20px;
+            padding: 0 7px;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            border-radius: 999px;
+            background: rgba(248, 250, 252, 0.9);
+            font-family: var(--mono-font);
+            font-size: 0.68rem;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: #425466;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        .asset-info-pill--approval {
+            border-color: rgba(15, 76, 129, 0.26);
+            background: rgba(239, 246, 255, 0.85);
+            color: #1e40af;
+        }
+        .asset-info-pill--rejected {
+            border-color: rgba(100, 116, 139, 0.22);
+            background: rgba(248, 250, 252, 0.92);
+            color: #64748b;
+        }
+        .asset-name-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+        }
         .asset-service-alert-pill {
             display: inline-flex;
             align-items: center;
             height: 20px;
             padding: 0 7px;
-            margin-left: 6px;
             border: 1px solid rgba(15, 23, 42, 0.14);
             border-radius: 999px;
             background: rgba(248, 250, 252, 0.9);
@@ -2927,36 +2958,43 @@ let searchDebounceId = null;
                             link.className = "asset-name-link";
                             link.textContent = row.name || "-";
                             td.appendChild(link);
+                            const badgeRow = document.createElement("div");
+                            badgeRow.className = "asset-name-badges";
                             if (row.has_pending_update) {
                                 const pending = document.createElement("span");
-                                pending.textContent = " • Oczekuje";
-                                td.appendChild(pending);
+                                pending.className = "asset-info-pill asset-info-pill--approval";
+                                pending.textContent = "Oczekuje";
+                                badgeRow.appendChild(pending);
                             } else if (row.has_rejected_update) {
                                 const rejected = document.createElement("span");
-                                rejected.textContent = " • Odrzucono";
-                                td.appendChild(rejected);
-                                if (row.rejected_update_comment && !isRejectedUpdateCommentDismissed(row.id)) {
-                                    const comment = document.createElement("div");
-                                    comment.className = "asset-rejected-update-comment";
-                                    comment.title = row.rejected_update_comment;
-                                    const commentText = document.createElement("div");
-                                    commentText.className = "asset-rejected-update-text";
-                                    commentText.textContent = "Powód: " + row.rejected_update_comment;
-                                    comment.appendChild(commentText);
-                                    const dismiss = document.createElement("span");
-                                    dismiss.className = "asset-rejected-update-close";
-                                    dismiss.dataset.role = "dismiss-rejected";
-                                    dismiss.dataset.assetId = row.id;
-                                    dismiss.textContent = "×";
-                                    comment.appendChild(dismiss);
-                                    td.appendChild(comment);
-                                }
+                                rejected.className = "asset-info-pill asset-info-pill--rejected";
+                                rejected.textContent = "Odrzucono";
+                                badgeRow.appendChild(rejected);
                             }
-                            if (row.has_active_service_alert && !row.has_pending_update) {
+                            if (row.has_active_service_alert) {
                                 const alertBadge = document.createElement("span");
-                                alertBadge.className = "asset-service-alert-pill asset-service-alert-" + getAlertUrgencyLevel(row.service_alert_next_date);
+                                alertBadge.className = "asset-info-pill asset-service-alert-" + getAlertUrgencyLevel(row.service_alert_next_date);
                                 alertBadge.textContent = "Alert serwisowy";
-                                td.appendChild(alertBadge);
+                                badgeRow.appendChild(alertBadge);
+                            }
+                            if (badgeRow.hasChildNodes()) {
+                                td.appendChild(badgeRow);
+                            }
+                            if (row.has_rejected_update && row.rejected_update_comment && !isRejectedUpdateCommentDismissed(row.id)) {
+                                const comment = document.createElement("div");
+                                comment.className = "asset-rejected-update-comment";
+                                comment.title = row.rejected_update_comment;
+                                const commentText = document.createElement("div");
+                                commentText.className = "asset-rejected-update-text";
+                                commentText.textContent = "Powód: " + row.rejected_update_comment;
+                                comment.appendChild(commentText);
+                                const dismiss = document.createElement("span");
+                                dismiss.className = "asset-rejected-update-close";
+                                dismiss.dataset.role = "dismiss-rejected";
+                                dismiss.dataset.assetId = row.id;
+                                dismiss.textContent = "×";
+                                comment.appendChild(dismiss);
+                                td.appendChild(comment);
                             }
                         } else if (column.key === "status") {
                             const pill = document.createElement("span");

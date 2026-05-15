@@ -5816,7 +5816,8 @@ class AssetListViewTests(TestCase):
         response = self.client.get(reverse("assets:list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'pending.textContent = " • Oczekuje";')
+        self.assertContains(response, 'pending.className = "asset-info-pill asset-info-pill--approval";')
+        self.assertContains(response, 'pending.textContent = "Oczekuje";')
 
     def test_list_view_contains_rejected_update_marker_renderer_with_pending_priority(self):
         user = User.objects.create_user(username="viewer-rejected-marker", password="test-pass-123")
@@ -5826,9 +5827,9 @@ class AssetListViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'if (row.has_pending_update) {')
-        self.assertContains(response, 'pending.textContent = " • Oczekuje";')
+        self.assertContains(response, 'pending.className = "asset-info-pill asset-info-pill--approval";')
         self.assertContains(response, '} else if (row.has_rejected_update) {')
-        self.assertContains(response, 'rejected.textContent = " • Odrzucono";')
+        self.assertContains(response, 'rejected.className = "asset-info-pill asset-info-pill--rejected";')
 
 
 class AssetDetailViewTests(TestCase):
