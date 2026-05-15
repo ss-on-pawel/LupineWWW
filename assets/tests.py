@@ -23,7 +23,7 @@ from inventory.models import InventorySession, InventorySnapshotItem
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
-from .models import Asset, AssetBarcodeSequence, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
+from .models import Asset, AssetBarcodeSequence, AssetChangeRequest, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
@@ -8410,3 +8410,182 @@ class AssetAttachmentViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertTrue(AssetAttachment.objects.filter(pk=att.pk).exists())
 
+
+class AssetServiceAlertTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Alert Test Location")
+
+        self.superuser = User.objects.create_superuser(
+            username="alert-super", password="test-pass-123"
+        )
+        self.user_in_scope = User.objects.create_user(
+            username="alert-user-in", password="test-pass-123"
+        )
+        self.user_in_scope.profile.allowed_locations.add(self.location)
+
+        self.user_out_scope = User.objects.create_user(
+            username="alert-user-out", password="test-pass-123"
+        )
+
+        self.asset = Asset.objects.create(
+            name="Alert Test Asset",
+            inventory_number="ALT-001",
+            location_fk=self.location,
+        )
+
+    def _create_url(self):
+        return reverse("assets:service-alert-create", kwargs={"asset_id": self.asset.pk})
+
+    def _resolve_url(self, alert_pk):
+        return reverse("assets:service-alert-resolve", kwargs={"alert_id": alert_pk})
+
+    def test_create_alert_by_authenticated_user_with_access(self):
+        self.client.force_login(self.user_in_scope)
+        response = self.client.post(
+            self._create_url(),
+            {"reason": "Koniec przeglądu technicznego", "alert_date": "2026-06-01"},
+        )
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        alert = self.asset.service_alerts.get()
+        self.assertEqual(alert.reason, "Koniec przeglądu technicznego")
+        self.assertEqual(alert.status, AssetServiceAlert.Status.ACTIVE)
+        self.assertEqual(alert.created_by, self.user_in_scope)
+
+    def test_create_alert_rejected_for_user_outside_scope(self):
+        self.client.force_login(self.user_out_scope)
+        response = self.client.post(
+            self._create_url(),
+            {"reason": "Przegląd", "alert_date": "2026-06-01"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(self.asset.service_alerts.exists())
+
+    def test_create_alert_requires_login(self):
+        response = self.client.post(
+            self._create_url(),
+            {"reason": "Przegląd", "alert_date": "2026-06-01"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(self.asset.service_alerts.exists())
+
+    def test_resolve_alert_requires_manager_or_admin(self):
+        alert = AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Przegląd",
+            alert_date=date(2026, 6, 1),
+        )
+        self.client.force_login(self.user_in_scope)
+        response = self.client.post(self._resolve_url(alert.pk), {"status": "done"})
+        self.assertEqual(response.status_code, 403)
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, AssetServiceAlert.Status.ACTIVE)
+
+    def test_resolve_alert_done_by_superuser(self):
+        alert = AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Przegląd",
+            alert_date=date(2026, 6, 1),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.post(self._resolve_url(alert.pk), {"status": "done"})
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, AssetServiceAlert.Status.DONE)
+        self.assertEqual(alert.resolved_by, self.superuser)
+        self.assertIsNotNone(alert.resolved_at)
+
+    def test_resolve_alert_cancelled_by_superuser(self):
+        alert = AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Przegląd",
+            alert_date=date(2026, 6, 1),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.post(self._resolve_url(alert.pk), {"status": "cancelled"})
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, AssetServiceAlert.Status.CANCELLED)
+
+    def test_api_returns_no_alert_flags_when_no_alerts(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"search": self.asset.inventory_number},
+        )
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertFalse(row["has_active_service_alert"])
+        self.assertFalse(row["service_alert_overdue"])
+        self.assertEqual(row["service_alert_label"], "")
+        self.assertEqual(row["service_alert_next_date"], "")
+
+    def test_api_returns_alert_flag_for_future_alert(self):
+        AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Przegląd roczny",
+            alert_date=date(2099, 1, 1),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"search": self.asset.inventory_number},
+        )
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_active_service_alert"])
+        self.assertFalse(row["service_alert_overdue"])
+        self.assertEqual(row["service_alert_label"], "Przegląd roczny")
+        self.assertEqual(row["service_alert_next_date"], "2099-01-01")
+
+    def test_api_returns_overdue_flag_for_past_alert(self):
+        AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Przeterminowany przegląd",
+            alert_date=date(2020, 1, 1),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"search": self.asset.inventory_number},
+        )
+        row = response.json()["results"][0]
+        self.assertTrue(row["has_active_service_alert"])
+        self.assertTrue(row["service_alert_overdue"])
+
+    def test_api_closed_alert_does_not_set_flag(self):
+        AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Zamknięty przegląd",
+            alert_date=date(2099, 1, 1),
+            status=AssetServiceAlert.Status.DONE,
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(
+            reverse("assets:api-list"),
+            {"search": self.asset.inventory_number},
+        )
+        row = response.json()["results"][0]
+        self.assertFalse(row["has_active_service_alert"])
+
+    def test_asset_detail_shows_active_alert(self):
+        AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Wymiana filtra powietrza",
+            alert_date=date(2026, 9, 1),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Wymiana filtra powietrza")
+        self.assertContains(response, "Alerty serwisowe")
+
+    def test_asset_detail_hides_resolved_alert(self):
+        AssetServiceAlert.objects.create(
+            asset=self.asset,
+            reason="Stary przegląd",
+            alert_date=date(2026, 9, 1),
+            status=AssetServiceAlert.Status.DONE,
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Stary przegląd")

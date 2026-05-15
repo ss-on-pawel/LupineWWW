@@ -1376,6 +1376,38 @@
         .asset-list-shell[data-mode="dense"] .asset-runtime-status-pill {
             border-color: rgba(14, 116, 144, 0.24);
         }
+        .asset-service-alert-pill {
+            display: inline-flex;
+            align-items: center;
+            height: 20px;
+            padding: 0 7px;
+            margin-left: 6px;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            border-radius: 999px;
+            background: rgba(248, 250, 252, 0.9);
+            font-family: var(--mono-font);
+            font-size: 0.68rem;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: #425466;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        .asset-service-alert-overdue {
+            border-color: rgba(185, 28, 28, 0.28);
+            background: rgba(254, 242, 242, 0.85);
+            color: #991b1b;
+        }
+        .asset-service-alert-due-soon {
+            border-color: rgba(180, 89, 9, 0.28);
+            background: rgba(255, 247, 224, 0.85);
+            color: #92400e;
+        }
+        .asset-service-alert-upcoming {
+            border-color: rgba(22, 101, 52, 0.24);
+            background: rgba(240, 253, 244, 0.85);
+            color: #166534;
+        }
         .asset-table-empty,
         .asset-table-loading {
             padding: 28px 18px;
@@ -2859,6 +2891,17 @@ let searchDebounceId = null;
                 });
             }
 
+            function getAlertUrgencyLevel(nextDateStr) {
+                if (!nextDateStr) return "scheduled";
+                var today = new Date();
+                today.setHours(0, 0, 0, 0);
+                var diffDays = Math.floor((new Date(nextDateStr) - today) / 86400000);
+                if (diffDays < 0) return "overdue";
+                if (diffDays <= 7) return "due-soon";
+                if (diffDays <= 30) return "scheduled";
+                return "upcoming";
+            }
+
             function renderRows(rows) {
                 const visibleColumns = getVisibleColumns();
                 elements.tableBody.innerHTML = "";
@@ -2908,6 +2951,12 @@ let searchDebounceId = null;
                                     comment.appendChild(dismiss);
                                     td.appendChild(comment);
                                 }
+                            }
+                            if (row.has_active_service_alert && !row.has_pending_update) {
+                                const alertBadge = document.createElement("span");
+                                alertBadge.className = "asset-service-alert-pill asset-service-alert-" + getAlertUrgencyLevel(row.service_alert_next_date);
+                                alertBadge.textContent = "Alert serwisowy";
+                                td.appendChild(alertBadge);
                             }
                         } else if (column.key === "status") {
                             const pill = document.createElement("span");

@@ -89,6 +89,11 @@
             background: rgba(240, 249, 255, 0.78);
             color: #155e75;
         }
+        .meta-pill-alert {
+            border-color: rgba(180, 89, 9, 0.28);
+            background: rgba(255, 247, 224, 0.85);
+            color: #92400e;
+        }
         .asset-actions {
             display: flex;
             gap: 8px;
@@ -384,6 +389,9 @@
                     {% if is_in_active_inventory %}
                         <span class="meta-pill meta-pill-runtime">PROCES / {{ runtime_status_display }}</span>
                     {% endif %}
+                    {% if service_alerts %}
+                        <span class="meta-pill meta-pill-alert">ALERT / {{ service_alerts.0.reason|truncatechars:40 }}</span>
+                    {% endif %}
                     <span class="meta-pill">RODZAJ / {{ asset_type_display }}</span>
                     <span class="meta-pill">LOKALIZACJA / {{ asset.location|default:"-" }}</span>
                 </div>
@@ -588,6 +596,60 @@
                             <div class="detail-value is-mono">{{ asset.insurance_until|date:"Y-m-d"|default:"-" }}</div>
                         </div>
                     </div>
+                    <div style="border-top: var(--asset-line); padding: 16px 0 4px;">
+                        <span class="section-label">Alerty serwisowe</span>
+                    </div>
+                    {% if service_alerts %}
+                        <div class="asset-history-table-wrap">
+                            <table class="asset-history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Data alertu</th>
+                                        <th>Powód / opis</th>
+                                        <th>Dodany przez</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for alert in service_alerts %}
+                                        <tr>
+                                            <td class="asset-history-date">{{ alert.alert_date|date:"Y-m-d" }}</td>
+                                            <td>{{ alert.reason }}</td>
+                                            <td>
+                                                {% if alert.created_by %}
+                                                    {% firstof alert.created_by.get_full_name alert.created_by.get_username %}
+                                                {% else %}—{% endif %}
+                                            </td>
+                                            <td class="attach-actions-cell">
+                                                {% if can_manage_service_alerts %}
+                                                    <form method="post" action="{% url 'assets:service-alert-resolve' alert.id %}" style="display:inline;">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="status" value="done">
+                                                        <button class="ui-btn ui-btn--secondary" type="submit">Wykonany</button>
+                                                    </form>
+                                                    <form method="post" action="{% url 'assets:service-alert-resolve' alert.id %}" style="display:inline;" onsubmit="return window.confirm('Anulować alert?');">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="status" value="cancelled">
+                                                        <button class="ui-btn ui-btn--danger" type="submit">Anuluj</button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="asset-history-empty">Brak aktywnych alertów serwisowych.</p>
+                    {% endif %}
+                    <form method="post" action="{% url 'assets:service-alert-create' asset.id %}" style="margin-top: 8px; margin-bottom: 8px;">
+                        {% csrf_token %}
+                        <div class="attach-upload-row">
+                            <input class="attach-title-input" type="text" name="reason" placeholder="Powód / opis alertu" maxlength="500" required>
+                            <input class="attach-title-input" type="date" name="alert_date" style="flex: 0 0 160px;" required>
+                            <button class="ui-btn ui-btn--primary" type="submit">Dodaj alert</button>
+                        </div>
+                    </form>
                 </div>
             </section>
 

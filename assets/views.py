@@ -1,5 +1,6 @@
 import csv
 import json
+from datetime import date
 
 from accounts.utils import get_accessible_location_ids
 from django.contrib import messages
@@ -8,7 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.paginator import EmptyPage, Paginator
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import DateField, Exists, OuterRef, Q, Subquery
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -20,7 +21,7 @@ import urllib.parse
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
 from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm
-from .models import Asset, AssetAttachment, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
+from .models import Asset, AssetAttachment, AssetChangeRequest, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     capture_asset_history_values,
@@ -840,6 +841,8 @@ def asset_detail(request, id):
             "page_title": "Karta środka",
             "attachments": attachments,
             "attachment_form": AssetAttachmentForm(),
+            "service_alerts": asset.service_alerts.filter(status=AssetServiceAlert.Status.ACTIVE).order_by("alert_date"),
+            "can_manage_service_alerts": _user_can_restore_asset(request.user),
         },
     )
 
@@ -1018,6 +1021,72 @@ def asset_attachment_delete(request, asset_id, attachment_id):
     return redirect("assets:detail", id=asset.pk)
 
 
+@login_required
+@require_POST
+def asset_service_alert_create(request, asset_id):
+    asset = get_object_or_404(Asset, pk=asset_id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    reason = request.POST.get("reason", "").strip()
+    alert_date_raw = request.POST.get("alert_date", "").strip()
+
+    if not reason:
+        messages.error(request, "Powód alertu nie może być pusty.")
+        return redirect("assets:detail", id=asset.pk)
+
+    if not alert_date_raw:
+        messages.error(request, "Data alertu jest wymagana.")
+        return redirect("assets:detail", id=asset.pk)
+
+    try:
+        alert_date = date.fromisoformat(alert_date_raw)
+    except ValueError:
+        messages.error(request, "Nieprawidłowy format daty alertu.")
+        return redirect("assets:detail", id=asset.pk)
+
+    AssetServiceAlert.objects.create(
+        asset=asset,
+        reason=reason,
+        alert_date=alert_date,
+        status=AssetServiceAlert.Status.ACTIVE,
+        created_by=request.user,
+    )
+    messages.success(request, "Alert serwisowy został dodany.")
+    return redirect("assets:detail", id=asset.pk)
+
+
+@login_required
+@require_POST
+def asset_service_alert_resolve(request, alert_id):
+    if not _user_can_restore_asset(request.user):
+        raise PermissionDenied
+
+    alert = get_object_or_404(
+        AssetServiceAlert.objects.select_related("asset"),
+        pk=alert_id,
+        status=AssetServiceAlert.Status.ACTIVE,
+    )
+    asset = alert.asset
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    new_status = request.POST.get("status", "").strip()
+    if new_status not in {AssetServiceAlert.Status.DONE, AssetServiceAlert.Status.CANCELLED}:
+        messages.error(request, "Nieprawidłowy status zamknięcia alertu.")
+        return redirect("assets:detail", id=asset.pk)
+
+    alert.status = new_status
+    alert.resolved_by = request.user
+    alert.resolved_at = timezone.now()
+    alert.save(update_fields=["status", "resolved_by", "resolved_at"])
+
+    messages.success(request, "Alert serwisowy został zamknięty.")
+    return redirect("assets:detail", id=asset.pk)
+
+
 def _format_asset_type_display(asset, asset_type_names_by_code=None):
     if asset.asset_type_ref_id and asset.asset_type_ref:
         return asset.asset_type_ref.name
@@ -1131,6 +1200,32 @@ def build_asset_list_queryset(request):
             .order_by("-reviewed_at", "-updated_at", "-pk")
             .values("review_comment")[:1]
         ),
+        has_active_service_alert=Exists(
+            AssetServiceAlert.objects.filter(
+                asset=OuterRef("pk"),
+                status=AssetServiceAlert.Status.ACTIVE,
+            )
+        ),
+        service_alert_overdue=Exists(
+            AssetServiceAlert.objects.filter(
+                asset=OuterRef("pk"),
+                status=AssetServiceAlert.Status.ACTIVE,
+                alert_date__lt=timezone.localdate(),
+            )
+        ),
+        service_alert_label=Subquery(
+            AssetServiceAlert.objects.filter(
+                asset=OuterRef("pk"),
+                status=AssetServiceAlert.Status.ACTIVE,
+            ).order_by("alert_date").values("reason")[:1]
+        ),
+        service_alert_next_date=Subquery(
+            AssetServiceAlert.objects.filter(
+                asset=OuterRef("pk"),
+                status=AssetServiceAlert.Status.ACTIVE,
+            ).order_by("alert_date").values("alert_date")[:1],
+            output_field=DateField(),
+        ),
     )
     parsed_filters = parse_asset_filters(request.GET)
     queryset = apply_asset_filters(queryset, parsed_filters)
@@ -1216,6 +1311,10 @@ def asset_list_api(request):
             "is_active_display": "Tak" if asset.is_active else "Nie",
             "updated_at": asset.updated_at.isoformat(),
             "updated_at_display": asset.updated_at.strftime("%Y-%m-%d %H:%M"),
+            "has_active_service_alert": asset.has_active_service_alert,
+            "service_alert_overdue": asset.service_alert_overdue,
+            "service_alert_label": asset.service_alert_label or "",
+            "service_alert_next_date": asset.service_alert_next_date.isoformat() if asset.service_alert_next_date else "",
         }
         for asset in page_assets
     ]
