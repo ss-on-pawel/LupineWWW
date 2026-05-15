@@ -24,6 +24,8 @@ from .views import (
     asset_list_api,
     asset_lt_document,
     asset_restore,
+    asset_service_alert_create,
+    asset_service_alert_resolve,
     asset_withdraw,
 )
 
@@ -55,4 +57,6 @@ urlpatterns = [
     path("assets/<int:asset_id>/attachments/upload/", asset_attachment_upload, name="attachment-upload"),
     path("assets/<int:asset_id>/attachments/<int:attachment_id>/download/", asset_attachment_download, name="attachment-download"),
     path("assets/<int:asset_id>/attachments/<int:attachment_id>/delete/", asset_attachment_delete, name="attachment-delete"),
+    path("assets/<int:asset_id>/service-alerts/create/", asset_service_alert_create, name="service-alert-create"),
+    path("service-alerts/<int:alert_id>/resolve/", asset_service_alert_resolve, name="service-alert-resolve"),
 ]

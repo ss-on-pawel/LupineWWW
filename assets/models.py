@@ -473,3 +473,52 @@ class AssetAttachment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.original_filename})"
+
+
+class AssetServiceAlert(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Aktywny"
+        DONE = "done", "Wykonany"
+        CANCELLED = "cancelled", "Anulowany"
+
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="service_alerts",
+        verbose_name="Środek",
+    )
+    reason = models.CharField(max_length=500, verbose_name="Powód / opis")
+    alert_date = models.DateField(db_index=True, verbose_name="Data alertu")
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        db_index=True,
+        verbose_name="Status",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="Utworzony przez",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data utworzenia")
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="Zamknięty przez",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True, verbose_name="Data zamknięcia")
+
+    class Meta:
+        ordering = ["alert_date", "created_at"]
+        verbose_name = "Alert serwisowy"
+        verbose_name_plural = "Alerty serwisowe"
+
+    def __str__(self) -> str:
+        return f"{self.asset_id}: {self.reason[:60]} ({self.alert_date})"
