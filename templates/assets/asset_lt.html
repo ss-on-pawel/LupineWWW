@@ -4,7 +4,13 @@
 
 {% block extra_head %}
     <style>
-        .inventory-sheet-screenbar {
+        /* ------------------------------------------------------------------ */
+        /*  Lupine AMS — Document language system v2                          */
+        /*  LT: Likwidacja środka trwałego / wyposażenia                      */
+        /*  All measurements in mm where possible; print-first design.        */
+        /* ------------------------------------------------------------------ */
+
+        .lt-screenbar {
             display: flex;
             flex-wrap: wrap;
             justify-content: space-between;
@@ -12,149 +18,334 @@
             margin-bottom: 12px;
         }
 
-        .inventory-sheet-page {
+        .lt-page {
             max-width: none;
             margin: 0 auto;
-            color: #111827;
+            color: #111111;
             background: #ffffff;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: "Liberation Sans", Arial, Helvetica, sans-serif;
+            font-size: 9pt;
+            line-height: 1.35;
         }
 
-        .inventory-sheet-document {
-            display: grid;
-            gap: 12px;
-            padding: 18px;
-            border: 1px solid #111827;
+        /* --- Document shell ------------------------------------------------ */
+
+        .lt-document {
             background: #ffffff;
+            padding: 10mm;
+            border: 1px solid #888;   /* screen-only frame */
         }
 
-        .inventory-sheet-title {
-            margin: 0 0 4px;
-            text-align: center;
-            font-size: 1.25rem;
-            font-weight: 800;
-            letter-spacing: 0.04em;
+        /* --- HEADER: two-column ------------------------------------------- */
+
+        .lt-header {
+            display: table;
+            width: 100%;
+            border-bottom: 1pt solid #111111;
+            padding-bottom: 3mm;
+            margin-bottom: 3mm;
         }
 
-        .inventory-sheet-subtitle {
-            margin: 0 0 10px;
-            text-align: center;
-            font-size: 0.86rem;
+        .lt-header-left {
+            display: table-cell;
+            vertical-align: top;
+            width: 65%;
+            padding-right: 4mm;
+        }
+
+        .lt-header-right {
+            display: table-cell;
+            vertical-align: top;
+            width: 35%;
+        }
+
+        .lt-org-name {
+            margin: 0 0 1mm;
+            font-size: 11pt;
             font-weight: 700;
+            line-height: 1.25;
         }
 
-        .inventory-sheet-meta {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 5px 18px;
+        .lt-org-sub {
             margin: 0;
-            font-size: 0.82rem;
+            font-size: 8.5pt;
+            color: #444444;
+            line-height: 1.3;
         }
 
-        .inventory-sheet-meta div {
-            display: grid;
-            grid-template-columns: 130px 1fr;
-            gap: 6px;
-            min-width: 0;
-        }
-
-        .inventory-sheet-meta dt {
-            font-weight: 700;
-        }
-
-        .inventory-sheet-meta dd {
-            margin: 0;
-            min-width: 0;
-        }
-
-        .inventory-sheet-line {
-            display: block;
-            min-height: 1.2em;
-            border-bottom: 1px dotted #111827;
-        }
-
-        .inventory-sheet-section-title {
-            margin: 0;
-            font-size: 0.9rem;
-            font-weight: 800;
-            text-transform: uppercase;
-        }
-
-        .inventory-sheet-table {
+        /* Bordered doc-ref box (right side of header) */
+        .lt-docref {
+            border: 0.75pt solid #111111;
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.72rem;
-            line-height: 1.2;
+            font-size: 8pt;
         }
 
-        .inventory-sheet-table th,
-        .inventory-sheet-table td {
-            padding: 4px 5px;
-            border: 1px solid #111827;
+        .lt-docref td {
+            padding: 2mm 3mm;
+            border: 0.4pt solid #999999;
+            vertical-align: middle;
+        }
+
+        .lt-docref .lt-docref-label {
+            font-size: 7pt;
+            color: #888888;
+            white-space: nowrap;
+        }
+
+        .lt-docref .lt-docref-value {
+            font-family: "Liberation Mono", "Courier New", Courier, monospace;
+            font-size: 9pt;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        /* --- TITLE --------------------------------------------------------- */
+
+        .lt-title-block {
+            border-top: 0.75pt solid #111111;
+            border-bottom: 0.75pt solid #111111;
+            text-align: center;
+            padding: 2.5mm 0;
+            margin-bottom: 4mm;
+        }
+
+        .lt-title-abbr {
+            display: block;
+            margin: 0;
+            font-size: 7.5pt;
+            font-weight: 700;
+            color: #888888;
+            letter-spacing: 0.08em;
+        }
+
+        .lt-title-main {
+            display: block;
+            margin: 0;
+            font-size: 12pt;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            line-height: 1.25;
+        }
+
+        /* --- FORMAL CONTEXT table ------------------------------------------ */
+
+        .lt-context {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5mm;
+            font-size: 8.5pt;
+        }
+
+        .lt-context .lt-ctx-hdr {
+            background: #e8e8e8;
+            font-size: 7.5pt;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 2.5mm 4mm;
+            border: 0.75pt solid #111111;
+        }
+
+        .lt-context td {
+            padding: 2.5mm 4mm;
+            border: 0.4pt solid #999999;
+            vertical-align: middle;
+        }
+
+        .lt-context .lt-ctx-label {
+            font-size: 7.5pt;
+            font-weight: 700;
+            color: #444444;
+            white-space: nowrap;
+            width: 40mm;
+        }
+
+        .lt-context .lt-ctx-value {
+            border-bottom: 0.4pt dotted #aaaaaa;
+            min-width: 30mm;
+        }
+
+        .lt-context .lt-ctx-value.is-filled {
+            border-bottom: none;
+            font-weight: 700;
+        }
+
+        /* --- SECTION LABEL ------------------------------------------------ */
+
+        .lt-section-label {
+            background: #e8e8e8;
+            border: 0.75pt solid #111111;
+            font-size: 7.5pt;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 2mm 4mm;
+            margin-bottom: 0;
+        }
+
+        /* --- MAIN ASSET TABLE --------------------------------------------- */
+
+        .lt-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 7.5pt;
+            line-height: 1.25;
+            margin-bottom: 5mm;
+        }
+
+        .lt-table thead th {
+            background: #e8e8e8;
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-align: center;
+            padding: 2.5mm 3mm;
+            border: 0.4pt solid #999999;
+            border-bottom: 0.75pt solid #111111;
+        }
+
+        .lt-table tbody td {
+            padding: 2.5mm 3mm;
+            border: 0.4pt solid #999999;
             vertical-align: top;
         }
 
-        .inventory-sheet-table th {
-            text-align: center;
-            font-weight: 800;
-            background: #f3f4f6;
+        .lt-table tfoot td {
+            padding: 2.5mm 3mm;
+            border: 0.4pt solid #999999;
+            border-top: 0.75pt solid #111111;
+            background: #eeeeee;
+            font-weight: 700;
+            font-size: 7.5pt;
         }
 
-        .inventory-sheet-table td:nth-child(1),
-        .inventory-sheet-table td:nth-child(6) {
+        .lt-table-outer {
+            border: 0.75pt solid #111111;
+        }
+
+        .lt-col-num {
             text-align: right;
-            font-variant-numeric: tabular-nums;
+            font-family: "Liberation Mono", "Courier New", Courier, monospace;
         }
 
-        .inventory-sheet-empty-note {
-            padding: 8px;
-            border: 1px solid #111827;
-            font-size: 0.82rem;
+        .lt-col-code {
+            font-family: "Liberation Mono", "Courier New", Courier, monospace;
+            font-size: 7pt;
         }
 
-        .inventory-sheet-remarks {
-            font-size: 0.82rem;
-        }
-
-        .inventory-sheet-remarks-lines {
-            margin-top: 4px;
-        }
-
-        .inventory-sheet-footer {
-            display: grid;
-            gap: 14px;
-            break-inside: avoid;
-            page-break-inside: avoid;
-            font-size: 0.82rem;
-        }
-
-        .inventory-sheet-signatures {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 24px;
-            margin-top: 8px;
-        }
-
-        .inventory-sheet-signature {
-            min-height: 58px;
-            padding-top: 34px;
-            border-top: 1px dotted #111827;
+        .lt-col-center {
             text-align: center;
-            font-size: 0.76rem;
         }
+
+        /* --- NOTES --------------------------------------------------------- */
+
+        .lt-notes-box {
+            border: 0.75pt solid #111111;
+            min-height: 24mm;
+            padding: 3mm 4mm;
+            margin-bottom: 6mm;
+            font-size: 8.5pt;
+            line-height: 1.6;
+        }
+
+        .lt-notes-lines {
+            border-bottom: 0.4pt solid #cccccc;
+            min-height: 6mm;
+            margin-bottom: 1mm;
+        }
+
+        /* --- PLACE / DATE -------------------------------------------------- */
+
+        .lt-place-date {
+            font-size: 8.5pt;
+            font-weight: 700;
+            margin-bottom: 6mm;
+        }
+
+        .lt-place-date span {
+            display: inline-block;
+            min-width: 80mm;
+            border-bottom: 0.5pt solid #111111;
+            margin-left: 3mm;
+        }
+
+        /* --- SIGNATURES ---------------------------------------------------- */
+
+        .lt-signatures {
+            display: table;
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2mm;
+        }
+
+        .lt-sig-cell {
+            display: table-cell;
+            vertical-align: bottom;
+            padding-right: 10mm;
+        }
+
+        .lt-sig-cell:last-child {
+            padding-right: 0;
+        }
+
+        .lt-sig-role {
+            font-size: 7pt;
+            font-weight: 700;
+            color: #444444;
+            text-align: center;
+            margin-bottom: 1mm;
+        }
+
+        .lt-sig-space {
+            min-height: 20mm;
+            border-bottom: 0.6pt solid #111111;
+        }
+
+        .lt-sig-sublabel {
+            font-size: 7pt;
+            color: #888888;
+            text-align: center;
+            margin-top: 1mm;
+        }
+
+        .lt-seal-cell {
+            display: table-cell;
+            vertical-align: top;
+            width: 50mm;
+            padding-left: 5mm;
+        }
+
+        .lt-seal-box {
+            border: 0.5pt solid #aaaaaa;
+            min-height: 38mm;
+            min-width: 45mm;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 2mm;
+        }
+
+        .lt-seal-label {
+            font-size: 7pt;
+            color: #888888;
+            text-align: center;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /*  PRINT OVERRIDES                                                    */
+        /* ------------------------------------------------------------------ */
 
         @page {
             size: A4;
-            margin: 10mm;
+            margin: 15mm 15mm 18mm 20mm;
         }
 
         @media print {
             body {
                 background: #ffffff !important;
+                font-size: 9pt;
             }
 
             .app-header,
-            .inventory-sheet-screenbar {
+            .lt-screenbar {
                 display: none !important;
             }
 
@@ -166,30 +357,35 @@
                 background: #ffffff !important;
             }
 
-            .inventory-sheet-page {
+            .lt-page {
                 width: auto;
                 margin: 0;
             }
 
-            .inventory-sheet-document {
+            .lt-document {
                 padding: 0;
                 border: 0;
             }
 
-            .inventory-sheet-table {
-                font-size: 0.66rem;
+            .lt-table {
+                font-size: 7pt;
             }
 
-            .inventory-sheet-table thead {
+            .lt-table thead {
                 display: table-header-group;
             }
 
-            .inventory-sheet-table tr {
+            .lt-table tbody tr {
                 break-inside: avoid;
                 page-break-inside: avoid;
             }
 
-            .inventory-sheet-signatures {
+            .lt-signatures {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+
+            .lt-notes-box {
                 break-inside: avoid;
                 page-break-inside: avoid;
             }
@@ -198,88 +394,166 @@
 {% endblock %}
 
 {% block content %}
-    <div class="inventory-sheet-screenbar">
+    <div class="lt-screenbar">
         <a class="ui-btn ui-btn--secondary" href="{% url 'assets:archive' %}">Powrót do Archiwum</a>
+        {% if ids_raw %}
+            <a class="ui-btn ui-btn--primary" href="{% url 'assets:lt-generate' %}?ids={{ ids_raw }}">Zapisz jako dokument formalny (PDF)</a>
+        {% endif %}
         <button class="ui-btn ui-btn--secondary" type="button" onclick="window.print()">Drukuj / PDF</button>
     </div>
 
-    <section class="inventory-sheet-page">
-        <article class="inventory-sheet-document">
-            <header>
-                <h1 class="inventory-sheet-title">LT — Likwidacja środka trwałego / wyposażenia</h1>
-                {% if org.full_name or org.short_name %}
-                    <p class="inventory-sheet-subtitle">{{ org.full_name|default:org.short_name }}</p>
-                {% endif %}
-                <dl class="inventory-sheet-meta">
-                    <div>
-                        <dt>Data wygenerowania</dt>
-                        <dd>{{ generated_at|date:"Y-m-d H:i" }}</dd>
-                    </div>
-                    <div>
-                        <dt>Liczba pozycji</dt>
-                        <dd>{{ assets|length }}</dd>
-                    </div>
-                    {% if org.short_name %}
-                        <div>
-                            <dt>Organizacja</dt>
-                            <dd>{{ org.short_name }}</dd>
-                        </div>
+    <section class="lt-page">
+        <article class="lt-document">
+
+            {# ================================================================ #}
+            {# 1. HEADER — ORG (left) | DOC REF (right)                       #}
+            {# ================================================================ #}
+            <header class="lt-header">
+                <div class="lt-header-left">
+                    {% if org.full_name %}
+                        <p class="lt-org-name">{{ org.full_name }}</p>
                     {% endif %}
-                </dl>
+                    {% if org.short_name and org.short_name != org.full_name %}
+                        <p class="lt-org-sub">{{ org.short_name }}</p>
+                    {% endif %}
+                    {% if org.report_footer %}
+                        <p class="lt-org-sub">{{ org.report_footer }}</p>
+                    {% endif %}
+                </div>
+                <div class="lt-header-right">
+                    <table class="lt-docref">
+                        <tr>
+                            <td class="lt-docref-label">Nr dokumentu:</td>
+                            <td class="lt-docref-value">LT/—</td>
+                        </tr>
+                        <tr>
+                            <td class="lt-docref-label">Data czynności:</td>
+                            <td class="lt-docref-value">—</td>
+                        </tr>
+                        <tr>
+                            <td class="lt-docref-label">Data wystawienia:</td>
+                            <td class="lt-docref-value">{{ generated_at|date:"d.m.Y" }}</td>
+                        </tr>
+                    </table>
+                </div>
             </header>
 
-            <section aria-labelledby="lt-items-title">
-                <h2 class="inventory-sheet-section-title" id="lt-items-title">Wykaz środków do likwidacji</h2>
-                {% if assets %}
-                    <table class="inventory-sheet-table">
-                        <thead>
+            {# ================================================================ #}
+            {# 2. TITLE                                                        #}
+            {# ================================================================ #}
+            <div class="lt-title-block">
+                <span class="lt-title-abbr">LT</span>
+                <span class="lt-title-main">LIKWIDACJA ŚRODKA TRWAŁEGO / WYPOSAŻENIA</span>
+            </div>
+
+            {# ================================================================ #}
+            {# 3. FORMAL CONTEXT                                               #}
+            {# ================================================================ #}
+            <table class="lt-context">
+                <tbody>
+                    <tr>
+                        <td colspan="4" class="lt-ctx-hdr">DANE FORMALNE</td>
+                    </tr>
+                    <tr>
+                        <td class="lt-ctx-label">Dokument sporządził:</td>
+                        <td class="lt-ctx-value is-filled">{{ generated_at|date:"Y-m-d H:i" }}</td>
+                        <td class="lt-ctx-label">Liczba pozycji:</td>
+                        <td class="lt-ctx-value is-filled">{{ assets|length }}</td>
+                    </tr>
+                    <tr>
+                        <td class="lt-ctx-label">Komisja likwidacyjna:</td>
+                        <td class="lt-ctx-value"></td>
+                        <td class="lt-ctx-label">Przewodniczący komisji:</td>
+                        <td class="lt-ctx-value"></td>
+                    </tr>
+                    <tr>
+                        <td class="lt-ctx-label">Podstawa prawna:</td>
+                        <td class="lt-ctx-value" colspan="3"></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            {# ================================================================ #}
+            {# 4. ASSET TABLE                                                  #}
+            {# ================================================================ #}
+            <div class="lt-section-label">WYKAZ ŚRODKÓW OBJĘTYCH LIKWIDACJĄ</div>
+            {% if assets %}
+                <table class="lt-table lt-table-outer">
+                    <thead>
+                        <tr>
+                            <th style="width:8mm;">Lp.</th>
+                            <th style="width:26mm;">Nr inw.</th>
+                            <th style="width:24mm;">Kod kreskowy</th>
+                            <th>Nazwa środka</th>
+                            <th style="width:22mm;">Rodzaj</th>
+                            <th style="width:9mm;">Szt.</th>
+                            <th style="width:28mm;">Lokalizacja</th>
+                            <th style="width:18mm;">Stan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in assets %}
                             <tr>
-                                <th>Lp.</th>
-                                <th>Kod kreskowy</th>
-                                <th>Nr inwentarzowy</th>
-                                <th>Nazwa</th>
-                                <th>Rodzaj</th>
-                                <th>Ilość</th>
-                                <th>Lokalizacja</th>
-                                <th>Status</th>
+                                <td class="lt-col-num">{{ forloop.counter }}</td>
+                                <td class="lt-col-code">{{ asset.inventory_number|default:"—" }}</td>
+                                <td class="lt-col-code">{{ asset.barcode|default:"—" }}</td>
+                                <td>{{ asset.name }}</td>
+                                <td>{{ asset.asset_type_ref.name|default:asset.get_asset_type_display|default:"—" }}</td>
+                                <td class="lt-col-num">{{ asset.current_quantity }}</td>
+                                <td>{{ asset.location|default:"—" }}</td>
+                                <td>{{ asset.get_status_display }}</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {% for asset in assets %}
-                                <tr>
-                                    <td>{{ forloop.counter }}</td>
-                                    <td>{{ asset.barcode|default:"-" }}</td>
-                                    <td>{{ asset.inventory_number|default:"-" }}</td>
-                                    <td>{{ asset.name }}</td>
-                                    <td>{{ asset.asset_type_ref.name|default:asset.get_asset_type_display|default:"-" }}</td>
-                                    <td>{{ asset.current_quantity }}</td>
-                                    <td>{{ asset.location|default:"-" }}</td>
-                                    <td>{{ asset.get_status_display }}</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                {% else %}
-                    <div class="inventory-sheet-empty-note">Brak pozycji.</div>
-                {% endif %}
-            </section>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td></td>
+                            <td colspan="4"><strong>RAZEM ({{ assets|length }} pozycji):</strong></td>
+                            <td class="lt-col-num"><strong>{{ total_quantity }}</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            {% else %}
+                <div style="border:0.75pt solid #111111;padding:6mm;font-size:8.5pt;margin-bottom:5mm;">Brak pozycji.</div>
+            {% endif %}
 
-            <section class="inventory-sheet-remarks" aria-labelledby="lt-remarks-title">
-                <h2 class="inventory-sheet-section-title" id="lt-remarks-title">Uwagi</h2>
-                <div class="inventory-sheet-remarks-lines">
-                    <span class="inventory-sheet-line"></span>
-                    <span class="inventory-sheet-line"></span>
-                    <span class="inventory-sheet-line"></span>
-                </div>
-            </section>
+            {# ================================================================ #}
+            {# 5. NOTES                                                        #}
+            {# ================================================================ #}
+            <div class="lt-section-label">PODSTAWA LIKWIDACJI / UWAGI</div>
+            <div class="lt-notes-box">
+                <div class="lt-notes-lines">&nbsp;</div>
+                <div class="lt-notes-lines">&nbsp;</div>
+                <div class="lt-notes-lines">&nbsp;</div>
+            </div>
 
-            <footer class="inventory-sheet-footer">
-                <div>Miejsce i data: <span class="inventory-sheet-line"></span></div>
-                <div class="inventory-sheet-signatures">
-                    <div class="inventory-sheet-signature">Sporządził</div>
-                    <div class="inventory-sheet-signature">Zatwierdził</div>
+            {# ================================================================ #}
+            {# 6. PLACE AND DATE                                               #}
+            {# ================================================================ #}
+            <p class="lt-place-date">Miejscowość, dnia:<span>&nbsp;</span></p>
+
+            {# ================================================================ #}
+            {# 7. SIGNATURES                                                   #}
+            {# ================================================================ #}
+            <div class="lt-signatures">
+                <div class="lt-sig-cell">
+                    <div class="lt-sig-role">Sporządził / Sporządziła</div>
+                    <div class="lt-sig-space"></div>
+                    <div class="lt-sig-sublabel">(podpis i pieczęć imienna)</div>
                 </div>
-            </footer>
+                <div class="lt-sig-cell">
+                    <div class="lt-sig-role">Zatwierdził / Zatwierdziła</div>
+                    <div class="lt-sig-space"></div>
+                    <div class="lt-sig-sublabel">(podpis i pieczęć imienna)</div>
+                </div>
+                <div class="lt-seal-cell">
+                    <div class="lt-seal-box">
+                        <span class="lt-seal-label">M.P.<br>(pieczęć organizacji)</span>
+                    </div>
+                </div>
+            </div>
+
         </article>
     </section>
 {% endblock %}

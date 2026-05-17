@@ -445,6 +445,9 @@ class AssetHistoryEntry(models.Model):
 
 
 class AssetAttachment(models.Model):
+    class DocumentType(models.TextChoices):
+        LT = "lt", "LT — Likwidacja"
+
     asset = models.ForeignKey(
         Asset,
         on_delete=models.CASCADE,
@@ -465,6 +468,26 @@ class AssetAttachment(models.Model):
         verbose_name="Dodany przez",
     )
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Data dodania")
+    document_type = models.CharField(
+        max_length=20,
+        choices=DocumentType.choices,
+        blank=True,
+        db_index=True,
+        verbose_name="Typ dokumentu",
+    )
+    date_of_action = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Data czynności",
+    )
+    is_system_generated = models.BooleanField(
+        default=False,
+        verbose_name="Wygenerowany przez system",
+    )
+    is_protected = models.BooleanField(
+        default=False,
+        verbose_name="Chroniony",
+    )
 
     class Meta:
         ordering = ["-uploaded_at"]

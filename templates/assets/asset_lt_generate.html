@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Generuj dokument LT{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .lt-generate-shell {
+            max-width: 820px;
+        }
+        .lt-generate-info {
+            padding: 12px 14px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(14, 116, 144, 0.22);
+            background: rgba(240, 249, 255, 0.78);
+            color: #155e75;
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
+        .lt-generate-error {
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(193, 18, 31, 0.22);
+            background: rgba(254, 242, 242, 0.92);
+            color: #9f1239;
+            font-size: 0.88rem;
+        }
+        .lt-assets-table-wrap {
+            overflow-x: auto;
+            margin-bottom: 24px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .lt-assets-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+        .lt-assets-table th,
+        .lt-assets-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            text-align: left;
+            vertical-align: top;
+        }
+        .lt-assets-table thead th {
+            background: rgba(248, 250, 252, 0.95);
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #66758a;
+            font-weight: 700;
+        }
+        .lt-assets-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+        .lt-empty-note {
+            padding: 16px;
+            color: #66758a;
+            font-size: 0.9rem;
+        }
+        .lt-section-title {
+            margin: 0 0 12px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #101828;
+        }
+        .lt-form-section {
+            margin-bottom: 28px;
+        }
+        .lt-separator {
+            border: 0;
+            border-top: 1px solid rgba(15, 23, 42, 0.1);
+            margin: 24px 0;
+        }
+        .lt-date-hint {
+            font-size: 0.82rem;
+            color: #66758a;
+            margin-top: 4px;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 72px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="lt-generate-shell">
+    <div class="card">
+        <h1 style="margin: 0 0 6px; font-size: 1.4rem; font-weight: 700;">Generuj dokument LT — Likwidacja</h1>
+        <p style="margin: 0 0 20px; color: #425466; font-size: 0.92rem;">
+            Dokument zostanie wygenerowany jako nieedytowalny PDF i zapisany jako chroniony załącznik przy każdym wybranym środku.
+        </p>
+
+        <div class="lt-generate-info">
+            Dokument formalny jest immutable — po zapisaniu nie można go edytować ani nadpisać.<br>
+            Ponowne wygenerowanie tworzy <strong>nowy</strong> załącznik. Stare dokumenty pozostają w systemie.
+        </div>
+
+        {% if form_error %}
+            <div class="lt-generate-error">{{ form_error }}</div>
+        {% endif %}
+
+        <div class="lt-form-section">
+            <h2 class="lt-section-title">Środki objęte dokumentem</h2>
+            {% if assets %}
+                <div class="lt-assets-table-wrap">
+                    <table class="lt-assets-table">
+                        <thead>
+                            <tr>
+                                <th>Lp.</th>
+                                <th>Nr inwentarzowy</th>
+                                <th>Nazwa</th>
+                                <th>Lokalizacja</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for asset in assets %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ asset.inventory_number }}</td>
+                                    <td>{{ asset.name }}</td>
+                                    <td>{{ asset.location|default:"—" }}</td>
+                                    <td>{{ asset.get_status_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="lt-empty-note">Brak archiwalnych środków pasujących do podanych identyfikatorów. Sprawdź, czy środki zostały wcześniej wycofane z ewidencji.</div>
+            {% endif %}
+        </div>
+
+        {% if assets %}
+            <hr class="lt-separator">
+
+            <form method="post" action="{% url 'assets:lt-generate' %}">
+                {% csrf_token %}
+                <input type="hidden" name="ids" value="{{ ids_raw }}">
+
+                <div class="lt-form-section">
+                    <h2 class="lt-section-title">Dane dokumentu</h2>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label for="date_of_action">Data czynności <span style="color: #c1121f;">*</span></label>
+                            <input type="date" id="date_of_action" name="date_of_action" required>
+                            <p class="lt-date-hint">Data faktycznej czynności likwidacyjnej — może być wcześniejsza niż data wygenerowania dokumentu.</p>
+                        </div>
+                        <div class="form-field">
+                            <label for="issuing_unit_text">Jednostka realizująca (opcjonalnie)</label>
+                            <input type="text" id="issuing_unit_text" name="issuing_unit_text" maxlength="200"
+                                   placeholder="Oddział, filia, szkoła, adres...">
+                        </div>
+                        <div class="form-field field-wide">
+                            <label for="notes">Podstawa / uwagi (opcjonalnie)</label>
+                            <textarea id="notes" name="notes" maxlength="1000"
+                                      placeholder="Podstawa prawna, powód likwidacji, numer uchwały..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="ui-btn ui-btn--primary" type="submit">Generuj i zapisz dokument formalny</button>
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'assets:archive' %}">Anuluj</a>
+                </div>
+            </form>
+        {% else %}
+            <div class="actions">
+                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:archive' %}">Wróć do Archiwum</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

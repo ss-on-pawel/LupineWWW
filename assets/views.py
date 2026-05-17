@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 from datetime import date
 
@@ -1015,6 +1016,9 @@ def asset_attachment_delete(request, asset_id, attachment_id):
         raise Http404
 
     attachment = get_object_or_404(AssetAttachment, pk=attachment_id, asset=asset)
+    if attachment.is_protected:
+        messages.error(request, "Nie można usunąć chronionego dokumentu formalnego.")
+        return redirect("assets:detail", id=asset.pk)
     attachment.file.delete(save=False)
     attachment.delete()
     messages.success(request, "Załącznik został usunięty.")
@@ -1459,11 +1463,133 @@ def asset_lt_document(request):
     if not assets:
         return HttpResponse("Brak archiwalnych środków do wygenerowania LT.", status=404)
 
+    total_quantity = sum(a.current_quantity for a in assets)
+    ids_raw = ",".join(str(a.pk) for a in assets)
+
     return render(request, "assets/asset_lt.html", {
         "assets": assets,
         "org": OrganizationSettings.get(),
         "generated_at": timezone.now(),
+        "ids_raw": ids_raw,
+        "total_quantity": total_quantity,
     })
+
+
+@login_required
+def asset_generate_lt_pdf(request):
+    from django.core.files.base import ContentFile
+    from locations.models import OrganizationSettings
+    from .documents import generate_lt_pdf
+
+    raw = (request.GET if request.method == "GET" else request.POST).get("ids", "").strip()
+    if not raw:
+        return HttpResponse("Nie podano identyfikatorów.", status=400)
+
+    try:
+        ids = [int(i) for i in raw.split(",") if i.strip()]
+    except ValueError:
+        return HttpResponse("Nieprawidłowe parametry.", status=400)
+
+    if not ids or len(ids) > 200:
+        return HttpResponse("Nieprawidłowa liczba identyfikatorów.", status=400)
+
+    queryset = Asset.objects.filter(id__in=ids, is_active=False).select_related("asset_type_ref", "location_fk")
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None:
+        queryset = queryset.filter(location_fk_id__in=location_ids)
+
+    assets = list(queryset.order_by("id"))
+    ids_raw = ",".join(str(i) for i in ids)
+
+    if request.method == "GET":
+        return render(request, "assets/asset_lt_generate.html", {
+            "assets": assets,
+            "ids_raw": ids_raw,
+        })
+
+    # POST — validate and generate
+    is_json = request.POST.get("format") == "json"
+
+    def _form_error(msg):
+        if is_json:
+            return JsonResponse({"ok": False, "error": msg}, status=400)
+        return render(request, "assets/asset_lt_generate.html", {
+            "assets": assets,
+            "ids_raw": ids_raw,
+            "form_error": msg,
+        })
+
+    date_of_action_raw = request.POST.get("date_of_action", "").strip()
+    if not date_of_action_raw:
+        return _form_error("Data czynności jest wymagana.")
+
+    try:
+        date_of_action = date.fromisoformat(date_of_action_raw)
+    except ValueError:
+        return _form_error("Nieprawidłowy format daty.")
+
+    if not assets:
+        return _form_error("Brak archiwalnych środków pasujących do podanych identyfikatorów.")
+
+    issuing_unit_text = request.POST.get("issuing_unit_text", "").strip()
+    notes = request.POST.get("notes", "").strip()
+
+    now = timezone.now()
+    year = now.year
+    existing_count = AssetAttachment.objects.filter(document_type=AssetAttachment.DocumentType.LT).count()
+    doc_number = f"LT/{existing_count + 1:06d}/{year}"
+
+    org = OrganizationSettings.get()
+    pdf_buffer = generate_lt_pdf(
+        assets=assets,
+        org=org,
+        date_of_action=date_of_action,
+        generated_by=request.user,
+        generated_at=now,
+        issuing_unit_text=issuing_unit_text,
+        notes=notes,
+        doc_number=doc_number,
+    )
+    pdf_bytes = pdf_buffer.read()
+    safe_doc_num = doc_number.replace("/", "-")
+    filename = f"LT_{date_of_action.strftime('%Y%m%d')}_{safe_doc_num}.pdf"
+
+    first_att = None
+    with transaction.atomic():
+        for asset in assets:
+            att = AssetAttachment(
+                asset=asset,
+                title=f"LT — Likwidacja ({date_of_action.strftime('%d.%m.%Y')})",
+                original_filename=filename,
+                content_type="application/pdf",
+                size_bytes=len(pdf_bytes),
+                uploaded_by=request.user,
+                document_type=AssetAttachment.DocumentType.LT,
+                date_of_action=date_of_action,
+                is_system_generated=True,
+                is_protected=True,
+            )
+            att.file.save(filename, ContentFile(pdf_bytes), save=True)
+            if first_att is None:
+                first_att = att
+
+    if is_json:
+        pdf_url = reverse("assets:attachment-download", kwargs={
+            "asset_id": first_att.asset_id,
+            "attachment_id": first_att.pk,
+        })
+        return JsonResponse({
+            "ok": True,
+            "message": f"Dokument LT {doc_number} został wygenerowany i zapisany dla {len(assets)} środków.",
+            "pdf_url": pdf_url,
+        })
+
+    return FileResponse(
+        io.BytesIO(pdf_bytes),
+        content_type="application/pdf",
+        as_attachment=True,
+        filename=filename,
+    )
 
 
 @login_required

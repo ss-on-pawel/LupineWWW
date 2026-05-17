@@ -7935,7 +7935,7 @@ class AssetLtDocumentViewTests(TestCase):
     def test_template_contains_remarks_section(self):
         self.client.force_login(self.admin_user)
         response = self.client.get(self._url(self.archived_asset.pk))
-        self.assertContains(response, "Uwagi")
+        self.assertContains(response, "UWAGI")
 
     def test_no_ids_returns_400(self):
         self.client.force_login(self.admin_user)
@@ -8410,6 +8410,84 @@ class AssetAttachmentViewTests(TestCase):
         resp = self.client.post(self._delete_url(att.pk))
         self.assertEqual(resp.status_code, 403)
         self.assertTrue(AssetAttachment.objects.filter(pk=att.pk).exists())
+
+    def test_delete_protected_attachment_is_blocked(self):
+        from .models import AssetAttachment
+        att = AssetAttachment.objects.create(
+            asset=self.asset,
+            title="LT doc",
+            original_filename="lt.pdf",
+            content_type="application/pdf",
+            size_bytes=4,
+            uploaded_by=self.superuser,
+            file=self._make_file(name="lt.pdf"),
+            document_type=AssetAttachment.DocumentType.LT,
+            is_protected=True,
+            is_system_generated=True,
+        )
+        self.client.force_login(self.superuser)
+        resp = self.client.post(self._delete_url(att.pk))
+        self.assertRedirects(resp, reverse("assets:detail", kwargs={"id": self.asset.pk}))
+        self.assertTrue(AssetAttachment.objects.filter(pk=att.pk).exists())
+
+
+class AssetGenerateLtPdfViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.location = Location.objects.create(name="LT Generate Location")
+        cls.archived_asset = Asset.objects.create(
+            name="Stary Laptop",
+            inventory_number="LTGEN-INW-001",
+            barcode="LTGEN-BC-001",
+            status=Asset.Status.LIQUIDATED,
+            location=cls.location.path,
+            location_fk=cls.location,
+            is_active=False,
+        )
+        cls.active_asset = Asset.objects.create(
+            name="Nowy Laptop",
+            inventory_number="LTGEN-INW-002",
+            barcode="LTGEN-BC-002",
+            status=Asset.Status.ACTIVE,
+            location=cls.location.path,
+            location_fk=cls.location,
+            is_active=True,
+        )
+        cls.admin_user = User.objects.create_superuser(username="ltgen-admin", password="pass123")
+
+    def _get_url(self, *ids):
+        return reverse("assets:lt-generate") + "?ids=" + ",".join(str(i) for i in ids)
+
+    def test_get_shows_form_with_archived_assets(self):
+        self.client.force_login(self.admin_user)
+        resp = self.client.get(self._get_url(self.archived_asset.pk))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "LTGEN-INW-001")
+
+    def test_get_excludes_active_assets(self):
+        self.client.force_login(self.admin_user)
+        resp = self.client.get(self._get_url(self.active_asset.pk))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "LTGEN-INW-002")
+
+    def test_get_no_ids_returns_400(self):
+        self.client.force_login(self.admin_user)
+        resp = self.client.get(reverse("assets:lt-generate"))
+        self.assertEqual(resp.status_code, 400)
+
+    def test_post_missing_date_returns_form_with_error(self):
+        self.client.force_login(self.admin_user)
+        resp = self.client.post(reverse("assets:lt-generate"), {
+            "ids": str(self.archived_asset.pk),
+            "date_of_action": "",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Data czynno")
+
+    def test_anonymous_redirects_to_login(self):
+        resp = self.client.get(self._get_url(self.archived_asset.pk))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("login", resp["Location"])
 
 
 class AssetServiceAlertTests(TestCase):

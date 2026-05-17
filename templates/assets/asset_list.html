@@ -396,6 +396,36 @@
         .asset-list-shell[data-asset-list-mode="archive"] #asset-generate-lt {
             display: inline-flex;
         }
+        #asset-lt-date-group {
+            display: none;
+            align-items: center;
+            gap: 5px;
+        }
+        .asset-list-shell[data-asset-list-mode="archive"] #asset-lt-date-group {
+            display: inline-flex;
+        }
+        #asset-lt-date-label {
+            font-size: 0.8rem;
+            color: #66758a;
+            white-space: nowrap;
+            user-select: none;
+        }
+        #asset-lt-date {
+            height: 36px;
+            padding: 0 7px;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            border-radius: 0;
+            background: rgba(255, 255, 255, 0.9);
+            color: #111827;
+            font: inherit;
+            font-size: 0.88rem;
+            width: 138px;
+            cursor: pointer;
+        }
+        #asset-lt-date:focus {
+            outline: 2px solid rgba(193, 18, 31, 0.28);
+            outline-offset: 1px;
+        }
         .asset-management-toolbar-group {
             display: inline-flex;
             align-items: center;
@@ -1679,6 +1709,10 @@
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
                         <button id="asset-print-labels" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Drukuj etykiety</button>
+                        <span id="asset-lt-date-group">
+                            <label for="asset-lt-date" id="asset-lt-date-label">Data likwidacji:</label>
+                            <input type="date" id="asset-lt-date" name="date_of_action" autocomplete="off">
+                        </span>
                         <button id="asset-generate-lt" type="button" class="ui-btn ui-btn--secondary" disabled>Generuj LT</button>
                     </div>
                     <div class="asset-list-table-tools-cluster">
@@ -2158,6 +2192,7 @@
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
             const bulkWithdrawApiUrl = "/api/assets/bulk-withdraw/";
+            const ltGenerateUrl = "{% url 'assets:lt-generate' %}";
             const detailTemplate = shell.dataset.detailUrlTemplate;
             const defaultPageSize = 50;
             const searchDebounceMs = 300;
@@ -2239,6 +2274,8 @@
                 moveTrigger: document.getElementById("asset-move-trigger"),
                 printLabelsButton: document.getElementById("asset-print-labels"),
                 ltButton: document.getElementById("asset-generate-lt"),
+                ltDateGroup: document.getElementById("asset-lt-date-group"),
+                ltDateInput: document.getElementById("asset-lt-date"),
                 moveTarget: document.getElementById("asset-move-target"),
                 movePopup: document.getElementById("asset-move-popup"),
                 moveSearch: document.getElementById("asset-move-search"),
@@ -2288,6 +2325,7 @@
                 moveOptionsError: "",
                 moveSubmitting: false,
                 withdrawSubmitting: false,
+                ltSubmitting: false,
                 filters: [],
                 ordering: "-updated_at",
                 columns: loadColumns(),
@@ -2469,12 +2507,27 @@ let searchDebounceId = null;
                     window.open("/assets/labels/pdf/?ids=" + ids.join(","), "_blank");
                 });
 
+                // Set default date to today (YYYY-MM-DD) on init
+                (function () {
+                    const today = new Date();
+                    const y = today.getFullYear();
+                    const m = String(today.getMonth() + 1).padStart(2, "0");
+                    const d = String(today.getDate()).padStart(2, "0");
+                    elements.ltDateInput.value = y + "-" + m + "-" + d;
+                }());
+
                 elements.ltButton.addEventListener("click", function () {
                     const ids = getSelectedAssetIds();
-                    if (!ids.length) {
+                    if (!ids.length || state.ltSubmitting) {
                         return;
                     }
-                    window.open("/assets/archive/lt/?ids=" + ids.join(","), "_blank");
+                    const actionDate = (elements.ltDateInput && elements.ltDateInput.value) || "";
+                    if (!actionDate) {
+                        showListNotice("Wybierz datę likwidacji przed wygenerowaniem dokumentu LT.");
+                        elements.ltDateInput && elements.ltDateInput.focus();
+                        return;
+                    }
+                    submitLtGenerate(ids, actionDate);
                 });
 
                 elements.tableBody.addEventListener("change", function (event) {
@@ -3693,6 +3746,49 @@ let searchDebounceId = null;
                     });
             }
 
+            function submitLtGenerate(assetIds, dateOfAction) {
+                state.ltSubmitting = true;
+                syncToolbarControls();
+
+                const body = new URLSearchParams();
+                body.append("ids", assetIds.join(","));
+                body.append("date_of_action", dateOfAction);
+                body.append("format", "json");
+
+                fetch(ltGenerateUrl, {
+                    method: "POST",
+                    headers: {
+                        "Accept": "application/json",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRFToken": getCsrfToken(),
+                    },
+                    body: body.toString(),
+                })
+                    .then(function (response) {
+                        return response.json().catch(function () {
+                            return {};
+                        }).then(function (payload) {
+                            return { ok: response.ok, payload: payload };
+                        });
+                    })
+                    .then(function (result) {
+                        if (!result.ok || !result.payload.ok) {
+                            throw new Error(result.payload.error || "Nie udało się wygenerować dokumentu LT.");
+                        }
+                        showListNotice(result.payload.message || "Dokument LT został wygenerowany.");
+                        if (result.payload.pdf_url) {
+                            window.open(result.payload.pdf_url, "_blank");
+                        }
+                    })
+                    .catch(function (error) {
+                        window.alert(error.message || "Nie udało się wygenerować dokumentu LT.");
+                    })
+                    .finally(function () {
+                        state.ltSubmitting = false;
+                        syncToolbarControls();
+                    });
+            }
+
             function arrangeSearchAndFiltersLayout() {
                 const searchField = shell.querySelector('[data-role="search-field"]');
                 const filtersSection = elements.filtersSection;
@@ -3825,7 +3921,12 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
                 elements.managementDeleteButton.disabled = state.withdrawSubmitting || getSelectedAssetIds().length < 1;
                 elements.printLabelsButton.disabled = getSelectedAssetIds().length < 1;
-                elements.ltButton.disabled = getSelectedAssetIds().length < 1;
+                elements.ltButton.disabled = state.ltSubmitting || getSelectedAssetIds().length < 1;
+                if (state.ltSubmitting) {
+                    elements.ltButton.textContent = "Generuję...";
+                } else {
+                    elements.ltButton.textContent = "Generuj LT";
+                }
 
                 elements.managementAddButton.textContent = "Dodaj środek";
                 elements.managementAddButton.className = "ui-btn ui-btn--success";
