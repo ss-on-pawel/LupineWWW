@@ -425,17 +425,7 @@
             {% endif %}
         </div>
         {% if not asset.is_active %}
-            <div class="asset-archive-notice">
-                Środek znajduje się w Archiwum
-                {% if latest_lt_attachment %}
-                    <span style="margin-left: 12px; font-weight: 400;">·</span>
-                    <a href="{% url 'assets:attachment-download' asset.id latest_lt_attachment.id %}"
-                       target="_blank"
-                       style="margin-left: 12px; color: inherit; text-decoration: underline; font-size: 0.88rem;">
-                        Otwórz dokument LT ({{ latest_lt_attachment.date_of_action|date:"Y-m-d" }})
-                    </a>
-                {% endif %}
-            </div>
+            <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>
         {% endif %}
 
         <div class="asset-sections">
@@ -731,30 +721,18 @@
                             <table class="asset-history-table asset-attachments-table">
                                 <thead>
                                     <tr>
-                                        <th>Tytuł / Typ</th>
+                                        <th>Tytuł</th>
                                         <th>Plik</th>
                                         <th>Rozmiar</th>
                                         <th>Dodany przez</th>
-                                        <th>Data dodania</th>
+                                        <th>Data</th>
                                         <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for att in attachments %}
                                         <tr>
-                                            <td>
-                                                {{ att.title }}
-                                                {% if att.document_type %}
-                                                    <br>
-                                                    <span style="display:inline-flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
-                                                        <span style="padding:2px 7px;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;border:1px solid rgba(193,18,31,0.3);background:rgba(254,242,242,0.8);color:#9f1239;">{{ att.get_document_type_display }}</span>
-                                                        {% if att.is_system_generated %}<span style="padding:2px 7px;font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;border:1px solid rgba(15,23,42,0.15);background:rgba(248,250,252,0.9);color:#475467;">SYSTEMOWY</span>{% endif %}
-                                                    </span>
-                                                    {% if att.date_of_action %}
-                                                        <br><span style="font-size:0.8rem;color:#66758a;">Data czynności: {{ att.date_of_action|date:"Y-m-d" }}</span>
-                                                    {% endif %}
-                                                {% endif %}
-                                            </td>
+                                            <td>{{ att.title }}</td>
                                             <td class="asset-history-value">{{ att.original_filename }}</td>
                                             <td class="asset-history-value">{{ att.size_bytes|filesizeformat }}</td>
                                             <td>
@@ -765,14 +743,7 @@
                                             <td class="asset-history-date">{{ att.uploaded_at|date:"Y-m-d H:i" }}</td>
                                             <td class="attach-actions-cell">
                                                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:attachment-download' asset.id att.id %}" target="_blank">Otwórz</a>
-                                                {% if att.is_protected %}
-                                                    {% if can_delete_protected %}
-                                                        <form method="post" action="{% url 'assets:attachment-delete' asset.id att.id %}" style="display:inline;" onsubmit="return window.confirm('UWAGA: To jest chroniony dokument formalny. Na pewno usunąć?');">
-                                                            {% csrf_token %}
-                                                            <button class="ui-btn ui-btn--danger" type="submit">Usuń</button>
-                                                        </form>
-                                                    {% endif %}
-                                                {% elif can_delete_attachment %}
+                                                {% if can_delete_attachment %}
                                                     <form method="post" action="{% url 'assets:attachment-delete' asset.id att.id %}" style="display:inline;" onsubmit="return window.confirm('Usunąć załącznik?');">
                                                         {% csrf_token %}
                                                         <button class="ui-btn ui-btn--danger" type="submit">Usuń</button>
