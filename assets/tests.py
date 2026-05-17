@@ -23,7 +23,7 @@ from inventory.models import InventorySession, InventorySnapshotItem
 
 from .forms import AssetForm
 from .filters import get_asset_filter_ui_schema
-from .models import Asset, AssetBarcodeSequence, AssetChangeRequest, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
+from .models import Asset, AssetAttachment, AssetBarcodeSequence, AssetChangeRequest, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
@@ -6273,6 +6273,110 @@ class AssetDetailViewTests(TestCase):
         self.assertNotContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
 
 
+class AssetDetailLtNoticeTests(TestCase):
+    def setUp(self):
+        from django.core.files.base import ContentFile
+        self.location = Location.objects.create(name="LT Notice Loc")
+        self.superuser = User.objects.create_superuser(username="lt-notice-su", password="pass")
+        self.archived_asset = Asset.objects.create(
+            name="Archived LT Notice Asset",
+            inventory_number="LT-NOTICE-001",
+            barcode="LTNOT001",
+            status=Asset.Status.LIQUIDATED,
+            location=self.location.path,
+            location_fk=self.location,
+            is_active=False,
+        )
+        self.active_asset = Asset.objects.create(
+            name="Active LT Notice Asset",
+            inventory_number="LT-NOTICE-002",
+            barcode="LTNOT002",
+            status=Asset.Status.ACTIVE,
+            location=self.location.path,
+            location_fk=self.location,
+            is_active=True,
+        )
+        self.ContentFile = ContentFile
+
+    def _detail_url(self, asset):
+        return reverse("assets:detail", kwargs={"id": asset.pk})
+
+    def _make_lt_attachment(self, asset, date_of_action=None):
+        from datetime import date as date_type
+        return AssetAttachment.objects.create(
+            asset=asset,
+            file=self.ContentFile(b"%PDF-1.4 fake", name="lt_test.pdf"),
+            title="LT — Likwidacja środka trwałego",
+            original_filename="lt_test.pdf",
+            content_type="application/pdf",
+            size_bytes=14,
+            uploaded_by=self.superuser,
+            document_type=AssetAttachment.DocumentType.LT,
+            date_of_action=date_of_action or date_type(2025, 5, 1),
+            is_system_generated=True,
+            is_protected=True,
+        )
+
+    def test_archived_asset_without_lt_shows_no_lt_link(self):
+        self.client.force_login(self.superuser)
+        resp = self.client.get(self._detail_url(self.archived_asset))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Środek znajduje się w Archiwum")
+        self.assertNotContains(resp, "Otwórz dokument LT")
+        self.assertNotContains(resp, "Generuj dokument LT")
+
+    def test_archived_asset_with_lt_shows_open_link(self):
+        att = self._make_lt_attachment(self.archived_asset)
+        self.client.force_login(self.superuser)
+        resp = self.client.get(self._detail_url(self.archived_asset))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Otwórz dokument LT")
+        self.assertNotContains(resp, "Generuj dokument LT")
+        att.file.delete(save=False)
+        att.delete()
+
+    def test_lt_link_points_to_correct_download_url(self):
+        from datetime import date as date_type
+        att = self._make_lt_attachment(self.archived_asset, date_of_action=date_type(2025, 6, 15))
+        expected_url = reverse("assets:attachment-download", kwargs={
+            "asset_id": self.archived_asset.pk,
+            "attachment_id": att.pk,
+        })
+        self.client.force_login(self.superuser)
+        resp = self.client.get(self._detail_url(self.archived_asset))
+        self.assertContains(resp, expected_url)
+        self.assertContains(resp, "2025-06-15")
+        att.file.delete(save=False)
+        att.delete()
+
+    def test_multiple_lt_attachments_shows_latest(self):
+        from datetime import date as date_type
+        import time
+        att_old = self._make_lt_attachment(self.archived_asset, date_of_action=date_type(2025, 1, 1))
+        time.sleep(0.01)
+        att_new = self._make_lt_attachment(self.archived_asset, date_of_action=date_type(2025, 12, 31))
+        self.client.force_login(self.superuser)
+        resp = self.client.get(self._detail_url(self.archived_asset))
+        # Latest date should appear, old should not
+        self.assertContains(resp, "2025-12-31")
+        expected_url = reverse("assets:attachment-download", kwargs={
+            "asset_id": self.archived_asset.pk,
+            "attachment_id": att_new.pk,
+        })
+        self.assertContains(resp, expected_url)
+        for att in [att_old, att_new]:
+            att.file.delete(save=False)
+            att.delete()
+
+    def test_active_asset_has_no_archive_notice(self):
+        self.client.force_login(self.superuser)
+        resp = self.client.get(self._detail_url(self.active_asset))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Środek znajduje się w Archiwum")
+        self.assertNotContains(resp, "Otwórz dokument LT")
+        self.assertNotContains(resp, "Generuj dokument LT")
+
+
 class AssetRestoreViewTests(TestCase):
     def setUp(self):
         self.location = Location.objects.create(name="Restore Location")
@@ -7935,7 +8039,7 @@ class AssetLtDocumentViewTests(TestCase):
     def test_template_contains_remarks_section(self):
         self.client.force_login(self.admin_user)
         response = self.client.get(self._url(self.archived_asset.pk))
-        self.assertContains(response, "Uwagi")
+        self.assertContains(response, "UWAGI")
 
     def test_no_ids_returns_400(self):
         self.client.force_login(self.admin_user)
@@ -8590,3 +8694,408 @@ class AssetServiceAlertTests(TestCase):
         response = self.client.get(reverse("assets:detail", kwargs={"id": self.asset.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Stary przegląd")
+
+
+class LtPdfGeneratorTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from locations.models import OrganizationSettings, Location
+        cls.org = OrganizationSettings.get()
+        cls.org.full_name = "Gmina Testowa"
+        cls.org.short_name = "GT"
+        cls.org.save()
+        cls.location = Location.objects.create(name="LT Gen Loc")
+        cls.asset = Asset.objects.create(
+            name="Biurko do likwidacji",
+            inventory_number="LT-GEN-001",
+            barcode="LTGEN001",
+            status=Asset.Status.LIQUIDATED,
+            location=cls.location.path,
+            location_fk=cls.location,
+            is_active=False,
+        )
+        cls.user = User.objects.create_user(username="lt-gen-user", password="pass")
+
+    def test_generate_lt_pdf_returns_nonempty_bytes(self):
+        from .documents import generate_lt_pdf
+        from datetime import datetime
+        buf = generate_lt_pdf(
+            assets=[self.asset],
+            org=self.org,
+            date_of_action=date(2025, 1, 15),
+            generated_by=self.user,
+            generated_at=datetime(2025, 1, 20, 10, 30),
+        )
+        self.assertGreater(len(buf.getvalue()), 0)
+
+    def test_generate_lt_pdf_starts_with_pdf_header(self):
+        from .documents import generate_lt_pdf
+        from datetime import datetime
+        buf = generate_lt_pdf(
+            assets=[self.asset],
+            org=self.org,
+            date_of_action=date(2025, 1, 15),
+            generated_by=self.user,
+            generated_at=datetime(2025, 1, 20, 10, 30),
+        )
+        self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_generate_lt_pdf_with_issuing_unit_and_notes(self):
+        from .documents import generate_lt_pdf
+        from datetime import datetime
+        buf = generate_lt_pdf(
+            assets=[self.asset],
+            org=self.org,
+            date_of_action=date(2025, 3, 10),
+            generated_by=self.user,
+            generated_at=datetime(2025, 3, 15, 9, 0),
+            issuing_unit_text="Oddział Północny",
+            notes="Na podstawie uchwały nr 12/2025",
+        )
+        self.assertGreater(len(buf.getvalue()), 0)
+
+    def test_generate_lt_pdf_empty_assets_list(self):
+        from .documents import generate_lt_pdf
+        from datetime import datetime
+        buf = generate_lt_pdf(
+            assets=[],
+            org=self.org,
+            date_of_action=date(2025, 1, 15),
+            generated_by=self.user,
+            generated_at=datetime(2025, 1, 20, 10, 30),
+        )
+        self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_generate_lt_pdf_polish_chars_in_org_name(self):
+        """PDF generator must not crash on Polish characters in org-level fields."""
+        from .documents import generate_lt_pdf
+        from locations.models import OrganizationSettings
+        from datetime import datetime
+
+        org = OrganizationSettings.get()
+        org.full_name = "Zażółć gęślą jaźń — Urząd Miasta Łodzi"
+        org.short_name = "ĄĆĘŁŃÓŚŻŹ"
+        org.save()
+        try:
+            buf = generate_lt_pdf(
+                assets=[self.asset],
+                org=org,
+                date_of_action=date(2025, 5, 10),
+                generated_by=self.user,
+                generated_at=datetime(2025, 5, 10, 12, 0),
+                issuing_unit_text="Wydział Ś-ci i Ź-deł",
+                notes="Podstawa: Uchwała nr 5/Ś/2025 — środki trwałe",
+            )
+        finally:
+            # Restore
+            org.full_name = "Gmina Testowa"
+            org.short_name = "GT"
+            org.save()
+
+        raw = buf.getvalue()
+        self.assertTrue(raw.startswith(b"%PDF"), "PDF header missing")
+        self.assertGreater(len(raw), 1000, "PDF suspiciously small")
+
+    def test_generate_lt_pdf_polish_chars_in_asset_fields(self):
+        """PDF generator must handle Polish chars in asset name, location, type."""
+        from .documents import generate_lt_pdf
+        from locations.models import Location, OrganizationSettings
+        from datetime import datetime
+
+        loc = Location.objects.create(name="Łódź — Biuro Główne")
+        asset = Asset.objects.create(
+            name="Środek trwały — żarówka energooszczędna ź. 3/ść",
+            inventory_number="LT-PL-001",
+            barcode="LTPL001",
+            status=Asset.Status.LIQUIDATED,
+            location=loc.path,
+            location_fk=loc,
+            is_active=False,
+        )
+        buf = generate_lt_pdf(
+            assets=[asset],
+            org=OrganizationSettings.get(),
+            date_of_action=date(2025, 6, 1),
+            generated_by=self.user,
+            generated_at=datetime(2025, 6, 1, 9, 0),
+            notes="Zażółć gęślą jaźń ĄĆĘŁŃÓŚŻŹ ąćęłńóśżź",
+        )
+        raw = buf.getvalue()
+        self.assertTrue(raw.startswith(b"%PDF"))
+        self.assertGreater(len(raw), 1000)
+
+    def test_font_registration_provides_polish_capable_font(self):
+        """DocSans font (body font) must be registered — not fall back to Helvetica."""
+        from .documents import _BODY_FONT, _BODY_FONT_BOLD
+        self.assertNotEqual(
+            _BODY_FONT, "Helvetica",
+            "Body font fell back to Helvetica — Polish characters will not render. "
+            "Install fonts-liberation (Linux) or ensure Arial/Calibri is available (Windows)."
+        )
+        self.assertNotEqual(
+            _BODY_FONT_BOLD, "Helvetica-Bold",
+            "Bold font fell back to Helvetica-Bold — Polish characters will not render."
+        )
+
+
+class AssetGenerateLtPdfViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from locations.models import Location
+        cls.location = Location.objects.create(name="LT View Loc")
+        cls.asset_type = AssetTypeDictionary.objects.get(code="fixed")
+        cls.archived_asset = Asset.objects.create(
+            name="Komputer archiwalny",
+            inventory_number="LT-VIEW-001",
+            barcode="LTVIEW001",
+            asset_type="fixed",
+            asset_type_ref=cls.asset_type,
+            status=Asset.Status.LIQUIDATED,
+            location=cls.location.path,
+            location_fk=cls.location,
+            is_active=False,
+        )
+        cls.active_asset = Asset.objects.create(
+            name="Monitor aktywny",
+            inventory_number="LT-VIEW-002",
+            barcode="LTVIEW002",
+            status=Asset.Status.ACTIVE,
+            location=cls.location.path,
+            location_fk=cls.location,
+            is_active=True,
+        )
+        cls.superuser = User.objects.create_superuser(username="lt-view-su", password="pass")
+        cls.manager = User.objects.create_user(username="lt-view-mgr", password="pass")
+        cls.manager.profile.role = UserProfile.Role.MANAGER
+        cls.manager.profile.allowed_locations.add(cls.location)
+        cls.manager.profile.save(update_fields=["role"])
+        cls.regular = User.objects.create_user(username="lt-view-usr", password="pass")
+
+    def _generate_url(self, *ids):
+        return reverse("assets:lt-generate") + "?ids=" + ",".join(str(i) for i in ids)
+
+    def _post(self, ids, extra=None):
+        data = {"ids": ",".join(str(i) for i in ids), "date_of_action": "2025-03-01"}
+        if extra:
+            data.update(extra)
+        return self.client.post(reverse("assets:lt-generate"), data)
+
+    # --- Access ---
+
+    def test_anonymous_redirects_to_login(self):
+        resp = self.client.get(self._generate_url(self.archived_asset.pk))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("login", resp["Location"])
+
+    def test_regular_user_forbidden(self):
+        self.client.force_login(self.regular)
+        resp = self.client.get(self._generate_url(self.archived_asset.pk))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_manager_can_access_form(self):
+        self.client.force_login(self.manager)
+        resp = self.client.get(self._generate_url(self.archived_asset.pk))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "LT-VIEW-001")
+
+    # --- Validation ---
+
+    def test_post_without_date_of_action_rejected(self):
+        self.client.force_login(self.manager)
+        resp = self.client.post(reverse("assets:lt-generate"), {
+            "ids": str(self.archived_asset.pk),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Data czynności jest wymagana")
+        self.assertEqual(AssetAttachment.objects.filter(asset=self.archived_asset, document_type="lt").count(), 0)
+
+    def test_active_asset_excluded_from_lt(self):
+        self.client.force_login(self.superuser)
+        resp = self._post([self.active_asset.pk])
+        self.assertRedirects(resp, reverse("assets:archive"))
+        self.assertEqual(AssetAttachment.objects.filter(asset=self.active_asset, document_type="lt").count(), 0)
+
+    # --- Happy path ---
+
+    def test_post_with_date_of_action_creates_attachment(self):
+        self.client.force_login(self.manager)
+        resp = self._post([self.archived_asset.pk])
+        self.assertRedirects(resp, reverse("assets:archive"))
+        att = AssetAttachment.objects.get(asset=self.archived_asset, document_type="lt")
+        self.assertEqual(att.document_type, AssetAttachment.DocumentType.LT)
+        self.assertEqual(att.date_of_action, date(2025, 3, 1))
+        self.assertTrue(att.is_system_generated)
+        self.assertTrue(att.is_protected)
+        self.assertEqual(att.content_type, "application/pdf")
+        self.assertEqual(att.uploaded_by, self.manager)
+        self.assertGreater(att.size_bytes, 0)
+        self.assertEqual(att.title, "LT — Likwidacja środka trwałego")
+        att.file.delete(save=False)
+
+    def test_post_stores_valid_pdf_bytes(self):
+        self.client.force_login(self.superuser)
+        self._post([self.archived_asset.pk])
+        att = AssetAttachment.objects.filter(asset=self.archived_asset, document_type="lt").latest("uploaded_at")
+        att.file.open("rb")
+        first_bytes = att.file.read(4)
+        att.file.close()
+        self.assertEqual(first_bytes, b"%PDF")
+        att.file.delete(save=False)
+
+    def test_post_with_optional_fields(self):
+        self.client.force_login(self.superuser)
+        resp = self.client.post(reverse("assets:lt-generate"), {
+            "ids": str(self.archived_asset.pk),
+            "date_of_action": "2025-06-15",
+            "issuing_unit_text": "Filia Wschodnia",
+            "notes": "Uchwała nr 99/2025",
+        })
+        self.assertRedirects(resp, reverse("assets:archive"))
+        att = AssetAttachment.objects.filter(asset=self.archived_asset, document_type="lt").latest("uploaded_at")
+        self.assertEqual(att.date_of_action, date(2025, 6, 15))
+        att.file.delete(save=False)
+
+    # --- Inline toolbar fetch flow (format=json) ---
+
+    def _fetch_post(self, data):
+        """Simulate fetch POST with format=json (form-encoded body, same as URLSearchParams in JS)."""
+        payload = dict(data)
+        payload["format"] = "json"
+        return self.client.post(reverse("assets:lt-generate"), payload)
+
+    def test_fetch_post_without_date_returns_json_error(self):
+        self.client.force_login(self.manager)
+        resp = self._fetch_post({"ids": str(self.archived_asset.pk)})
+        self.assertEqual(resp.status_code, 400)
+        data = resp.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("Data czynności", data["error"])
+
+    def test_fetch_post_with_date_returns_json_ok(self):
+        self.client.force_login(self.manager)
+        resp = self._fetch_post({
+            "ids": str(self.archived_asset.pk),
+            "date_of_action": "2025-09-01",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        self.assertIn("pdf_url", data)
+        self.assertIn("count", data)
+        self.assertEqual(data["count"], 1)
+        att = AssetAttachment.objects.filter(asset=self.archived_asset, document_type="lt").latest("uploaded_at")
+        att.file.delete(save=False)
+        att.delete()
+
+    def test_fetch_post_pdf_url_is_valid_download_path(self):
+        self.client.force_login(self.superuser)
+        resp = self._fetch_post({
+            "ids": str(self.archived_asset.pk),
+            "date_of_action": "2025-10-15",
+        })
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        pdf_url = data.get("pdf_url", "")
+        self.assertTrue(pdf_url.startswith("/"), f"pdf_url should be an absolute path, got: {pdf_url!r}")
+        self.assertIn("download", pdf_url)
+        dl_resp = self.client.get(pdf_url)
+        # Consume content and close response to release file handle before cleanup
+        _ = b"".join(dl_resp.streaming_content) if dl_resp.streaming else dl_resp.content
+        dl_resp.close()
+        self.assertEqual(dl_resp.status_code, 200)
+        self.assertEqual(dl_resp.get("Content-Type"), "application/pdf")
+        att = AssetAttachment.objects.filter(asset=self.archived_asset, document_type="lt").latest("uploaded_at")
+        try:
+            att.file.delete(save=False)
+        except Exception:
+            pass
+        att.delete()
+
+    def test_fetch_post_active_asset_excluded_returns_no_assets_error(self):
+        self.client.force_login(self.superuser)
+        resp = self._fetch_post({
+            "ids": str(self.active_asset.pk),
+            "date_of_action": "2025-11-01",
+        })
+        self.assertEqual(resp.status_code, 400)
+        data = resp.json()
+        self.assertFalse(data["ok"])
+
+    def test_fetch_post_regular_user_returns_403(self):
+        self.client.force_login(self.regular)
+        resp = self._fetch_post({
+            "ids": str(self.archived_asset.pk),
+            "date_of_action": "2025-09-01",
+        })
+        self.assertEqual(resp.status_code, 403)
+
+    # --- Delete protection ---
+
+    def test_protected_attachment_delete_blocked_for_manager(self):
+        from django.core.files.base import ContentFile
+        att = AssetAttachment.objects.create(
+            asset=self.archived_asset,
+            file=ContentFile(b"%PDF-1.4 fake", name="lt_test.pdf"),
+            title="LT — test",
+            original_filename="lt_test.pdf",
+            content_type="application/pdf",
+            size_bytes=13,
+            uploaded_by=self.superuser,
+            document_type=AssetAttachment.DocumentType.LT,
+            is_system_generated=True,
+            is_protected=True,
+        )
+        self.client.force_login(self.manager)
+        delete_url = reverse("assets:attachment-delete", kwargs={
+            "asset_id": self.archived_asset.pk,
+            "attachment_id": att.pk,
+        })
+        resp = self.client.post(delete_url)
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(AssetAttachment.objects.filter(pk=att.pk).exists())
+        att.file.delete(save=False)
+        att.delete()
+
+    def test_protected_attachment_delete_allowed_for_superuser(self):
+        from django.core.files.base import ContentFile
+        att = AssetAttachment.objects.create(
+            asset=self.archived_asset,
+            file=ContentFile(b"%PDF-1.4 fake", name="lt_super.pdf"),
+            title="LT — superuser delete test",
+            original_filename="lt_super.pdf",
+            content_type="application/pdf",
+            size_bytes=13,
+            uploaded_by=self.superuser,
+            document_type=AssetAttachment.DocumentType.LT,
+            is_system_generated=True,
+            is_protected=True,
+        )
+        self.client.force_login(self.superuser)
+        delete_url = reverse("assets:attachment-delete", kwargs={
+            "asset_id": self.archived_asset.pk,
+            "attachment_id": att.pk,
+        })
+        resp = self.client.post(delete_url)
+        self.assertRedirects(resp, reverse("assets:detail", kwargs={"id": self.archived_asset.pk}))
+        self.assertFalse(AssetAttachment.objects.filter(pk=att.pk).exists())
+
+    def test_regular_unprotected_attachment_delete_still_works_for_manager(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        att = AssetAttachment.objects.create(
+            asset=self.archived_asset,
+            file=SimpleUploadedFile("regular.pdf", b"content", content_type="application/pdf"),
+            title="Zwykły załącznik",
+            original_filename="regular.pdf",
+            content_type="application/pdf",
+            size_bytes=7,
+            uploaded_by=self.manager,
+            is_protected=False,
+        )
+        self.client.force_login(self.manager)
+        delete_url = reverse("assets:attachment-delete", kwargs={
+            "asset_id": self.archived_asset.pk,
+            "attachment_id": att.pk,
+        })
+        resp = self.client.post(delete_url)
+        self.assertRedirects(resp, reverse("assets:detail", kwargs={"id": self.archived_asset.pk}))
+        self.assertFalse(AssetAttachment.objects.filter(pk=att.pk).exists())

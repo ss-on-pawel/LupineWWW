@@ -822,13 +822,21 @@ def asset_detail(request, id):
         session__status=InventorySession.Status.ACTIVE,
     ).exists()
     attachments = asset.attachments.select_related("uploaded_by").order_by("-uploaded_at")
+    latest_lt_attachment = (
+        asset.attachments
+        .filter(document_type=AssetAttachment.DocumentType.LT, is_system_generated=True)
+        .order_by("-uploaded_at")
+        .first()
+    ) if not asset.is_active else None
+    can_manage = _user_can_restore_asset(request.user)
     return render(
         request,
         "assets/asset_detail.html",
         {
             "asset": asset,
-            "can_restore_asset": (not asset.is_active) and _user_can_restore_asset(request.user),
-            "can_delete_attachment": _user_can_restore_asset(request.user),
+            "can_restore_asset": (not asset.is_active) and can_manage,
+            "can_delete_attachment": can_manage,
+            "can_delete_protected": request.user.is_superuser,
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "withdraw_capabilities": get_asset_withdraw_capabilities(asset),
             "history_entries": history_entries,
@@ -840,9 +848,10 @@ def asset_detail(request, id):
             ],
             "page_title": "Karta środka",
             "attachments": attachments,
+            "latest_lt_attachment": latest_lt_attachment,
             "attachment_form": AssetAttachmentForm(),
             "service_alerts": asset.service_alerts.filter(status=AssetServiceAlert.Status.ACTIVE).order_by("alert_date"),
-            "can_manage_service_alerts": _user_can_restore_asset(request.user),
+            "can_manage_service_alerts": can_manage,
         },
     )
 
@@ -1015,6 +1024,9 @@ def asset_attachment_delete(request, asset_id, attachment_id):
         raise Http404
 
     attachment = get_object_or_404(AssetAttachment, pk=attachment_id, asset=asset)
+    if attachment.is_protected and not request.user.is_superuser:
+        raise PermissionDenied
+
     attachment.file.delete(save=False)
     attachment.delete()
     messages.success(request, "Załącznik został usunięty.")
@@ -1459,11 +1471,152 @@ def asset_lt_document(request):
     if not assets:
         return HttpResponse("Brak archiwalnych środków do wygenerowania LT.", status=404)
 
+    total_quantity = sum(a.current_quantity for a in assets)
     return render(request, "assets/asset_lt.html", {
         "assets": assets,
         "org": OrganizationSettings.get(),
         "generated_at": timezone.now(),
+        "ids_raw": raw,
+        "total_quantity": total_quantity,
     })
+
+
+@login_required
+def asset_generate_lt_pdf(request):
+    from locations.models import OrganizationSettings
+    from django.core.files.base import ContentFile
+    from .documents import generate_lt_pdf
+
+    if not _user_can_restore_asset(request.user):
+        raise PermissionDenied
+
+    # Detect fetch/AJAX request from the inline toolbar (format=json in POST body).
+    is_fetch = request.method == "POST" and request.POST.get("format") == "json"
+
+    raw = (request.GET.get("ids") or request.POST.get("ids") or "").strip()
+
+    if not raw:
+        if is_fetch:
+            return JsonResponse({"ok": False, "error": "Nie podano identyfikatorów środków."}, status=400)
+        messages.error(request, "Nie podano identyfikatorów środków.")
+        return redirect("assets:archive")
+
+    try:
+        ids = [int(i) for i in raw.split(",") if i.strip()]
+    except ValueError:
+        if is_fetch:
+            return JsonResponse({"ok": False, "error": "Nieprawidłowe identyfikatory środków."}, status=400)
+        messages.error(request, "Nieprawidłowe identyfikatory środków.")
+        return redirect("assets:archive")
+
+    if not ids or len(ids) > 200:
+        if is_fetch:
+            return JsonResponse({"ok": False, "error": "Nieprawidłowa liczba identyfikatorów."}, status=400)
+        messages.error(request, "Nieprawidłowa liczba identyfikatorów.")
+        return redirect("assets:archive")
+
+    queryset = Asset.objects.filter(id__in=ids, is_active=False).select_related(
+        "asset_type_ref", "location_fk"
+    )
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None:
+        queryset = queryset.filter(location_fk_id__in=location_ids)
+    assets = list(queryset.order_by("id"))
+
+    if request.method == "GET":
+        return render(request, "assets/asset_lt_generate.html", {
+            "assets": assets,
+            "ids_raw": raw,
+            "page_title": "Generuj dokument LT",
+        })
+
+    # POST — generate and attach
+    date_of_action_raw = request.POST.get("date_of_action", "").strip()
+    if not date_of_action_raw:
+        if is_fetch:
+            return JsonResponse({"ok": False, "error": "Data czynności jest wymagana."}, status=400)
+        messages.error(request, "Data czynności jest wymagana.")
+        return render(request, "assets/asset_lt_generate.html", {
+            "assets": assets,
+            "ids_raw": raw,
+            "page_title": "Generuj dokument LT",
+            "form_error": "Data czynności jest wymagana.",
+        })
+
+    try:
+        action_date = date.fromisoformat(date_of_action_raw)
+    except ValueError:
+        if is_fetch:
+            return JsonResponse({"ok": False, "error": "Nieprawidłowy format daty czynności."}, status=400)
+        messages.error(request, "Nieprawidłowy format daty czynności.")
+        return render(request, "assets/asset_lt_generate.html", {
+            "assets": assets,
+            "ids_raw": raw,
+            "page_title": "Generuj dokument LT",
+            "form_error": "Nieprawidłowy format daty czynności.",
+        })
+
+    if not assets:
+        if is_fetch:
+            return JsonResponse({"ok": False, "error": "Brak archiwalnych środków do objęcia dokumentem LT."}, status=400)
+        messages.error(request, "Brak archiwalnych środków do objęcia dokumentem LT.")
+        return redirect("assets:archive")
+
+    issuing_unit_text = request.POST.get("issuing_unit_text", "").strip()
+    notes = request.POST.get("notes", "").strip()
+
+    org = OrganizationSettings.get()
+    generated_at = timezone.now()
+
+    pdf_buffer = generate_lt_pdf(
+        assets=assets,
+        org=org,
+        date_of_action=action_date,
+        generated_by=request.user,
+        generated_at=generated_at,
+        issuing_unit_text=issuing_unit_text,
+        notes=notes,
+    )
+    pdf_bytes = pdf_buffer.getvalue()
+    filename = f"lt_{action_date.strftime('%Y%m%d')}_{len(assets)}szt.pdf"
+
+    first_attachment = None
+    for asset in assets:
+        att = AssetAttachment.objects.create(
+            asset=asset,
+            file=ContentFile(pdf_bytes, name=filename),
+            title="LT — Likwidacja środka trwałego",
+            original_filename=filename,
+            content_type="application/pdf",
+            size_bytes=len(pdf_bytes),
+            uploaded_by=request.user,
+            document_type=AssetAttachment.DocumentType.LT,
+            date_of_action=action_date,
+            is_system_generated=True,
+            is_protected=True,
+        )
+        if first_attachment is None:
+            first_attachment = att
+
+    if is_fetch:
+        pdf_url = ""
+        if first_attachment is not None:
+            pdf_url = reverse("assets:attachment-download", kwargs={
+                "asset_id": first_attachment.asset_id,
+                "attachment_id": first_attachment.id,
+            })
+        return JsonResponse({
+            "ok": True,
+            "count": len(assets),
+            "pdf_url": pdf_url,
+            "message": f"Dokument LT zapisany przy {len(assets)} środkach.",
+        })
+
+    messages.success(
+        request,
+        f"Dokument LT został zapisany jako chroniony załącznik przy {len(assets)} środkach.",
+    )
+    return redirect("assets:archive")
 
 
 @login_required
