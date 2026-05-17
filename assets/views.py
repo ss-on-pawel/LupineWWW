@@ -1247,6 +1247,7 @@ def build_asset_list_queryset(request):
     }
 
 
+@login_required
 def asset_list_api(request):
     page = max(_parse_positive_int(request.GET.get("page"), default=1), 1)
     page_size = min(max(_parse_positive_int(request.GET.get("page_size"), default=50), 1), 200)
