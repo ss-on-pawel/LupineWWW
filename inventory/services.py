@@ -84,15 +84,7 @@ def import_inventory_scan_text(raw_text: str, uploaded_by=None) -> InventoryScan
 
         asset = _get_asset_by_scan_code(code)
         if asset is None:
-            InventoryObservedItem.objects.create(
-                session=session,
-                asset=None,
-                code=code,
-                scanned_location=current_location,
-                status=InventoryObservedItem.Status.UNKNOWN_CODE,
-                first_seen_at=now,
-                last_seen_at=now,
-            )
+            _record_unknown_code(session=session, code=code, current_location=current_location, seen_at=now)
             unknown_codes_count += 1
             processed_lines += 1
             continue
@@ -144,15 +136,7 @@ def record_mobile_scan(session: "InventorySession", code: str, current_location_
 
     asset = _get_asset_by_scan_code(code)
     if asset is None:
-        InventoryObservedItem.objects.create(
-            session=session,
-            asset=None,
-            code=code,
-            scanned_location=current_location,
-            status=InventoryObservedItem.Status.UNKNOWN_CODE,
-            first_seen_at=now,
-            last_seen_at=now,
-        )
+        _record_unknown_code(session=session, code=code, current_location=current_location, seen_at=now)
         return {"ok": True, "type": "unknown", "status": InventoryObservedItem.Status.UNKNOWN_CODE}
 
     status = _resolve_observed_status(session, asset, current_location)
@@ -175,6 +159,41 @@ def record_mobile_scan(session: "InventorySession", code: str, current_location_
         observed_item.save(update_fields=["code", "scanned_location", "status", "last_seen_at"])
 
     return {"ok": True, "type": "asset", "status": status}
+
+
+def _record_unknown_code(
+    *,
+    session: InventorySession,
+    code: str,
+    current_location: Location | None,
+    seen_at,
+) -> InventoryObservedItem:
+    observed_item = (
+        InventoryObservedItem.objects
+        .filter(
+            session=session,
+            asset__isnull=True,
+            code=code,
+            status=InventoryObservedItem.Status.UNKNOWN_CODE,
+        )
+        .order_by("id")
+        .first()
+    )
+    if observed_item is None:
+        return InventoryObservedItem.objects.create(
+            session=session,
+            asset=None,
+            code=code,
+            scanned_location=current_location,
+            status=InventoryObservedItem.Status.UNKNOWN_CODE,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+        )
+
+    observed_item.scanned_location = current_location
+    observed_item.last_seen_at = seen_at
+    observed_item.save(update_fields=["scanned_location", "last_seen_at"])
+    return observed_item
 
 
 def _get_location_by_code(code: str):

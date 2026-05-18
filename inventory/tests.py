@@ -1569,6 +1569,24 @@ class ImportInventoryScanTextTests(TestCase):
         self.assertEqual(observed.status, InventoryObservedItem.Status.UNKNOWN_CODE)
         self.assertEqual(observed.scanned_location, self.child)
 
+    def test_repeated_unknown_code_keeps_one_observed_item(self):
+        import_inventory_scan_text(
+            f"{self.session.number}\n{self.root.code}\nUNKNOWN-CODE-REPEAT\n"
+            f"{self.child.code}\nUNKNOWN-CODE-REPEAT"
+        )
+
+        observed = InventoryObservedItem.objects.get(asset__isnull=True, code="UNKNOWN-CODE-REPEAT")
+        self.assertEqual(observed.status, InventoryObservedItem.Status.UNKNOWN_CODE)
+        self.assertEqual(observed.scanned_location, self.child)
+        self.assertEqual(
+            InventoryObservedItem.objects.filter(
+                session=self.session,
+                asset__isnull=True,
+                code="UNKNOWN-CODE-REPEAT",
+            ).count(),
+            1,
+        )
+
     def test_scan_batch_stores_raw_text_and_counters(self):
         raw_text = f"{self.session.number}\n{self.child.code}\nBC-IMPORT-IN\nUNKNOWN-CODE-002\n"
 
@@ -3038,6 +3056,33 @@ class MobileScannerTests(TestCase):
         data = response.json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["type"], "unknown")
+
+    def test_repeated_unknown_mobile_scan_keeps_one_observed_item(self):
+        for location_code in ("", self.child.code):
+            response = self.client.post(
+                self._scan_url(),
+                data=json.dumps({"code": "UNKNOWN-MOB-REPEAT", "current_location_code": location_code}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.json()["ok"])
+            self.assertEqual(response.json()["type"], "unknown")
+
+        observed = InventoryObservedItem.objects.get(
+            session=self.session_a,
+            asset__isnull=True,
+            code="UNKNOWN-MOB-REPEAT",
+        )
+        self.assertEqual(observed.status, InventoryObservedItem.Status.UNKNOWN_CODE)
+        self.assertEqual(observed.scanned_location, self.child)
+        self.assertEqual(
+            InventoryObservedItem.objects.filter(
+                session=self.session_a,
+                asset__isnull=True,
+                code="UNKNOWN-MOB-REPEAT",
+            ).count(),
+            1,
+        )
 
     # 8. Token from session A cannot record scan to session B
     def test_token_scoped_to_own_session(self):
