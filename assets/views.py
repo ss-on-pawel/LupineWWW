@@ -21,8 +21,8 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 import urllib.parse
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
-from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm
-from .models import Asset, AssetAttachment, AssetChangeRequest, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
+from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm, DepreciationPlanForm
+from .models import Asset, AssetAttachment, AssetChangeRequest, AssetDepreciationPlan, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     capture_asset_history_values,
@@ -1901,3 +1901,45 @@ def asset_import_template(request):
     )
     response["Content-Disposition"] = 'attachment; filename="szablon_importu.xlsx"'
     return response
+
+
+@login_required
+def asset_depreciation_plan(request, asset_id):
+    asset = get_object_or_404(Asset, pk=asset_id)
+    accessible_location_ids = get_accessible_location_ids(request.user)
+    if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
+        raise Http404
+
+    plan = AssetDepreciationPlan.objects.filter(asset=asset).first()
+    is_readonly = not asset.is_active
+
+    if request.method == "POST":
+        if is_readonly:
+            messages.error(request, "Nie można edytować planu amortyzacji dla archiwalnego środka.")
+            return redirect("assets:detail", id=asset.pk)
+        form = DepreciationPlanForm(request.POST, instance=plan)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.asset = asset
+            obj.save()
+            messages.success(request, "Plan amortyzacji został zapisany.")
+            return redirect("assets:detail", id=asset.pk)
+    else:
+        initial = {}
+        if plan is None:
+            if asset.purchase_value is not None:
+                initial["initial_value"] = asset.purchase_value
+            start = asset.commissioning_date or asset.purchase_date
+            if start is not None:
+                initial["depreciation_start_date"] = start
+        form = DepreciationPlanForm(instance=plan, initial=initial if plan is None else {})
+
+    if is_readonly:
+        for field in form.fields.values():
+            field.disabled = True
+
+    return render(request, "assets/asset_depreciation_plan.html", {
+        "asset": asset,
+        "form": form,
+        "is_readonly": is_readonly,
+    })

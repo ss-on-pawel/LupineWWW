@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Plan amortyzacji — {{ asset.name }}{% endblock %}
+
+{% block extra_head %}
+    <style>
+        .depreciation-page {
+            display: grid;
+            gap: 12px;
+        }
+        .depreciation-header {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+        }
+        .depreciation-actions {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .depreciation-toggle {
+            display: flex;
+            align-items: center;
+            min-height: 42px;
+            padding: 8px 10px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            background: rgba(255, 255, 255, 0.88);
+        }
+        .depreciation-toggle .form-field {
+            gap: 0;
+        }
+        .depreciation-toggle label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+        }
+        .depreciation-form {
+            display: grid;
+            gap: 12px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<section class="depreciation-page">
+    <header class="depreciation-header">
+        <h1 class="page-title">Amortyzacja</h1>
+        <p class="page-subtitle">{{ asset.name }} ({{ asset.inventory_number }})</p>
+    </header>
+
+    <div class="depreciation-actions">
+        <a href="{% url 'assets:detail' id=asset.pk %}" class="ui-btn ui-btn--secondary">Wróć do karty środka</a>
+    </div>
+
+    {% if is_readonly %}
+    <div class="notice notice-warning">
+        Ten środek jest archiwalny. Plan amortyzacji jest wyświetlany w trybie tylko do odczytu.
+    </div>
+    {% endif %}
+
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="message message-{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form method="post" class="depreciation-form">
+        {% csrf_token %}
+
+        <div class="depreciation-toggle">
+            <div class="form-field">
+                <label class="checkbox-label">
+                    {{ form.enabled }}
+                    {{ form.enabled.label }}
+                </label>
+                {{ form.enabled.errors }}
+            </div>
+        </div>
+
+        <section class="card">
+            <h3 class="section-title">Parametry planu</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    {{ form.method.label_tag }}
+                    {{ form.method }}
+                    {{ form.method.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.kst_category.label_tag }}
+                    {{ form.kst_category }}
+                    {{ form.kst_category.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.initial_value.label_tag }}
+                    {{ form.initial_value }}
+                    {{ form.initial_value.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.residual_value.label_tag }}
+                    {{ form.residual_value }}
+                    {% if form.residual_value.help_text %}<div class="helptext">{{ form.residual_value.help_text }}</div>{% endif %}
+                    {{ form.residual_value.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.depreciation_start_date.label_tag }}
+                    {{ form.depreciation_start_date }}
+                    {{ form.depreciation_start_date.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.annual_rate_percent.label_tag }}
+                    {{ form.annual_rate_percent }}
+                    {% if form.annual_rate_percent.help_text %}<div class="helptext">{{ form.annual_rate_percent.help_text }}</div>{% endif %}
+                    {{ form.annual_rate_percent.errors }}
+                </div>
+                <div class="form-field">
+                    {{ form.useful_life_months.label_tag }}
+                    {{ form.useful_life_months }}
+                    {% if form.useful_life_months.help_text %}<div class="helptext">{{ form.useful_life_months.help_text }}</div>{% endif %}
+                    {{ form.useful_life_months.errors }}
+                </div>
+                <div class="form-field form-field-wide">
+                    {{ form.notes.label_tag }}
+                    {{ form.notes }}
+                    {{ form.notes.errors }}
+                </div>
+            </div>
+            {% if form.non_field_errors %}
+            <div class="form-errors">{{ form.non_field_errors }}</div>
+            {% endif %}
+        </section>
+
+        {% if not is_readonly %}
+        <div class="form-actions">
+            <button type="submit" class="ui-btn ui-btn--primary">Zapisz plan</button>
+            <a href="{% url 'assets:detail' id=asset.pk %}" class="ui-btn ui-btn--secondary">Anuluj</a>
+        </div>
+        {% endif %}
+    </form>
+</section>
+{% endblock %}

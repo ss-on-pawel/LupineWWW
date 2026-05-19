@@ -374,6 +374,19 @@
         .asset-attachments-table td {
             vertical-align: middle;
         }
+        .depreciation-block {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: var(--asset-line);
+        }
+        .depreciation-header {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            min-height: 40px;
+        }
     </style>
 {% endblock %}
 
@@ -565,6 +578,54 @@
                             <span class="detail-label">Centrum kosztów</span>
                             <div class="detail-value is-mono">{{ asset.cost_center|default:"-" }}</div>
                         </div>
+                    </div>
+
+                    <div class="depreciation-block">
+                        <div class="depreciation-header">
+                            {% if asset.is_active %}
+                                <a href="{% url 'assets:depreciation-plan' asset_id=asset.pk %}" class="ui-btn ui-btn--secondary">Amortyzacja</a>
+                            {% endif %}
+                        </div>
+                        {% with plan=asset.depreciation_plan %}
+                        {% if plan and plan.enabled %}
+                            <div class="section-grid">
+                                <div class="detail-item">
+                                    <span class="detail-label">Status</span>
+                                    <div class="detail-value"><span class="badge badge-active">Włączona</span></div>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Metoda</span>
+                                    <div class="detail-value">{{ plan.get_method_display|default:"-" }}</div>
+                                </div>
+                                {% if plan.kst_category %}
+                                <div class="detail-item">
+                                    <span class="detail-label">KST / kategoria</span>
+                                    <div class="detail-value is-mono">{{ plan.kst_category }}</div>
+                                </div>
+                                {% endif %}
+                                <div class="detail-item">
+                                    <span class="detail-label">Wartość początkowa</span>
+                                    <div class="detail-value is-mono">{% if plan.initial_value %}{{ plan.initial_value }} zł{% else %}-{% endif %}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Wartość rezydualna</span>
+                                    <div class="detail-value is-mono">{% if plan.residual_value %}{{ plan.residual_value }} zł{% else %}-{% endif %}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Stawka roczna</span>
+                                    <div class="detail-value is-mono">{% if plan.annual_rate_percent %}{{ plan.annual_rate_percent }} %{% else %}-{% endif %}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Okres</span>
+                                    <div class="detail-value is-mono">{% if plan.useful_life_months %}{{ plan.useful_life_months }} mies.{% else %}-{% endif %}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Data rozpoczęcia</span>
+                                    <div class="detail-value is-mono">{{ plan.depreciation_start_date|date:"Y-m-d"|default:"-" }}</div>
+                                </div>
+                            </div>
+                        {% endif %}
+                        {% endwith %}
                     </div>
                 </div>
             </section>

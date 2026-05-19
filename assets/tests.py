@@ -21,9 +21,9 @@ from users.models import User
 from locations.models import Location
 from inventory.models import InventorySession, InventorySnapshotItem
 
-from .forms import AssetForm
+from .forms import AssetForm, DepreciationPlanForm
 from .filters import get_asset_filter_ui_schema
-from .models import Asset, AssetBarcodeSequence, AssetChangeRequest, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
+from .models import Asset, AssetBarcodeSequence, AssetChangeRequest, AssetDepreciationPlan, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
     deserialize_asset_payload_for_form,
@@ -8674,3 +8674,219 @@ class AssetServiceAlertTests(TestCase):
         response = self.client.get(reverse("assets:detail", kwargs={"id": self.asset.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Stary przegląd")
+
+
+class DepreciationPlanFormTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Dep Form Location")
+        self.asset = Asset.objects.create(
+            name="Dep Asset", inventory_number="DEP-001", location_fk=self.location,
+        )
+
+    def _form(self, data):
+        return DepreciationPlanForm(data=data)
+
+    def test_linear_calculates_months_from_rate(self):
+        form = self._form({
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "20", "useful_life_months": "",
+            "initial_value": "10000", "residual_value": "",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "", "notes": "",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["useful_life_months"], 60)
+
+    def test_linear_calculates_rate_from_months(self):
+        form = self._form({
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "", "useful_life_months": "48",
+            "initial_value": "5000", "residual_value": "",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "", "notes": "",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        from decimal import Decimal as D
+        self.assertEqual(form.cleaned_data["annual_rate_percent"], D("25.00"))
+
+    def test_one_time_normalizes_rate_and_period(self):
+        form = self._form({
+            "enabled": True, "method": "one_time",
+            "annual_rate_percent": "", "useful_life_months": "",
+            "initial_value": "3000", "residual_value": "",
+            "depreciation_start_date": "2026-06-01",
+            "kst_category": "", "notes": "",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        from decimal import Decimal as D
+        self.assertEqual(form.cleaned_data["annual_rate_percent"], D("100"))
+        self.assertEqual(form.cleaned_data["useful_life_months"], 1)
+
+    def test_residual_exceeds_initial_is_invalid(self):
+        form = self._form({
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "20", "useful_life_months": "",
+            "initial_value": "1000", "residual_value": "2000",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "", "notes": "",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("residual_value", form.errors)
+
+    def test_linear_requires_rate_or_months(self):
+        form = self._form({
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "", "useful_life_months": "",
+            "initial_value": "5000", "residual_value": "",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "", "notes": "",
+        })
+        self.assertFalse(form.is_valid())
+
+    def test_enabled_plan_requires_initial_value_and_start_date(self):
+        form = self._form({
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "20", "useful_life_months": "",
+            "initial_value": "", "residual_value": "",
+            "depreciation_start_date": "",
+            "kst_category": "", "notes": "",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("initial_value", form.errors)
+        self.assertIn("depreciation_start_date", form.errors)
+
+    def test_disabled_plan_requires_no_method(self):
+        form = self._form({
+            "enabled": False, "method": "",
+            "annual_rate_percent": "", "useful_life_months": "",
+            "initial_value": "", "residual_value": "",
+            "depreciation_start_date": "",
+            "kst_category": "", "notes": "",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+
+
+class DepreciationPlanModelTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Dep Model Location")
+        self.asset = Asset.objects.create(
+            name="Dep Model Asset", inventory_number="DEPM-001", location_fk=self.location,
+        )
+
+    def test_one_plan_per_asset(self):
+        AssetDepreciationPlan.objects.create(asset=self.asset, enabled=False)
+        from django.db import IntegrityError, transaction
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AssetDepreciationPlan.objects.create(asset=self.asset, enabled=False)
+
+
+class DepreciationPlanViewTests(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Dep View Location")
+        self.user = User.objects.create_superuser(
+            username="dep-view-super", password="test-pass-123"
+        )
+        self.scoped_user = User.objects.create_user(username="dep-view-scoped", password="test-pass-123")
+        self.scoped_user.profile.allowed_locations.add(self.location)
+        self.out_of_scope_user = User.objects.create_user(username="dep-view-out", password="test-pass-123")
+        self.active_asset = Asset.objects.create(
+            name="Active Dep Asset", inventory_number="DEPV-001",
+            location_fk=self.location, is_active=True,
+        )
+        self.archived_asset = Asset.objects.create(
+            name="Archived Dep Asset", inventory_number="DEPV-002",
+            location_fk=self.location, is_active=False,
+            status=Asset.Status.LIQUIDATED,
+        )
+
+    def _url(self, asset_id):
+        return reverse("assets:depreciation-plan", kwargs={"asset_id": asset_id})
+
+    def test_get_requires_login(self):
+        response = self.client.get(self._url(self.active_asset.pk))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith(reverse("accounts:login")))
+
+    def test_get_asset_without_plan_shows_form(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("form", response.context)
+        self.assertIsInstance(response.context["form"], DepreciationPlanForm)
+
+    def test_get_initialises_from_asset_purchase_value(self):
+        asset = Asset.objects.create(
+            name="Asset With Value", inventory_number="DEPV-003",
+            location_fk=self.location, is_active=True,
+            purchase_value=Decimal("9000"),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(asset.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["form"].initial.get("initial_value"), Decimal("9000"))
+
+    def test_post_valid_creates_plan_and_redirects(self):
+        self.client.force_login(self.user)
+        response = self.client.post(self._url(self.active_asset.pk), {
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "20", "useful_life_months": "",
+            "initial_value": "5000", "residual_value": "",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "491", "notes": "",
+        })
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
+        plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
+        self.assertTrue(plan.enabled)
+        self.assertEqual(plan.method, "linear")
+        self.assertEqual(plan.useful_life_months, 60)
+
+    def test_scoped_user_can_create_plan_for_accessible_asset(self):
+        self.client.force_login(self.scoped_user)
+        response = self.client.post(self._url(self.active_asset.pk), {
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "25", "useful_life_months": "",
+            "initial_value": "6000", "residual_value": "",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "491", "notes": "",
+        })
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
+        self.assertTrue(AssetDepreciationPlan.objects.filter(asset=self.active_asset).exists())
+
+    def test_user_outside_location_scope_gets_404(self):
+        self.client.force_login(self.out_of_scope_user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        self.assertEqual(response.status_code, 404)
+
+    def test_post_for_archived_asset_does_not_save(self):
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.archived_asset.pk), {
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "10", "useful_life_months": "",
+            "initial_value": "2000", "residual_value": "",
+            "depreciation_start_date": "2026-01-01",
+            "kst_category": "", "notes": "",
+        })
+        self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.archived_asset).exists())
+
+    def test_get_for_archived_asset_disables_form_fields(self):
+        AssetDepreciationPlan.objects.create(
+            asset=self.archived_asset,
+            enabled=True,
+            method=AssetDepreciationPlan.Method.LINEAR,
+            initial_value=Decimal("2000"),
+            depreciation_start_date=date(2026, 1, 1),
+            annual_rate_percent=Decimal("10"),
+            useful_life_months=120,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(self.archived_asset.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(all(field.field.disabled for field in response.context["form"]))
+
+    def test_asset_detail_contains_depreciation_action(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Amortyzacja")
+        self.assertContains(response, reverse("assets:depreciation-plan", kwargs={"asset_id": self.active_asset.pk}))

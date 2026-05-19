@@ -498,6 +498,54 @@ class AssetAttachment(models.Model):
         return f"{self.title} ({self.original_filename})"
 
 
+class AssetDepreciationPlan(models.Model):
+    class Method(models.TextChoices):
+        LINEAR = "linear", "Liniowa"
+        ONE_TIME = "one_time", "Jednorazowa"
+
+    asset = models.OneToOneField(
+        Asset,
+        on_delete=models.CASCADE,
+        related_name="depreciation_plan",
+        verbose_name="Środek",
+    )
+    enabled = models.BooleanField(default=False, verbose_name="Włączono naliczanie")
+    method = models.CharField(
+        max_length=20,
+        choices=Method.choices,
+        blank=True,
+        verbose_name="Metoda",
+    )
+    kst_category = models.CharField(max_length=120, blank=True, verbose_name="KST / kategoria")
+    initial_value = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Wartość początkowa (zł)",
+    )
+    residual_value = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Wartość rezydualna (zł)",
+    )
+    depreciation_start_date = models.DateField(null=True, blank=True, verbose_name="Data rozpoczęcia")
+    annual_rate_percent = models.DecimalField(
+        max_digits=6, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Stawka roczna (%)",
+    )
+    useful_life_months = models.PositiveIntegerField(null=True, blank=True, verbose_name="Okres (miesiące)")
+    notes = models.TextField(blank=True, verbose_name="Uwagi")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data utworzenia")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Data aktualizacji")
+
+    class Meta:
+        verbose_name = "Plan amortyzacji"
+        verbose_name_plural = "Plany amortyzacji"
+
+    def __str__(self) -> str:
+        return f"{self.asset}: plan amortyzacji"
+
+
 class AssetServiceAlert(models.Model):
     class Status(models.TextChoices):
         ACTIVE = "active", "Aktywny"
