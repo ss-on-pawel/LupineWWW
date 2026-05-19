@@ -1912,27 +1912,45 @@ def asset_depreciation_plan(request, asset_id):
 
     plan = AssetDepreciationPlan.objects.filter(asset=asset).first()
     is_readonly = not asset.is_active
+    monthly_depreciation_amount = None
+    annual_depreciation_amount = None
 
     if request.method == "POST":
         if is_readonly:
             messages.error(request, "Nie można edytować planu amortyzacji dla archiwalnego środka.")
             return redirect("assets:detail", id=asset.pk)
-        form = DepreciationPlanForm(request.POST, instance=plan)
-        if form.is_valid():
-            obj = form.save(commit=False)
-            obj.asset = asset
-            obj.save()
-            messages.success(request, "Plan amortyzacji został zapisany.")
-            return redirect("assets:detail", id=asset.pk)
+
+        action = request.POST.get("action", "save")
+        post_data = request.POST.copy()
+        if action == "generate":
+            post_data["enabled"] = "on"
+        form = DepreciationPlanForm(post_data, instance=plan)
+
+        if action == "generate":
+            if form.is_valid():
+                preview = form.save(commit=False)
+                preview.asset = asset
+                preview.depreciation_start_date = asset.commissioning_date
+                monthly_depreciation_amount = preview.monthly_depreciation_amount
+                annual_depreciation_amount = preview.annual_depreciation_amount
+            # Re-render without saving
+        else:
+            if form.is_valid():
+                obj = form.save(commit=False)
+                obj.asset = asset
+                obj.depreciation_start_date = asset.commissioning_date
+                obj.save()
+                messages.success(request, "Plan amortyzacji został zapisany.")
+                return redirect("assets:detail", id=asset.pk)
     else:
         initial = {}
         if plan is None:
             if asset.purchase_value is not None:
                 initial["initial_value"] = asset.purchase_value
-            start = asset.commissioning_date or asset.purchase_date
-            if start is not None:
-                initial["depreciation_start_date"] = start
         form = DepreciationPlanForm(instance=plan, initial=initial if plan is None else {})
+        if plan:
+            monthly_depreciation_amount = plan.monthly_depreciation_amount
+            annual_depreciation_amount = plan.annual_depreciation_amount
 
     if is_readonly:
         for field in form.fields.values():
@@ -1942,4 +1960,7 @@ def asset_depreciation_plan(request, asset_id):
         "asset": asset,
         "form": form,
         "is_readonly": is_readonly,
+        "commissioning_date": asset.commissioning_date,
+        "monthly_depreciation_amount": monthly_depreciation_amount,
+        "annual_depreciation_amount": annual_depreciation_amount,
     })

@@ -8686,81 +8686,56 @@ class DepreciationPlanFormTests(TestCase):
     def _form(self, data):
         return DepreciationPlanForm(data=data)
 
-    def test_linear_calculates_months_from_rate(self):
-        form = self._form({
+    def _linear(self, **overrides):
+        base = {
             "enabled": True, "method": "linear",
-            "annual_rate_percent": "20", "useful_life_months": "",
+            "annual_rate_percent": "20",
             "initial_value": "10000", "residual_value": "",
-            "depreciation_start_date": "2026-01-01",
             "kst_category": "", "notes": "",
-        })
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.cleaned_data["useful_life_months"], 60)
+        }
+        base.update(overrides)
+        return base
 
-    def test_linear_calculates_rate_from_months(self):
-        form = self._form({
-            "enabled": True, "method": "linear",
-            "annual_rate_percent": "", "useful_life_months": "48",
-            "initial_value": "5000", "residual_value": "",
-            "depreciation_start_date": "2026-01-01",
-            "kst_category": "", "notes": "",
-        })
-        self.assertTrue(form.is_valid(), form.errors)
-        from decimal import Decimal as D
-        self.assertEqual(form.cleaned_data["annual_rate_percent"], D("25.00"))
-
-    def test_one_time_normalizes_rate_and_period(self):
+    def test_one_time_normalizes_rate_to_100(self):
         form = self._form({
             "enabled": True, "method": "one_time",
-            "annual_rate_percent": "", "useful_life_months": "",
+            "annual_rate_percent": "",
             "initial_value": "3000", "residual_value": "",
-            "depreciation_start_date": "2026-06-01",
             "kst_category": "", "notes": "",
         })
         self.assertTrue(form.is_valid(), form.errors)
-        from decimal import Decimal as D
-        self.assertEqual(form.cleaned_data["annual_rate_percent"], D("100"))
-        self.assertEqual(form.cleaned_data["useful_life_months"], 1)
+        self.assertEqual(form.cleaned_data["annual_rate_percent"], Decimal("100"))
+
+    def test_linear_valid_with_rate(self):
+        form = self._form(self._linear())
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["annual_rate_percent"], Decimal("20"))
+
+    def test_linear_requires_annual_rate(self):
+        form = self._form(self._linear(annual_rate_percent=""))
+        self.assertFalse(form.is_valid())
+        self.assertIn("annual_rate_percent", form.errors)
+
+    def test_linear_rate_must_be_positive(self):
+        form = self._form(self._linear(annual_rate_percent="0"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("annual_rate_percent", form.errors)
 
     def test_residual_exceeds_initial_is_invalid(self):
-        form = self._form({
-            "enabled": True, "method": "linear",
-            "annual_rate_percent": "20", "useful_life_months": "",
-            "initial_value": "1000", "residual_value": "2000",
-            "depreciation_start_date": "2026-01-01",
-            "kst_category": "", "notes": "",
-        })
+        form = self._form(self._linear(initial_value="1000", residual_value="2000"))
         self.assertFalse(form.is_valid())
         self.assertIn("residual_value", form.errors)
 
-    def test_linear_requires_rate_or_months(self):
-        form = self._form({
-            "enabled": True, "method": "linear",
-            "annual_rate_percent": "", "useful_life_months": "",
-            "initial_value": "5000", "residual_value": "",
-            "depreciation_start_date": "2026-01-01",
-            "kst_category": "", "notes": "",
-        })
-        self.assertFalse(form.is_valid())
-
-    def test_enabled_plan_requires_initial_value_and_start_date(self):
-        form = self._form({
-            "enabled": True, "method": "linear",
-            "annual_rate_percent": "20", "useful_life_months": "",
-            "initial_value": "", "residual_value": "",
-            "depreciation_start_date": "",
-            "kst_category": "", "notes": "",
-        })
+    def test_enabled_plan_requires_initial_value(self):
+        form = self._form(self._linear(initial_value=""))
         self.assertFalse(form.is_valid())
         self.assertIn("initial_value", form.errors)
-        self.assertIn("depreciation_start_date", form.errors)
 
     def test_disabled_plan_requires_no_method(self):
         form = self._form({
             "enabled": False, "method": "",
-            "annual_rate_percent": "", "useful_life_months": "",
+            "annual_rate_percent": "",
             "initial_value": "", "residual_value": "",
-            "depreciation_start_date": "",
             "kst_category": "", "notes": "",
         })
         self.assertTrue(form.is_valid(), form.errors)
@@ -8780,6 +8755,34 @@ class DepreciationPlanModelTests(TestCase):
             with transaction.atomic():
                 AssetDepreciationPlan.objects.create(asset=self.asset, enabled=False)
 
+    def test_linear_depreciation_amounts_use_base_and_annual_rate(self):
+        plan = AssetDepreciationPlan.objects.create(
+            asset=self.asset,
+            enabled=True,
+            method=AssetDepreciationPlan.Method.LINEAR,
+            initial_value=Decimal("10000"),
+            residual_value=Decimal("1000"),
+            depreciation_start_date=date(2026, 1, 1),
+            annual_rate_percent=Decimal("20"),
+            useful_life_months=60,
+        )
+        self.assertEqual(plan.depreciation_base_amount, Decimal("9000.00"))
+        self.assertEqual(plan.annual_depreciation_amount, Decimal("1800.00"))
+        self.assertEqual(plan.monthly_depreciation_amount, Decimal("150.00"))
+
+    def test_one_time_depreciation_amounts_use_full_base(self):
+        plan = AssetDepreciationPlan.objects.create(
+            asset=self.asset,
+            enabled=True,
+            method=AssetDepreciationPlan.Method.ONE_TIME,
+            initial_value=Decimal("2500"),
+            depreciation_start_date=date(2026, 1, 1),
+            annual_rate_percent=Decimal("100"),
+            useful_life_months=1,
+        )
+        self.assertEqual(plan.annual_depreciation_amount, Decimal("2500.00"))
+        self.assertEqual(plan.monthly_depreciation_amount, Decimal("2500.00"))
+
 
 class DepreciationPlanViewTests(TestCase):
     def setUp(self):
@@ -8793,6 +8796,7 @@ class DepreciationPlanViewTests(TestCase):
         self.active_asset = Asset.objects.create(
             name="Active Dep Asset", inventory_number="DEPV-001",
             location_fk=self.location, is_active=True,
+            commissioning_date=date(2026, 2, 15),
         )
         self.archived_asset = Asset.objects.create(
             name="Archived Dep Asset", inventory_number="DEPV-002",
@@ -8830,24 +8834,22 @@ class DepreciationPlanViewTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.post(self._url(self.active_asset.pk), {
             "enabled": True, "method": "linear",
-            "annual_rate_percent": "20", "useful_life_months": "",
+            "annual_rate_percent": "20",
             "initial_value": "5000", "residual_value": "",
-            "depreciation_start_date": "2026-01-01",
             "kst_category": "491", "notes": "",
         })
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
         plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
         self.assertTrue(plan.enabled)
         self.assertEqual(plan.method, "linear")
-        self.assertEqual(plan.useful_life_months, 60)
+        self.assertEqual(plan.depreciation_start_date, self.active_asset.commissioning_date)
 
     def test_scoped_user_can_create_plan_for_accessible_asset(self):
         self.client.force_login(self.scoped_user)
         response = self.client.post(self._url(self.active_asset.pk), {
             "enabled": True, "method": "linear",
-            "annual_rate_percent": "25", "useful_life_months": "",
+            "annual_rate_percent": "25",
             "initial_value": "6000", "residual_value": "",
-            "depreciation_start_date": "2026-01-01",
             "kst_category": "491", "notes": "",
         })
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
@@ -8862,9 +8864,8 @@ class DepreciationPlanViewTests(TestCase):
         self.client.force_login(self.user)
         self.client.post(self._url(self.archived_asset.pk), {
             "enabled": True, "method": "linear",
-            "annual_rate_percent": "10", "useful_life_months": "",
+            "annual_rate_percent": "10",
             "initial_value": "2000", "residual_value": "",
-            "depreciation_start_date": "2026-01-01",
             "kst_category": "", "notes": "",
         })
         self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.archived_asset).exists())
@@ -8884,9 +8885,120 @@ class DepreciationPlanViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(all(field.field.disabled for field in response.context["form"]))
 
+    def test_get_existing_plan_shows_read_only_depreciation_amounts(self):
+        AssetDepreciationPlan.objects.create(
+            asset=self.active_asset,
+            enabled=True,
+            method=AssetDepreciationPlan.Method.LINEAR,
+            initial_value=Decimal("10000"),
+            residual_value=Decimal("1000"),
+            depreciation_start_date=date(2026, 1, 1),
+            annual_rate_percent=Decimal("20"),
+            useful_life_months=60,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("150.00"))
+        self.assertEqual(response.context["annual_depreciation_amount"], Decimal("1800.00"))
+        self.assertContains(response, "Miesięczny odpis amortyzacyjny")
+        self.assertContains(response, "Roczny odpis amortyzacyjny")
+
     def test_asset_detail_contains_depreciation_action(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Amortyzacja")
         self.assertContains(response, reverse("assets:depreciation-plan", kwargs={"asset_id": self.active_asset.pk}))
+
+    # --- generate/save workflow ---
+
+    def _valid_linear_payload(self, action="save"):
+        return {
+            "action": action,
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "20",
+            "initial_value": "10000", "residual_value": "1000",
+            "kst_category": "", "notes": "",
+        }
+
+    def test_generate_action_does_not_save_to_db(self):
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="generate"))
+        self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.active_asset).exists())
+
+    def test_generate_action_shows_monthly_and_annual_amounts(self):
+        self.client.force_login(self.user)
+        response = self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="generate"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Miesięczny odpis amortyzacyjny")
+        self.assertContains(response, "Roczny odpis amortyzacyjny")
+        self.assertContains(response, "depreciation-plan-preview")
+        # base=9000, rate=20% → annual=1800, monthly=150
+        self.assertEqual(response.context["annual_depreciation_amount"], Decimal("1800.00"))
+        self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("150.00"))
+
+    def test_generate_action_calculates_even_when_enabled_checkbox_is_missing(self):
+        self.client.force_login(self.user)
+        payload = self._valid_linear_payload(action="generate")
+        payload.pop("enabled")
+        response = self.client.post(self._url(self.active_asset.pk), payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["annual_depreciation_amount"], Decimal("1800.00"))
+        self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("150.00"))
+        self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.active_asset).exists())
+
+    def test_save_action_creates_plan(self):
+        self.client.force_login(self.user)
+        response = self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="save"))
+        self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
+        self.assertTrue(AssetDepreciationPlan.objects.filter(asset=self.active_asset).exists())
+
+    def test_linear_amounts_calculation(self):
+        """base=9000, rate=20% → annual=1800, monthly=150."""
+        self.client.force_login(self.user)
+        response = self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="generate"))
+        self.assertEqual(response.context["annual_depreciation_amount"], Decimal("1800.00"))
+        self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("150.00"))
+
+    def test_one_time_shows_full_base_as_amounts(self):
+        """one_time: annual = monthly = base (initial - residual)."""
+        self.client.force_login(self.user)
+        payload = {
+            "action": "generate",
+            "enabled": True, "method": "one_time",
+            "annual_rate_percent": "",
+            "initial_value": "5000", "residual_value": "500",
+            "kst_category": "", "notes": "",
+        }
+        response = self.client.post(self._url(self.active_asset.pk), payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["annual_depreciation_amount"], Decimal("4500.00"))
+        self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("4500.00"))
+
+    def test_form_shows_asset_commissioning_date_as_data_przyjecia(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertNotIn("depreciation_start_date", form.fields)
+        self.assertEqual(response.context["commissioning_date"], self.active_asset.commissioning_date)
+        self.assertContains(response, "Data przyj")
+        self.assertContains(response, "2026-02-15")
+
+    def test_form_does_not_contain_useful_life_months_field(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        form = response.context["form"]
+        self.assertNotIn("useful_life_months", form.fields)
+
+    def test_archived_asset_generate_action_does_not_save(self):
+        self.client.force_login(self.user)
+        response = self.client.post(self._url(self.archived_asset.pk), self._valid_linear_payload(action="generate"))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.archived_asset).exists())
+
+    def test_archived_asset_save_action_does_not_save(self):
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.archived_asset.pk), self._valid_linear_payload(action="save"))
+        self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.archived_asset).exists())

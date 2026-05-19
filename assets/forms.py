@@ -182,23 +182,14 @@ class DepreciationPlanForm(forms.ModelForm):
             "kst_category",
             "initial_value",
             "residual_value",
-            "depreciation_start_date",
             "annual_rate_percent",
-            "useful_life_months",
             "notes",
         ]
         widgets = {
-            "depreciation_start_date": forms.DateInput(attrs={"type": "date"}),
             "initial_value": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
             "residual_value": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
             "annual_rate_percent": forms.NumberInput(attrs={"step": "0.01", "min": "0", "max": "100"}),
-            "useful_life_months": forms.NumberInput(attrs={"min": "1"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
-        }
-        help_texts = {
-            "annual_rate_percent": "Np. 20 dla 5 lat. Podaj stawkę lub okres — drugie pole zostanie wyliczone.",
-            "useful_life_months": "Np. 60 dla 5 lat. Podaj okres lub stawkę — drugie pole zostanie wyliczone.",
-            "residual_value": "Wartość rezydualna (opcjonalna). Nie może przekraczać wartości początkowej.",
         }
 
     def clean(self):
@@ -206,10 +197,8 @@ class DepreciationPlanForm(forms.ModelForm):
         enabled = cleaned.get("enabled")
         method = cleaned.get("method")
         annual_rate = cleaned.get("annual_rate_percent")
-        months = cleaned.get("useful_life_months")
         initial = cleaned.get("initial_value")
         residual = cleaned.get("residual_value")
-        start_date = cleaned.get("depreciation_start_date")
 
         if not enabled:
             return cleaned
@@ -218,12 +207,10 @@ class DepreciationPlanForm(forms.ModelForm):
             self.add_error("method", "Wybierz metodę amortyzacji.")
             return cleaned
 
-        if initial is not None and initial < 0:
-            self.add_error("initial_value", "Wartość początkowa nie może być ujemna.")
         if initial is None:
             self.add_error("initial_value", "Podaj wartość początkową do amortyzacji.")
-        if start_date is None:
-            self.add_error("depreciation_start_date", "Podaj datę rozpoczęcia amortyzacji.")
+        elif initial < 0:
+            self.add_error("initial_value", "Wartość początkowa nie może być ujemna.")
         if residual is not None and residual < 0:
             self.add_error("residual_value", "Wartość rezydualna nie może być ujemna.")
         if initial is not None and residual is not None and residual > initial:
@@ -231,19 +218,11 @@ class DepreciationPlanForm(forms.ModelForm):
 
         if method == AssetDepreciationPlan.Method.ONE_TIME:
             cleaned["annual_rate_percent"] = Decimal("100")
-            cleaned["useful_life_months"] = 1
         elif method == AssetDepreciationPlan.Method.LINEAR:
-            if annual_rate is None and months is None:
-                self.add_error("annual_rate_percent", "Podaj stawkę roczną lub okres użytkowania.")
-            elif annual_rate is not None and annual_rate <= 0:
+            if annual_rate is None:
+                self.add_error("annual_rate_percent", "Podaj stawkę roczną amortyzacji.")
+            elif annual_rate <= 0:
                 self.add_error("annual_rate_percent", "Stawka roczna musi być większa od zera.")
-            elif months is not None and months < 1:
-                self.add_error("useful_life_months", "Okres musi wynosić co najmniej 1 miesiąc.")
-            else:
-                if annual_rate is not None and months is None:
-                    cleaned["useful_life_months"] = round(Decimal("1200") / annual_rate)
-                elif months is not None and annual_rate is None:
-                    cleaned["annual_rate_percent"] = (Decimal("1200") / months).quantize(Decimal("0.01"))
 
         return cleaned
 

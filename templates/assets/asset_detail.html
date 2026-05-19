@@ -616,12 +616,8 @@
                                     <div class="detail-value is-mono">{% if plan.annual_rate_percent %}{{ plan.annual_rate_percent }} %{% else %}-{% endif %}</div>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Okres</span>
-                                    <div class="detail-value is-mono">{% if plan.useful_life_months %}{{ plan.useful_life_months }} mies.{% else %}-{% endif %}</div>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Data rozpoczęcia</span>
-                                    <div class="detail-value is-mono">{{ plan.depreciation_start_date|date:"Y-m-d"|default:"-" }}</div>
+                                    <span class="detail-label">Data przyjęcia</span>
+                                    <div class="detail-value is-mono">{{ asset.commissioning_date|date:"Y-m-d"|default:"-" }}</div>
                                 </div>
                             </div>
                         {% endif %}
