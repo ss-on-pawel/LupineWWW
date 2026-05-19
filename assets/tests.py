@@ -4018,6 +4018,12 @@ class AssetListApiTests(TestCase):
     def setUp(self):
         self.client.force_login(self.admin_user)
 
+    def test_anonymous_request_redirects_to_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("assets:api-list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith(reverse("accounts:login")))
+
     def test_api_uses_default_pagination(self):
         response = self.client.get(reverse("assets:api-list"))
 
