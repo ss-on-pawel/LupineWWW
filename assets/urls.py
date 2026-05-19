@@ -17,6 +17,7 @@ from .views import (
     asset_change_bulk_reject,
     asset_change_reject,
     asset_depreciation_plan,
+    depreciation_report,
     asset_detail,
     asset_export_csv_api,
     asset_generate_lt_pdf,
@@ -63,4 +64,5 @@ urlpatterns = [
     path("assets/<int:asset_id>/service-alerts/create/", asset_service_alert_create, name="service-alert-create"),
     path("service-alerts/<int:alert_id>/resolve/", asset_service_alert_resolve, name="service-alert-resolve"),
     path("assets/<int:asset_id>/depreciation/", asset_depreciation_plan, name="depreciation-plan"),
+    path("assets/reports/depreciation/", depreciation_report, name="depreciation-report"),
 ]

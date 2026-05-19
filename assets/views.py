@@ -35,7 +35,8 @@ from .services import (
 )
 from inventory.models import InventorySession, InventorySnapshotItem
 from .importer import build_import_template_xlsx, import_assets_from_rows, parse_import_xlsx
-from locations.models import Location
+from .report_utils import build_depreciation_report
+from locations.models import Location, OrganizationSettings
 
 
 ASSET_WITHDRAW_STATUSES = {
@@ -1964,3 +1965,141 @@ def asset_depreciation_plan(request, asset_id):
         "monthly_depreciation_amount": monthly_depreciation_amount,
         "annual_depreciation_amount": annual_depreciation_amount,
     })
+
+
+@login_required
+def depreciation_report(request):
+    today = date.today()
+    period_type = request.GET.get("period_type", "monthly")
+    year_str = request.GET.get("year", "")
+    month_str = request.GET.get("month", "")
+    fmt = request.GET.get("format", "html")
+
+    year = None
+    month = None
+    error = None
+    rows = []
+    totals = {}
+    label = ""
+
+    if year_str:
+        try:
+            year = int(year_str)
+            if not (1900 <= year <= 2100):
+                raise ValueError
+        except ValueError:
+            error = "Nieprawidłowy rok."
+
+        if not error and period_type == "monthly":
+            try:
+                month = int(month_str) if month_str else None
+                if month is not None and not (1 <= month <= 12):
+                    raise ValueError
+                if month is None:
+                    error = "Dla okresu miesięcznego należy wybrać miesiąc."
+            except ValueError:
+                error = "Nieprawidłowy miesiąc."
+
+    show_results = year is not None and error is None
+
+    if show_results:
+        rows, totals, label = build_depreciation_report(year, month)
+
+        if fmt == "pdf":
+            from .documents import generate_depreciation_report_pdf
+            org = OrganizationSettings.get()
+            buf = generate_depreciation_report_pdf(rows, totals, label, org, timezone.now())
+            fname = f"amortyzacja_{year}_{month:02d}.pdf" if month else f"amortyzacja_{year}.pdf"
+            return FileResponse(buf, content_type="application/pdf", as_attachment=True, filename=fname)
+
+        if fmt == "xlsx":
+            buf = _build_depreciation_xlsx(rows, totals, label)
+            fname = f"amortyzacja_{year}_{month:02d}.xlsx" if month else f"amortyzacja_{year}.xlsx"
+            response = HttpResponse(
+                buf.read(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = f'attachment; filename="{fname}"'
+            return response
+
+    return render(request, "assets/depreciation_report.html", {
+        "year": year if year is not None else today.year,
+        "month": month if month is not None else today.month,
+        "period_type": period_type,
+        "rows": rows,
+        "totals": totals,
+        "period_label": label,
+        "error": error,
+        "show_results": show_results,
+    })
+
+
+def _build_depreciation_xlsx(rows, totals, period_label):
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Amortyzacja"
+
+    ws.merge_cells("A1:M1")
+    ws["A1"] = f"Zestawienie odpisów amortyzacyjnych — {period_label}"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A1"].alignment = Alignment(horizontal="center")
+
+    ws.append([])
+    headers = [
+        "Lp.", "Nr inw.", "Nazwa środka", "KST",
+        "Data startu", "Wartość pocz. (zł)", "Wartość rez. (zł)", "Podstawa (zł)",
+        "Metoda", "Stawka %", "Odpis za okres (zł)", "Skumulowana (zł)", "Wartość netto (zł)",
+    ]
+    ws.append(headers)
+    hdr_row = ws.max_row
+    hdr_fill = PatternFill(start_color="E8E8E8", end_color="E8E8E8", fill_type="solid")
+    for col, _ in enumerate(headers, 1):
+        cell = ws.cell(row=hdr_row, column=col)
+        cell.font = Font(bold=True)
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal="center", wrap_text=True)
+
+    for i, row in enumerate(rows, 1):
+        rate = float(row["annual_rate_percent"]) if row["annual_rate_percent"] else ""
+        ws.append([
+            i,
+            row["inventory_number"],
+            row["name"],
+            row["kst_category"],
+            row["start_date"].strftime("%Y-%m-%d"),
+            float(row["initial_value"]),
+            float(row["residual_value"]),
+            float(row["depreciation_base"]),
+            row["method_display"],
+            rate,
+            float(row["period_charge"]),
+            float(row["accumulated"]),
+            float(row["net_value"]),
+        ])
+
+    sum_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
+    ws.append([
+        "", "RAZEM:", "", "", "",
+        float(totals["initial_value"]), "",
+        float(totals["depreciation_base"]), "", "",
+        float(totals["period_charge"]),
+        float(totals["accumulated"]),
+        float(totals["net_value"]),
+    ])
+    sum_row = ws.max_row
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=sum_row, column=col)
+        cell.font = Font(bold=True)
+        cell.fill = sum_fill
+
+    for col, width in enumerate([5, 16, 32, 14, 12, 18, 18, 16, 10, 10, 20, 20, 20], 1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf

@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Zestawienie amortyzacji{% endblock %}
+
+{% block content %}
+<div class="rpt-page">
+
+    <div class="rpt-header">
+        <h1 class="rpt-title">Zestawienie odpisów amortyzacyjnych</h1>
+    </div>
+
+    {% if error %}
+    <div class="notice notice-error">{{ error }}</div>
+    {% endif %}
+
+    <div class="card">
+        <form method="get" class="rpt-form">
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="id_period_type">Typ okresu</label>
+                    <select name="period_type" id="id_period_type">
+                        <option value="monthly" {% if period_type == "monthly" %}selected{% endif %}>Miesięczny</option>
+                        <option value="annual" {% if period_type == "annual" %}selected{% endif %}>Roczny</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="id_year">Rok</label>
+                    <input type="number" name="year" id="id_year" value="{{ year }}" min="2000" max="2100">
+                </div>
+                <div class="form-field" id="month-field">
+                    <label for="id_month">Miesiąc</label>
+                    <select name="month" id="id_month">
+                        <option value="1"  {% if month == 1  %}selected{% endif %}>Styczeń</option>
+                        <option value="2"  {% if month == 2  %}selected{% endif %}>Luty</option>
+                        <option value="3"  {% if month == 3  %}selected{% endif %}>Marzec</option>
+                        <option value="4"  {% if month == 4  %}selected{% endif %}>Kwiecień</option>
+                        <option value="5"  {% if month == 5  %}selected{% endif %}>Maj</option>
+                        <option value="6"  {% if month == 6  %}selected{% endif %}>Czerwiec</option>
+                        <option value="7"  {% if month == 7  %}selected{% endif %}>Lipiec</option>
+                        <option value="8"  {% if month == 8  %}selected{% endif %}>Sierpień</option>
+                        <option value="9"  {% if month == 9  %}selected{% endif %}>Wrzesień</option>
+                        <option value="10" {% if month == 10 %}selected{% endif %}>Październik</option>
+                        <option value="11" {% if month == 11 %}selected{% endif %}>Listopad</option>
+                        <option value="12" {% if month == 12 %}selected{% endif %}>Grudzień</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions">
+                <button type="submit" class="ui-btn ui-btn--primary">Generuj podgląd</button>
+                {% if show_results %}
+                <a href="?period_type={{ period_type }}&year={{ year }}{% if period_type == 'monthly' and month %}&month={{ month }}{% endif %}&format=pdf"
+                   class="ui-btn ui-btn--secondary">Pobierz PDF</a>
+                <a href="?period_type={{ period_type }}&year={{ year }}{% if period_type == 'monthly' and month %}&month={{ month }}{% endif %}&format=xlsx"
+                   class="ui-btn ui-btn--secondary">Pobierz XLSX</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {% if show_results %}
+    <div class="card">
+        {% if rows %}
+        <p class="intro">{{ period_label }} — {{ rows|length }} środek/środków z aktywną amortyzacją</p>
+        <div class="rpt-table-wrap">
+            <table class="rpt-table">
+                <thead>
+                    <tr>
+                        <th>Lp.</th>
+                        <th>Nr inw.</th>
+                        <th>Nazwa środka</th>
+                        <th>KST</th>
+                        <th>Data startu</th>
+                        <th class="num">Wartość pocz. (zł)</th>
+                        <th class="num">Wartość rez. (zł)</th>
+                        <th class="num">Podstawa (zł)</th>
+                        <th>Metoda</th>
+                        <th class="num">Stawka %</th>
+                        <th class="num">Odpis za okres (zł)</th>
+                        <th class="num">Skumulowana (zł)</th>
+                        <th class="num">Wartość netto (zł)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td data-label="Lp.">{{ forloop.counter }}</td>
+                        <td data-label="Nr inw." class="mono">{{ row.inventory_number }}</td>
+                        <td data-label="Nazwa">{{ row.name }}</td>
+                        <td data-label="KST">{{ row.kst_category }}</td>
+                        <td data-label="Data startu" class="mono">{{ row.start_date|date:"Y-m-d" }}</td>
+                        <td data-label="Wartość pocz." class="num">{{ row.initial_value }}</td>
+                        <td data-label="Wartość rez." class="num">{{ row.residual_value }}</td>
+                        <td data-label="Podstawa" class="num">{{ row.depreciation_base }}</td>
+                        <td data-label="Metoda">{{ row.method_display }}</td>
+                        <td data-label="Stawka %" class="num">{{ row.annual_rate_percent|default:"—" }}</td>
+                        <td data-label="Odpis za okres" class="num"><strong>{{ row.period_charge }}</strong></td>
+                        <td data-label="Skumulowana" class="num">{{ row.accumulated }}</td>
+                        <td data-label="Wartość netto" class="num"><strong>{{ row.net_value }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="totals-row">
+                        <td></td>
+                        <td colspan="4"><strong>RAZEM</strong></td>
+                        <td class="num"><strong>{{ totals.initial_value }}</strong></td>
+                        <td></td>
+                        <td class="num"><strong>{{ totals.depreciation_base }}</strong></td>
+                        <td colspan="2"></td>
+                        <td class="num"><strong>{{ totals.period_charge }}</strong></td>
+                        <td class="num"><strong>{{ totals.accumulated }}</strong></td>
+                        <td class="num"><strong>{{ totals.net_value }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div id="rpt-sticky-scrollbar" class="rpt-sticky-scrollbar" hidden>
+            <div id="rpt-sticky-scrollbar-track" class="rpt-sticky-scrollbar-track">
+                <div id="rpt-sticky-scrollbar-spacer" class="rpt-sticky-scrollbar-spacer"></div>
+            </div>
+        </div>
+        {% else %}
+        <p class="muted">Brak środków z aktywną amortyzacją w wybranym okresie.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+(function () {
+    const periodType = document.getElementById('id_period_type');
+    const monthField = document.getElementById('month-field');
+    function toggle() {
+        monthField.style.display = periodType.value === 'monthly' ? '' : 'none';
+    }
+    periodType.addEventListener('change', toggle);
+    toggle();
+})();
+
+(function () {
+    const wrap = document.querySelector('.rpt-table-wrap');
+    const bar  = document.getElementById('rpt-sticky-scrollbar');
+    const track = document.getElementById('rpt-sticky-scrollbar-track');
+    const spacer = document.getElementById('rpt-sticky-scrollbar-spacer');
+    if (!wrap || !bar) return;
+
+    function sync() {
+        const table = wrap.querySelector('.rpt-table');
+        if (!table) { bar.hidden = true; return; }
+        const overflow = table.scrollWidth > wrap.clientWidth + 1;
+        bar.hidden = !overflow;
+        if (!overflow) { track.scrollLeft = 0; return; }
+        spacer.style.width = table.scrollWidth + 'px';
+        track.scrollLeft = wrap.scrollLeft;
+    }
+
+    wrap.addEventListener('scroll',  function () { if (!bar.hidden) track.scrollLeft = wrap.scrollLeft; });
+    track.addEventListener('scroll', function () { wrap.scrollLeft = track.scrollLeft; });
+    window.addEventListener('resize', sync);
+    sync();
+})();
+</script>
+
+<style>
+.rpt-page {
+    max-width: 1400px;
+}
+.rpt-header {
+    margin-bottom: 1.25rem;
+}
+.rpt-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+}
+.rpt-form .actions {
+    margin-top: 16px;
+}
+.rpt-table-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 18px;
+}
+.rpt-sticky-scrollbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 35;
+    margin-top: -18px;
+    padding-top: 4px;
+    width: 100%;
+    overflow: hidden;
+    background: linear-gradient(to top, rgba(248, 249, 251, 0.98), rgba(248, 249, 251, 0.88));
+}
+.rpt-sticky-scrollbar[hidden] {
+    display: none;
+}
+.rpt-sticky-scrollbar-track {
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    height: 14px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.92);
+    overscroll-behavior-x: contain;
+}
+.rpt-sticky-scrollbar-spacer {
+    height: 1px;
+}
+.rpt-table {
+    min-width: 1100px;
+    font-size: 0.88rem;
+}
+.rpt-table th,
+.rpt-table td {
+    padding: 8px 10px;
+    white-space: nowrap;
+}
+.rpt-table th.num,
+.rpt-table td.num {
+    text-align: right;
+}
+.rpt-table td.mono {
+    font-family: var(--mono-font);
+    font-size: 0.82rem;
+}
+.rpt-table tfoot .totals-row td {
+    background: rgba(10, 10, 10, 0.04);
+    border-top: 2px solid rgba(15, 23, 42, 0.18);
+}
+.notice-error {
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(193, 18, 31, 0.18);
+    background: rgba(254, 242, 242, 0.92);
+    color: #9f1239;
+}
+</style>
+{% endblock %}

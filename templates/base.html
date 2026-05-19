@@ -446,6 +446,7 @@
                     {% if request.user.is_authenticated %}
                         {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.role == "manager" %}
                             <a class="{% if request.path|slice:':16' == '/assets/changes/' %}is-active{% endif %}" href="{% url 'assets:change-list' %}">Kolejka zmian</a>
+                            <a class="{% if request.path == '/assets/reports/depreciation/' %}is-active{% endif %}" href="{% url 'assets:depreciation-report' %}">Amortyzacja</a>
                         {% endif %}
                         {% if request.user.is_superuser or request.user.is_staff %}
                             <a class="{% if request.path|slice:':10' == '/settings/' %}is-active{% endif %}" href="{% url 'settings:asset-types' %}">Słowniki</a>

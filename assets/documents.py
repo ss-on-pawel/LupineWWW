@@ -12,7 +12,7 @@ import os
 from datetime import date, datetime
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -133,7 +133,7 @@ _C_BORDER_OUTER = 0.75                   # pt — outer table border
 _C_BORDER_INNER = 0.4                    # pt — inner grid lines
 _C_BORDER_HEAVY = 0.75                   # pt — header separator
 
-# Page metrics
+# Page metrics — portrait A4 (LT documents)
 _PAGE_W, _PAGE_H = A4
 _MARGIN_L = 20 * mm
 _MARGIN_R = 15 * mm
@@ -141,6 +141,14 @@ _MARGIN_T = 15 * mm
 _MARGIN_B = 18 * mm   # larger bottom to make room for footer
 _CONTENT_W = _PAGE_W - _MARGIN_L - _MARGIN_R   # 175mm
 _FOOTER_H = 8 * mm
+
+# Page metrics — landscape A4 (depreciation report)
+_LAND_W, _LAND_H = landscape(A4)
+_LAND_ML = 15 * mm
+_LAND_MR = 15 * mm
+_LAND_MT = 12 * mm
+_LAND_MB = 16 * mm
+_LAND_CW = _LAND_W - _LAND_ML - _LAND_MR   # 267mm
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +734,201 @@ def _signature_table():
 
 # ---------------------------------------------------------------------------
 # Helpers
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Depreciation report — public API
+# ---------------------------------------------------------------------------
+
+def generate_depreciation_report_pdf(
+    rows,
+    totals,
+    period_label: str,
+    org,
+    generated_at: datetime,
+) -> io.BytesIO:
+    """
+    Generate a depreciation report PDF in landscape A4.
+
+    Args:
+        rows:         list of row dicts from build_depreciation_report()
+        totals:       totals dict from build_depreciation_report()
+        period_label: human-readable period string (e.g. "Maj 2026")
+        org:          OrganizationSettings instance
+        generated_at: datetime of generation
+
+    Returns:
+        BytesIO buffer at position 0.
+    """
+    ts = generated_at.strftime("%Y-%m-%d %H:%M") if generated_at else ""
+
+    def _make_doc(buf):
+        d = BaseDocTemplate(
+            buf,
+            pagesize=landscape(A4),
+            leftMargin=_LAND_ML,
+            rightMargin=_LAND_MR,
+            topMargin=_LAND_MT,
+            bottomMargin=_LAND_MB,
+            title="Zestawienie odpisów amortyzacyjnych",
+        )
+        d._rpt_ts = ts
+        d._rpt_period = period_label
+        d._rpt_total_pages = "?"
+        frame = Frame(
+            _LAND_ML, _LAND_MB,
+            _LAND_CW, _LAND_H - _LAND_MT - _LAND_MB,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        d.addPageTemplates([PageTemplate(id="main", frames=[frame], onPage=_draw_rpt_frame)])
+        return d
+
+    story = _build_rpt_story(rows, totals, period_label, org, ts)
+
+    buf1 = io.BytesIO()
+    doc1 = _make_doc(buf1)
+    doc1.build(story)
+    total_pages = doc1.page
+
+    buf2 = io.BytesIO()
+    doc2 = _make_doc(buf2)
+    doc2._rpt_total_pages = total_pages
+    doc2.build(_build_rpt_story(rows, totals, period_label, org, ts))
+    buf2.seek(0)
+    return buf2
+
+
+def _draw_rpt_frame(canvas, doc):
+    canvas.saveState()
+    y_line = _LAND_MB - 5 * mm
+    canvas.setStrokeColor(_C_RULE)
+    canvas.setLineWidth(0.3)
+    canvas.line(_LAND_ML, y_line, _LAND_W - _LAND_MR, y_line)
+    canvas.setFont(_MONO_FONT, 6.5)
+    canvas.setFillColor(_C_MID)
+    left_text = (
+        f"Lupine AMS  ·  Zestawienie odpisów amortyzacyjnych  ·  "
+        f"{getattr(doc, '_rpt_period', '')}  ·  Wygenerowano: {getattr(doc, '_rpt_ts', '')}"
+    )
+    right_text = f"Strona {canvas.getPageNumber()} z {getattr(doc, '_rpt_total_pages', '?')}"
+    canvas.drawString(_LAND_ML, y_line - 4.5 * mm, left_text)
+    canvas.drawRightString(_LAND_W - _LAND_MR, y_line - 4.5 * mm, right_text)
+    canvas.restoreState()
+
+
+def _build_rpt_story(rows, totals, period_label, org, ts):
+    story = []
+
+    org_full = (getattr(org, "full_name", "") or "").strip()
+
+    header_data = [[
+        Paragraph(org_full or "—", _ps("rh_org", 10, bold=True)),
+        Paragraph("ZESTAWIENIE ODPISÓW AMORTYZACYJNYCH", _ps("rh_ttl", 11, bold=True, alignment=1)),
+        Paragraph(period_label, _ps("rh_per", 10, bold=True, alignment=2)),
+    ]]
+    hdr_tbl = Table(header_data, colWidths=[90 * mm, 110 * mm, 67 * mm])
+    hdr_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("LINEBELOW", (0, 0), (-1, -1), _C_BORDER_OUTER, _C_BLACK),
+    ]))
+    story.append(hdr_tbl)
+    story.append(Spacer(1, 4 * mm))
+    story.append(_rpt_data_table(rows, totals))
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph(
+        f"Wygenerowano: {ts}  ·  Liczba pozycji: {len(rows)}",
+        _ps("rh_meta", 7, color=_C_MID),
+    ))
+    return story
+
+
+def _rpt_data_table(rows, totals):
+    # Column widths summing to 267mm (_LAND_CW)
+    col_widths = [w * mm for w in [7, 23, 45, 20, 18, 21, 21, 20, 14, 12, 22, 22, 22]]
+
+    th = _ps("rth", 7, bold=True, alignment=1)
+    td = _ps("rtd", 7)
+    tr_ = _ps("rtr", 7, alignment=2)
+    tm = _ps("rtm", 7, mono=True)
+
+    header = [
+        Paragraph("Lp.", th),
+        Paragraph("Nr inw.", th),
+        Paragraph("Nazwa środka", th),
+        Paragraph("KST", th),
+        Paragraph("Data\nstartu", th),
+        Paragraph("Wartość\npoczątkowa", th),
+        Paragraph("Wartość\nrezydualna", th),
+        Paragraph("Podstawa\namort.", th),
+        Paragraph("Metoda", th),
+        Paragraph("Stawka\n%", th),
+        Paragraph("Odpis za\nokres (zł)", th),
+        Paragraph("Skumulowana\namort. (zł)", th),
+        Paragraph("Wartość\nnetto (zł)", th),
+    ]
+
+    data = [header]
+    for i, row in enumerate(rows, 1):
+        rate = f"{row['annual_rate_percent']:.2f}" if row["annual_rate_percent"] else "—"
+        data.append([
+            Paragraph(str(i), tr_),
+            Paragraph(row["inventory_number"], tm),
+            Paragraph(row["name"], td),
+            Paragraph(row["kst_category"], td),
+            Paragraph(row["start_date"].strftime("%Y-%m-%d"), tm),
+            Paragraph(f"{row['initial_value']:.2f}", tr_),
+            Paragraph(f"{row['residual_value']:.2f}", tr_),
+            Paragraph(f"{row['depreciation_base']:.2f}", tr_),
+            Paragraph(row["method_display"], td),
+            Paragraph(rate, tr_),
+            Paragraph(f"{row['period_charge']:.2f}", tr_),
+            Paragraph(f"{row['accumulated']:.2f}", tr_),
+            Paragraph(f"{row['net_value']:.2f}", tr_),
+        ])
+
+    if len(data) == 1:
+        data.append([Paragraph("—", tr_), Paragraph("Brak danych dla wybranego okresu", td)] + [""] * 11)
+
+    n_last = len(data)
+    sum_row = [
+        Paragraph("", th),
+        Paragraph("RAZEM:", _ps("rs_lbl", 7, bold=True)),
+        "", "", "",
+        Paragraph(f"{totals['initial_value']:.2f}", _ps("rs_iv", 7, bold=True, alignment=2)),
+        "",
+        Paragraph(f"{totals['depreciation_base']:.2f}", _ps("rs_db", 7, bold=True, alignment=2)),
+        "", "",
+        Paragraph(f"{totals['period_charge']:.2f}", _ps("rs_pc", 7, bold=True, alignment=2)),
+        Paragraph(f"{totals['accumulated']:.2f}", _ps("rs_ac", 7, bold=True, alignment=2)),
+        Paragraph(f"{totals['net_value']:.2f}", _ps("rs_nv", 7, bold=True, alignment=2)),
+    ]
+    data.append(sum_row)
+
+    tbl = Table(data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), _C_HDR_BG),
+        ("FONT", (0, 0), (-1, 0), _BODY_FONT_BOLD, 7),
+        ("LINEBELOW", (0, 0), (-1, 0), _C_BORDER_HEAVY, _C_BLACK),
+        ("BACKGROUND", (0, n_last), (-1, n_last), _C_SUM_BG),
+        ("LINEABOVE", (0, n_last), (-1, n_last), _C_BORDER_HEAVY, _C_BLACK),
+        ("SPAN", (1, n_last), (4, n_last)),
+        ("BOX", (0, 0), (-1, -1), _C_BORDER_OUTER, _C_BLACK),
+        ("INNERGRID", (0, 0), (-1, -1), _C_BORDER_INNER, _C_RULE),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    return tbl
+
+
+# ---------------------------------------------------------------------------
+# LT document helpers
 # ---------------------------------------------------------------------------
 
 def _operator_display(user) -> str:
