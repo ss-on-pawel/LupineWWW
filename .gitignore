@@ -17,3 +17,19 @@ staticfiles/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Django media uploads
+/media/
+
+# Claude local machine config
+/.claude/
+
+# Local Windows driver files and helper scripts
+/drivers/
+/driver-update-msi-b650/
+/install-msi-b650-drivers.ps1
+/switch-audio.ps1
+
+# Local logs and scanner scratch files
+*.log
+/test_*.txt
