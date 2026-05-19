@@ -537,6 +537,16 @@ class AssetDepreciationPlan(models.Model):
         verbose_name="Stawka roczna (%)",
     )
     useful_life_months = models.PositiveIntegerField(null=True, blank=True, verbose_name="Okres (miesiące)")
+    monthly_depreciation_amount = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Miesięczny odpis amortyzacyjny (zł)",
+    )
+    annual_depreciation_amount = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Roczny odpis amortyzacyjny (zł)",
+    )
     notes = models.TextField(blank=True, verbose_name="Uwagi")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data utworzenia")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data aktualizacji")
@@ -548,40 +558,24 @@ class AssetDepreciationPlan(models.Model):
     def __str__(self) -> str:
         return f"{self.asset}: plan amortyzacji"
 
-    @property
-    def depreciation_base_amount(self):
+    def calculate_depreciation_amounts(self):
+        """Return (monthly, annual) computed from current parameters, or (None, None) if data is insufficient."""
         if not self.enabled or self.initial_value is None:
-            return None
+            return None, None
         residual = self.residual_value or Decimal("0")
         base = self.initial_value - residual
         if base < 0:
-            return None
-        return base.quantize(self.MONEY_QUANT, rounding=ROUND_HALF_UP)
-
-    @property
-    def annual_depreciation_amount(self):
-        base = self.depreciation_base_amount
-        if base is None:
-            return None
+            return None, None
+        base = base.quantize(self.MONEY_QUANT, rounding=ROUND_HALF_UP)
         if self.method == self.Method.ONE_TIME:
-            return base
-        if self.method == self.Method.LINEAR and self.annual_rate_percent is not None:
-            return (base * self.annual_rate_percent / Decimal("100")).quantize(
+            return base, base
+        if self.method == self.Method.LINEAR and self.annual_rate_percent:
+            annual = (base * self.annual_rate_percent / Decimal("100")).quantize(
                 self.MONEY_QUANT, rounding=ROUND_HALF_UP
             )
-        return None
-
-    @property
-    def monthly_depreciation_amount(self):
-        base = self.depreciation_base_amount
-        if base is None:
-            return None
-        if self.method == self.Method.ONE_TIME:
-            return base
-        annual_amount = self.annual_depreciation_amount
-        if annual_amount is None:
-            return None
-        return (annual_amount / Decimal("12")).quantize(self.MONEY_QUANT, rounding=ROUND_HALF_UP)
+            monthly = (annual / Decimal("12")).quantize(self.MONEY_QUANT, rounding=ROUND_HALF_UP)
+            return monthly, annual
+        return None, None
 
 
 class AssetServiceAlert(models.Model):

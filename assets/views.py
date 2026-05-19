@@ -1931,14 +1931,14 @@ def asset_depreciation_plan(request, asset_id):
                 preview = form.save(commit=False)
                 preview.asset = asset
                 preview.depreciation_start_date = asset.commissioning_date
-                monthly_depreciation_amount = preview.monthly_depreciation_amount
-                annual_depreciation_amount = preview.annual_depreciation_amount
+                monthly_depreciation_amount, annual_depreciation_amount = preview.calculate_depreciation_amounts()
             # Re-render without saving
         else:
             if form.is_valid():
                 obj = form.save(commit=False)
                 obj.asset = asset
                 obj.depreciation_start_date = asset.commissioning_date
+                obj.monthly_depreciation_amount, obj.annual_depreciation_amount = obj.calculate_depreciation_amounts()
                 obj.save()
                 messages.success(request, "Plan amortyzacji został zapisany.")
                 return redirect("assets:detail", id=asset.pk)

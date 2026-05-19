@@ -8755,33 +8755,61 @@ class DepreciationPlanModelTests(TestCase):
             with transaction.atomic():
                 AssetDepreciationPlan.objects.create(asset=self.asset, enabled=False)
 
-    def test_linear_depreciation_amounts_use_base_and_annual_rate(self):
-        plan = AssetDepreciationPlan.objects.create(
+    def test_model_has_stored_amount_fields(self):
+        plan = AssetDepreciationPlan.objects.create(asset=self.asset, enabled=False)
+        self.assertIsNone(plan.monthly_depreciation_amount)
+        self.assertIsNone(plan.annual_depreciation_amount)
+
+    def test_linear_calculate_amounts(self):
+        plan = AssetDepreciationPlan(
             asset=self.asset,
             enabled=True,
             method=AssetDepreciationPlan.Method.LINEAR,
             initial_value=Decimal("10000"),
             residual_value=Decimal("1000"),
-            depreciation_start_date=date(2026, 1, 1),
             annual_rate_percent=Decimal("20"),
-            useful_life_months=60,
         )
-        self.assertEqual(plan.depreciation_base_amount, Decimal("9000.00"))
-        self.assertEqual(plan.annual_depreciation_amount, Decimal("1800.00"))
-        self.assertEqual(plan.monthly_depreciation_amount, Decimal("150.00"))
+        monthly, annual = plan.calculate_depreciation_amounts()
+        self.assertEqual(annual, Decimal("1800.00"))
+        self.assertEqual(monthly, Decimal("150.00"))
 
-    def test_one_time_depreciation_amounts_use_full_base(self):
-        plan = AssetDepreciationPlan.objects.create(
+    def test_one_time_calculate_amounts(self):
+        plan = AssetDepreciationPlan(
             asset=self.asset,
             enabled=True,
             method=AssetDepreciationPlan.Method.ONE_TIME,
             initial_value=Decimal("2500"),
-            depreciation_start_date=date(2026, 1, 1),
             annual_rate_percent=Decimal("100"),
-            useful_life_months=1,
         )
-        self.assertEqual(plan.annual_depreciation_amount, Decimal("2500.00"))
-        self.assertEqual(plan.monthly_depreciation_amount, Decimal("2500.00"))
+        monthly, annual = plan.calculate_depreciation_amounts()
+        self.assertEqual(annual, Decimal("2500.00"))
+        self.assertEqual(monthly, Decimal("2500.00"))
+
+    def test_disabled_calculate_returns_none(self):
+        plan = AssetDepreciationPlan(
+            asset=self.asset,
+            enabled=False,
+            method=AssetDepreciationPlan.Method.LINEAR,
+            initial_value=Decimal("5000"),
+            annual_rate_percent=Decimal("10"),
+        )
+        monthly, annual = plan.calculate_depreciation_amounts()
+        self.assertIsNone(monthly)
+        self.assertIsNone(annual)
+
+    def test_residual_subtracted_from_base(self):
+        plan = AssetDepreciationPlan(
+            asset=self.asset,
+            enabled=True,
+            method=AssetDepreciationPlan.Method.LINEAR,
+            initial_value=Decimal("10000"),
+            residual_value=Decimal("2000"),
+            annual_rate_percent=Decimal("20"),
+        )
+        monthly, annual = plan.calculate_depreciation_amounts()
+        # base = 8000, annual = 8000*20/100 = 1600, monthly = 1600/12 ≈ 133.33
+        self.assertEqual(annual, Decimal("1600.00"))
+        self.assertEqual(monthly, Decimal("133.33"))
 
 
 class DepreciationPlanViewTests(TestCase):
@@ -8885,16 +8913,16 @@ class DepreciationPlanViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(all(field.field.disabled for field in response.context["form"]))
 
-    def test_get_existing_plan_shows_read_only_depreciation_amounts(self):
+    def test_get_existing_plan_shows_stored_depreciation_amounts(self):
         AssetDepreciationPlan.objects.create(
             asset=self.active_asset,
             enabled=True,
             method=AssetDepreciationPlan.Method.LINEAR,
             initial_value=Decimal("10000"),
             residual_value=Decimal("1000"),
-            depreciation_start_date=date(2026, 1, 1),
             annual_rate_percent=Decimal("20"),
-            useful_life_months=60,
+            monthly_depreciation_amount=Decimal("150.00"),
+            annual_depreciation_amount=Decimal("1800.00"),
         )
         self.client.force_login(self.user)
         response = self.client.get(self._url(self.active_asset.pk))
@@ -9002,3 +9030,79 @@ class DepreciationPlanViewTests(TestCase):
         self.client.force_login(self.user)
         self.client.post(self._url(self.archived_asset.pk), self._valid_linear_payload(action="save"))
         self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.archived_asset).exists())
+
+    # --- DB persistence of computed amounts ---
+
+    def test_save_action_stores_computed_amounts_in_db(self):
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="save"))
+        plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
+        self.assertEqual(plan.monthly_depreciation_amount, Decimal("150.00"))
+        self.assertEqual(plan.annual_depreciation_amount, Decimal("1800.00"))
+
+    def test_save_action_one_time_stores_full_base(self):
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.active_asset.pk), {
+            "action": "save",
+            "enabled": True, "method": "one_time",
+            "annual_rate_percent": "",
+            "initial_value": "5000", "residual_value": "500",
+            "kst_category": "", "notes": "",
+        })
+        plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
+        self.assertEqual(plan.monthly_depreciation_amount, Decimal("4500.00"))
+        self.assertEqual(plan.annual_depreciation_amount, Decimal("4500.00"))
+
+    def test_save_action_disabled_stores_none_amounts(self):
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.active_asset.pk), {
+            "action": "save",
+            "enabled": False, "method": "",
+            "annual_rate_percent": "",
+            "initial_value": "", "residual_value": "",
+            "kst_category": "", "notes": "",
+        })
+        plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
+        self.assertIsNone(plan.monthly_depreciation_amount)
+        self.assertIsNone(plan.annual_depreciation_amount)
+
+    def test_generate_does_not_store_amounts_in_db(self):
+        # generate should not create a DB record
+        self.client.force_login(self.user)
+        self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="generate"))
+        self.assertFalse(AssetDepreciationPlan.objects.filter(asset=self.active_asset).exists())
+
+    def test_resave_with_new_params_updates_stored_amounts(self):
+        self.client.force_login(self.user)
+        # First save: rate=20%
+        self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="save"))
+        plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
+        self.assertEqual(plan.annual_depreciation_amount, Decimal("1800.00"))
+        # Second save: rate=10%
+        self.client.post(self._url(self.active_asset.pk), {
+            "action": "save",
+            "enabled": True, "method": "linear",
+            "annual_rate_percent": "10",
+            "initial_value": "10000", "residual_value": "1000",
+            "kst_category": "", "notes": "",
+        })
+        plan.refresh_from_db()
+        self.assertEqual(plan.annual_depreciation_amount, Decimal("900.00"))
+        self.assertEqual(plan.monthly_depreciation_amount, Decimal("75.00"))
+
+    def test_get_shows_stored_db_amounts_not_computed(self):
+        # Plan stored with specific values — GET reads from DB, not re-computes
+        AssetDepreciationPlan.objects.create(
+            asset=self.active_asset,
+            enabled=True,
+            method=AssetDepreciationPlan.Method.LINEAR,
+            initial_value=Decimal("10000"),
+            annual_rate_percent=Decimal("20"),
+            monthly_depreciation_amount=Decimal("999.99"),
+            annual_depreciation_amount=Decimal("888.88"),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(self._url(self.active_asset.pk))
+        # Should show stored DB values, not re-computed
+        self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("999.99"))
+        self.assertEqual(response.context["annual_depreciation_amount"], Decimal("888.88"))
