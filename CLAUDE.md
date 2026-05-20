@@ -40,15 +40,16 @@ Właściciel: Paweł Kosson. Projekt praktycznie ukończony.
 - Planowanie amortyzacji środków trwałych (metoda liniowa i jednorazowa)
 
 ### Pozostało do zrobienia
-- Raporty (zakres do ustalenia z właścicielem)
+- Korekty wartości środka trwałego (zwiększenie/zmniejszenie) — potrzebne m.in. dla historii amortyzacji
+- Raporty (inne niż amortyzacja — zakres do ustalenia)
 - Optymalizacje wydajności (zapytania, widoki)
 - Zabezpieczenia — security hardening
 - Dodatkowa funkcjonalność na zamówienie (przyszłość)
 
 ### Stan produkcji
 - Ostatnia potwierdzona migracja: `[X] 0027_assetdepreciationplan_stored_amounts`
-- Ostatni deploy (2026-05-19): commity do `e590e69` włącznie (amortyzacja wdrożona, migracje zastosowane)
-- Aplikacja działa poprawnie
+- Ostatni deploy (2026-05-19): commity do `5f3d79f` włącznie (zestawienie odpisów amortyzacyjnych)
+- Aplikacja działa poprawnie po restarcie 2026-05-19 21:39 UTC
 
 ---
 

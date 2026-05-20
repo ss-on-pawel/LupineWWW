@@ -90,11 +90,11 @@
             <button type="submit" name="action" value="generate" class="ui-btn ui-btn--secondary">Generuj plan</button>
             <div class="depreciation-plan-preview" aria-label="Podgląd odpisów amortyzacyjnych">
                 <div class="depreciation-plan-preview__item">
-                    <span class="depreciation-plan-preview__label">Miesięczny odpis amortyzacyjny</span>
+                    <span class="depreciation-plan-preview__label">Odpis miesięczny</span>
                     <strong class="depreciation-plan-preview__value">{% if monthly_depreciation_amount is not None %}{{ monthly_depreciation_amount }} zł{% else %}-{% endif %}</strong>
                 </div>
                 <div class="depreciation-plan-preview__item">
-                    <span class="depreciation-plan-preview__label">Roczny odpis amortyzacyjny</span>
+                    <span class="depreciation-plan-preview__label">Odpis roczny</span>
                     <strong class="depreciation-plan-preview__value">{% if annual_depreciation_amount is not None %}{{ annual_depreciation_amount }} zł{% else %}-{% endif %}</strong>
                 </div>
             </div>

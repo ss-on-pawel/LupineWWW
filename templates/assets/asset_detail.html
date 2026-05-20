@@ -159,7 +159,7 @@
         }
         .asset-withdraw-form input[type="number"] {
             width: 84px;
-            min-height: 30px;
+            min-height: 40px;
             padding: 0 9px;
             border: 1px solid #cbd5e1;
             border-radius: 4px;
@@ -387,6 +387,26 @@
             flex-wrap: wrap;
             min-height: 40px;
         }
+        .depreciation-block .section-grid {
+            border-top: 0;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 0 10px;
+            border-radius: 999px;
+            font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .badge-active {
+            border: 1px solid rgba(21, 128, 61, 0.22);
+            background: rgba(21, 128, 61, 0.08);
+            color: #166534;
+        }
     </style>
 {% endblock %}
 
@@ -463,10 +483,6 @@
                         <div class="detail-item">
                             <span class="detail-label">Typ</span>
                             <div class="detail-value is-mono">{{ asset_type_display }}</div>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Wartość</span>
-                            <div class="detail-value is-mono">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Lokalizacja</span>
@@ -581,14 +597,10 @@
                     </div>
 
                     <div class="depreciation-block">
-                        <div class="depreciation-header">
-                            {% if asset.is_active %}
-                                <a href="{% url 'assets:depreciation-plan' asset_id=asset.pk %}" class="ui-btn ui-btn--secondary">Amortyzacja</a>
-                            {% endif %}
-                        </div>
+                        <span class="section-label">Plan amortyzacji</span>
                         {% with plan=asset.depreciation_plan %}
                         {% if plan and plan.enabled %}
-                            <div class="section-grid">
+                            <div class="section-grid" style="margin-top: 10px;">
                                 <div class="detail-item">
                                     <span class="detail-label">Status</span>
                                     <div class="detail-value"><span class="badge badge-active">Włączona</span></div>
@@ -615,13 +627,16 @@
                                     <span class="detail-label">Stawka roczna</span>
                                     <div class="detail-value is-mono">{% if plan.annual_rate_percent %}{{ plan.annual_rate_percent }} %{% else %}-{% endif %}</div>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Data przyjęcia</span>
-                                    <div class="detail-value is-mono">{{ asset.commissioning_date|date:"Y-m-d"|default:"-" }}</div>
-                                </div>
                             </div>
+                        {% else %}
+                            <p style="margin: 8px 0 0; font-size: 0.88rem; color: #66758a; font-weight: 600;">Brak aktywnego planu amortyzacji.</p>
                         {% endif %}
                         {% endwith %}
+                        {% if asset.is_active %}
+                            <div style="padding-top: 12px;">
+                                <a href="{% url 'assets:depreciation-plan' asset_id=asset.pk %}" class="ui-btn ui-btn--secondary">Konfiguruj plan amortyzacji</a>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </section>
