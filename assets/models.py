@@ -519,7 +519,7 @@ class AssetDepreciationPlan(models.Model):
         blank=True,
         verbose_name="Metoda",
     )
-    kst_category = models.CharField(max_length=120, blank=True, verbose_name="KST / kategoria")
+    kst_category = models.CharField(max_length=120, blank=True, verbose_name="KŚT")
     initial_value = models.DecimalField(
         max_digits=12, decimal_places=2,
         null=True, blank=True,
