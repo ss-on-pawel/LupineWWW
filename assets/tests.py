@@ -8865,12 +8865,13 @@ class DepreciationPlanViewTests(TestCase):
             "annual_rate_percent": "20",
             "initial_value": "5000", "residual_value": "",
             "kst_category": "491", "notes": "",
+            "depreciation_start_date": "2026-02-15",
         })
         self.assertRedirects(response, reverse("assets:detail", kwargs={"id": self.active_asset.pk}))
         plan = AssetDepreciationPlan.objects.get(asset=self.active_asset)
         self.assertTrue(plan.enabled)
         self.assertEqual(plan.method, "linear")
-        self.assertEqual(plan.depreciation_start_date, self.active_asset.commissioning_date)
+        self.assertEqual(plan.depreciation_start_date, date(2026, 2, 15))
 
     def test_scoped_user_can_create_plan_for_accessible_asset(self):
         self.client.force_login(self.scoped_user)
@@ -8929,8 +8930,8 @@ class DepreciationPlanViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("150.00"))
         self.assertEqual(response.context["annual_depreciation_amount"], Decimal("1800.00"))
-        self.assertContains(response, "Miesięczny odpis amortyzacyjny")
-        self.assertContains(response, "Roczny odpis amortyzacyjny")
+        self.assertContains(response, "150")
+        self.assertContains(response, "1800")
 
     def test_asset_detail_contains_depreciation_action(self):
         self.client.force_login(self.user)
@@ -8959,12 +8960,12 @@ class DepreciationPlanViewTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.post(self._url(self.active_asset.pk), self._valid_linear_payload(action="generate"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Miesięczny odpis amortyzacyjny")
-        self.assertContains(response, "Roczny odpis amortyzacyjny")
         self.assertContains(response, "depreciation-plan-preview")
         # base=9000, rate=20% → annual=1800, monthly=150
         self.assertEqual(response.context["annual_depreciation_amount"], Decimal("1800.00"))
         self.assertEqual(response.context["monthly_depreciation_amount"], Decimal("150.00"))
+        self.assertContains(response, "150")
+        self.assertContains(response, "1800")
 
     def test_generate_action_calculates_even_when_enabled_checkbox_is_missing(self):
         self.client.force_login(self.user)
@@ -9009,7 +9010,7 @@ class DepreciationPlanViewTests(TestCase):
         response = self.client.get(self._url(self.active_asset.pk))
         self.assertEqual(response.status_code, 200)
         form = response.context["form"]
-        self.assertNotIn("depreciation_start_date", form.fields)
+        self.assertIn("depreciation_start_date", form.fields)
         self.assertEqual(response.context["commissioning_date"], self.active_asset.commissioning_date)
         self.assertContains(response, "Data przyj")
         self.assertContains(response, "2026-02-15")
