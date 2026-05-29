@@ -1649,7 +1649,7 @@
                         <p>{{ asset_list_description|default:"Przeglądaj, filtruj i zarządzaj składnikami majątku w ewidencji." }}</p>
                     </div>
                     <div class="asset-list-heading-actions">
-                        {% if request.user.is_superuser or request.user.is_staff %}
+                        {% if request.user.is_superuser or request.user.is_staff or request.user.profile.role == "admin" %}
                             <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Słowniki</a>
                         {% endif %}
                         {% if request.user.is_superuser or request.user.profile.role == "admin" %}
