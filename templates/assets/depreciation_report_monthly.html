@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Zestawienie amortyzacji — miesięczne{% endblock %}
+
+{% block content %}
+<div class="rpt-page rpt-page-wide">
+
+    <div class="rpt-header">
+        <h1 class="rpt-title">Odpisy amortyzacyjne — zestawienie miesięczne</h1>
+    </div>
+
+    {% if error %}
+    <div class="notice notice-error">{{ error }}</div>
+    {% endif %}
+
+    <div class="card">
+        <form method="get" class="rpt-form">
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="id_year">Rok</label>
+                    <input type="number" name="year" id="id_year" value="{{ year }}" min="2000" max="2100" style="max-width:120px">
+                </div>
+            </div>
+            <div class="actions">
+                <button type="submit" class="ui-btn ui-btn--primary">Generuj</button>
+                {% if show_results %}
+                <a href="?year={{ year }}&format=pdf" class="ui-btn ui-btn--secondary">Pobierz PDF</a>
+                <a href="?year={{ year }}&format=xlsx" class="ui-btn ui-btn--secondary">Pobierz XLSX</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {% if show_results %}
+    <div class="card">
+        {% if rows %}
+        <p class="intro">{{ year }} — {{ rows|length }} środek/środków z aktywną amortyzacją</p>
+        <div class="rpt-table-wrap-wide">
+            <table class="rpt-table rpt-monthly-tbl">
+                <thead>
+                    <tr>
+                        <th class="col-lp">Lp.</th>
+                        <th class="col-kod">Kod</th>
+                        <th class="col-nazwa">Nazwa</th>
+                        <th class="num col-bo">BO</th>
+                        <th class="num">I</th>
+                        <th class="num">II</th>
+                        <th class="num">III</th>
+                        <th class="num">IV</th>
+                        <th class="num">V</th>
+                        <th class="num">VI</th>
+                        <th class="num">VII</th>
+                        <th class="num">VIII</th>
+                        <th class="num">IX</th>
+                        <th class="num">X</th>
+                        <th class="num">XI</th>
+                        <th class="num">XII</th>
+                        <th class="num col-suma">Suma</th>
+                        <th class="num col-bz">BZ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td class="num">{{ forloop.counter }}</td>
+                        <td class="is-mono">{{ row.inventory_number }}</td>
+                        <td class="col-nazwa-td">{{ row.name }}</td>
+                        <td class="num">{{ row.bo|floatformat:2 }}</td>
+                        {% for charge in row.months %}
+                        <td class="num{% if not charge %} muted{% endif %}">{% if charge %}{{ charge|floatformat:2 }}{% else %}—{% endif %}</td>
+                        {% endfor %}
+                        <td class="num bold">{{ row.suma|floatformat:2 }}</td>
+                        <td class="num bold">{{ row.bz|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="rpt-sum-row">
+                        <td></td>
+                        <td colspan="2"><strong>RAZEM</strong></td>
+                        <td class="num"><strong>{{ totals.bo|floatformat:2 }}</strong></td>
+                        {% for m in totals.months %}
+                        <td class="num"><strong>{{ m|floatformat:2 }}</strong></td>
+                        {% endfor %}
+                        <td class="num"><strong>{{ totals.suma|floatformat:2 }}</strong></td>
+                        <td class="num"><strong>{{ totals.bz|floatformat:2 }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% else %}
+        <p>Brak środków z aktywną amortyzacją dla roku {{ year }}.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<style>
+.rpt-page-wide { max-width: 100%; }
+.rpt-table-wrap-wide { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.rpt-monthly-tbl {
+    min-width: 1500px;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+.rpt-monthly-tbl th,
+.rpt-monthly-tbl td {
+    padding: 3px 6px;
+    border: 1px solid rgba(15,23,42,0.12);
+    white-space: nowrap;
+}
+.rpt-monthly-tbl thead th {
+    background: #e8e8e8;
+    font-weight: 600;
+    text-align: center;
+    border-bottom: 2px solid #333;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.rpt-monthly-tbl .col-naziv-td,
+.rpt-monthly-tbl .col-nazwa { text-align: left; }
+.rpt-monthly-tbl .col-nazwa-td { white-space: normal; min-width: 160px; max-width: 260px; }
+.rpt-monthly-tbl .num { text-align: right; }
+.rpt-monthly-tbl .is-mono { font-family: var(--mono-font, monospace); font-size: 0.74rem; }
+.rpt-monthly-tbl .muted { color: #bbb; }
+.rpt-monthly-tbl .bold { font-weight: 600; }
+.rpt-monthly-tbl .col-lp { width: 36px; text-align: right; }
+.rpt-monthly-tbl .col-kod { min-width: 75px; }
+.rpt-monthly-tbl .col-bo,
+.rpt-monthly-tbl .col-suma,
+.rpt-monthly-tbl .col-bz { min-width: 88px; }
+.rpt-monthly-tbl tbody tr:nth-child(even) { background: rgba(0,0,0,0.02); }
+.rpt-monthly-tbl tbody tr:hover { background: rgba(59,130,246,0.05); }
+.rpt-sum-row {
+    background: #eeeeee !important;
+    border-top: 2px solid #333;
+    font-weight: 600;
+}
+</style>
+{% endblock %}

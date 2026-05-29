@@ -143,3 +143,104 @@ def build_depreciation_report(year: int, month: int | None = None):
     }
 
     return rows, totals, label
+
+
+def build_depreciation_report_full_year(year: int):
+    """
+    Annual report with month-by-month breakdown.
+
+    Returns (rows, totals) where each row has:
+      inventory_number, name, bo, months (list[12] Decimal), suma, bz
+    """
+    year_end = date(year, 12, 31)
+    prev_year_end = date(year - 1, 12, 31)
+
+    plans = (
+        AssetDepreciationPlan.objects
+        .filter(
+            enabled=True,
+            depreciation_start_date__isnull=False,
+            depreciation_start_date__lte=year_end,
+            monthly_depreciation_amount__isnull=False,
+            asset__status=Asset.Status.ACTIVE,
+        )
+        .select_related("asset")
+        .order_by("asset__inventory_number")
+    )
+
+    rows = []
+    for plan in plans:
+        start = plan.depreciation_start_date
+        initial = plan.initial_value or Decimal("0")
+        residual = plan.residual_value or Decimal("0")
+        monthly = plan.monthly_depreciation_amount
+        base = (initial - residual).quantize(_MONEY, rounding=ROUND_HALF_UP)
+
+        if base <= 0 or not monthly:
+            continue
+
+        last = _last_active_date(plan)
+
+        # BO: net_value at 1 January of selected year
+        if start > prev_year_end:
+            bo = initial
+        else:
+            n_prev = _months_elapsed(start, prev_year_end)
+            if plan.useful_life_months:
+                n_prev = min(n_prev, plan.useful_life_months)
+            acc_prev = min(
+                (monthly * n_prev).quantize(_MONEY, rounding=ROUND_HALF_UP),
+                base,
+            )
+            bo = max(initial - acc_prev, residual).quantize(_MONEY, rounding=ROUND_HALF_UP)
+
+        # Monthly charges I–XII
+        month_charges = []
+        for m in range(1, 13):
+            month_date = date(year, m, 1)
+            if plan.method == AssetDepreciationPlan.Method.ONE_TIME:
+                charge = base if (start.year == year and start.month == m) else Decimal("0")
+            else:
+                if month_date < date(start.year, start.month, 1):
+                    charge = Decimal("0")
+                elif last is not None and month_date > last:
+                    charge = Decimal("0")
+                else:
+                    n_before = (year - start.year) * 12 + (m - start.month)
+                    acc_before = min(
+                        (monthly * n_before).quantize(_MONEY, rounding=ROUND_HALF_UP) if n_before > 0 else Decimal("0"),
+                        base,
+                    )
+                    remaining = base - acc_before
+                    charge = (
+                        Decimal("0") if remaining <= Decimal("0")
+                        else min(monthly, remaining).quantize(_MONEY, rounding=ROUND_HALF_UP)
+                    )
+            month_charges.append(charge)
+
+        suma = sum(month_charges).quantize(_MONEY, rounding=ROUND_HALF_UP)
+        if suma == Decimal("0"):
+            continue
+
+        bz = max(bo - suma, residual).quantize(_MONEY, rounding=ROUND_HALF_UP)
+
+        rows.append({
+            "inventory_number": plan.asset.inventory_number or "—",
+            "name": plan.asset.name or "—",
+            "bo": bo,
+            "months": month_charges,
+            "suma": suma,
+            "bz": bz,
+        })
+
+    def _sum_month(idx):
+        return sum(r["months"][idx] for r in rows).quantize(_MONEY, rounding=ROUND_HALF_UP)
+
+    totals = {
+        "bo": sum(r["bo"] for r in rows).quantize(_MONEY, rounding=ROUND_HALF_UP),
+        "months": [_sum_month(i) for i in range(12)],
+        "suma": sum(r["suma"] for r in rows).quantize(_MONEY, rounding=ROUND_HALF_UP),
+        "bz": sum(r["bz"] for r in rows).quantize(_MONEY, rounding=ROUND_HALF_UP),
+    }
+
+    return rows, totals

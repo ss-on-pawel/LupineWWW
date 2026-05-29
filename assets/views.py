@@ -2101,3 +2101,121 @@ def _build_depreciation_xlsx(rows, totals, period_label):
     wb.save(buf)
     buf.seek(0)
     return buf
+
+
+@login_required
+def depreciation_report_monthly(request):
+    from .report_utils import build_depreciation_report_full_year
+
+    today = date.today()
+    year_str = request.GET.get("year", "")
+    fmt = request.GET.get("format", "html")
+
+    year = None
+    error = None
+    rows = []
+    totals = {}
+
+    if year_str:
+        try:
+            year = int(year_str)
+            if not (1900 <= year <= 2100):
+                raise ValueError
+        except ValueError:
+            error = "Nieprawidłowy rok."
+
+    show_results = year is not None and error is None
+
+    if show_results:
+        rows, totals = build_depreciation_report_full_year(year)
+
+        if fmt == "pdf":
+            from .documents import generate_depreciation_full_year_pdf
+            org = OrganizationSettings.get()
+            buf = generate_depreciation_full_year_pdf(rows, totals, year, org, timezone.now())
+            fname = f"amortyzacja_miesiecznie_{year}.pdf"
+            return FileResponse(buf, content_type="application/pdf", as_attachment=True, filename=fname)
+
+        if fmt == "xlsx":
+            buf = _build_depreciation_full_year_xlsx(rows, totals, year)
+            fname = f"amortyzacja_miesiecznie_{year}.xlsx"
+            response = HttpResponse(
+                buf.read(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = f'attachment; filename="{fname}"'
+            return response
+
+    return render(request, "assets/depreciation_report_monthly.html", {
+        "year": year if year is not None else today.year,
+        "rows": rows,
+        "totals": totals,
+        "show_results": show_results,
+        "error": error,
+    })
+
+
+def _build_depreciation_full_year_xlsx(rows, totals, year):
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    MONTHS_ROM = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+    N_COLS = 18  # Lp + Kod + Nazwa + BO + 12 months + Suma + BZ
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Amortyzacja {year}"
+
+    ws.merge_cells(f"A1:{get_column_letter(N_COLS)}1")
+    ws["A1"] = f"Zestawienie odpisów amortyzacyjnych — {year}"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A1"].alignment = Alignment(horizontal="center")
+    ws.append([])
+
+    headers = ["Lp.", "Kod", "Nazwa", "BO"] + MONTHS_ROM + ["Suma", "BZ"]
+    ws.append(headers)
+
+    hdr_row = ws.max_row
+    hdr_font = Font(bold=True, size=9)
+    hdr_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    for cell in ws[hdr_row]:
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal="center", wrap_text=True)
+
+    num_fmt = "#,##0.00"
+
+    for i, row in enumerate(rows, 1):
+        data = [i, row["inventory_number"], row["name"], float(row["bo"])]
+        data += [float(m) for m in row["months"]]
+        data += [float(row["suma"]), float(row["bz"])]
+        ws.append(data)
+        r = ws.max_row
+        for col in range(4, N_COLS + 1):
+            ws.cell(r, col).number_format = num_fmt
+
+    t_data = ["", "RAZEM", "", float(totals["bo"])]
+    t_data += [float(m) for m in totals["months"]]
+    t_data += [float(totals["suma"]), float(totals["bz"])]
+    ws.append(t_data)
+    t_row = ws.max_row
+    t_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
+    for cell in ws[t_row]:
+        cell.font = Font(bold=True, size=9)
+        cell.fill = t_fill
+    for col in range(4, N_COLS + 1):
+        ws.cell(t_row, col).number_format = num_fmt
+
+    ws.column_dimensions["A"].width = 5
+    ws.column_dimensions["B"].width = 13
+    ws.column_dimensions["C"].width = 38
+    for col in range(4, N_COLS + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 13
+
+    ws.freeze_panes = "D4"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf

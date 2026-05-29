@@ -927,6 +927,143 @@ def _rpt_data_table(rows, totals):
     return tbl
 
 
+def generate_depreciation_full_year_pdf(rows, totals, year: int, org, generated_at) -> io.BytesIO:
+    """Annual depreciation report with monthly breakdown (landscape A4)."""
+    ts = generated_at.strftime("%Y-%m-%d %H:%M") if generated_at else ""
+    period_label = str(year)
+    months_rom = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+
+    def _make_doc(buf):
+        d = BaseDocTemplate(
+            buf,
+            pagesize=landscape(A4),
+            leftMargin=_LAND_ML,
+            rightMargin=_LAND_MR,
+            topMargin=_LAND_MT,
+            bottomMargin=_LAND_MB,
+            title=f"Zestawienie odpisów amortyzacyjnych {year}",
+        )
+        d._rpt_ts = ts
+        d._rpt_period = period_label
+        d._rpt_total_pages = "?"
+        frame = Frame(
+            _LAND_ML, _LAND_MB,
+            _LAND_CW, _LAND_H - _LAND_MT - _LAND_MB,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        d.addPageTemplates([PageTemplate(id="main", frames=[frame], onPage=_draw_rpt_frame)])
+        return d
+
+    def _story():
+        return _build_full_year_story(rows, totals, period_label, org, ts, months_rom)
+
+    buf1 = io.BytesIO()
+    doc1 = _make_doc(buf1)
+    doc1.build(_story())
+    total_pages = doc1.page
+
+    buf2 = io.BytesIO()
+    doc2 = _make_doc(buf2)
+    doc2._rpt_total_pages = total_pages
+    doc2.build(_story())
+    buf2.seek(0)
+    return buf2
+
+
+def _build_full_year_story(rows, totals, period_label, org, ts, months_rom):
+    story = []
+    org_full = (getattr(org, "full_name", "") or "").strip()
+
+    header_data = [[
+        Paragraph(org_full or "—", _ps("fyh_org", 10, bold=True)),
+        Paragraph("ZESTAWIENIE ODPISÓW AMORTYZACYJNYCH", _ps("fyh_ttl", 11, bold=True, alignment=1)),
+        Paragraph(period_label, _ps("fyh_per", 10, bold=True, alignment=2)),
+    ]]
+    hdr_tbl = Table(header_data, colWidths=[90 * mm, 110 * mm, 67 * mm])
+    hdr_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("LINEBELOW", (0, 0), (-1, -1), _C_BORDER_OUTER, _C_BLACK),
+    ]))
+    story.append(hdr_tbl)
+    story.append(Spacer(1, 4 * mm))
+    story.append(_full_year_data_table(rows, totals, months_rom))
+    story.append(Spacer(1, 3 * mm))
+    story.append(Paragraph(
+        f"Wygenerowano: {ts}  ·  Liczba pozycji: {len(rows)}",
+        _ps("fyh_meta", 7, color=_C_MID),
+    ))
+    return story
+
+
+def _full_year_data_table(rows, totals, months_rom):
+    # 18 cols: Lp(5)+Kod(18)+Nazwa(42)+BO(17)+12×11mm+Suma(17)+BZ(17) = 248mm ≤ 267mm
+    col_widths = [w * mm for w in [5, 18, 42, 17] + [11] * 12 + [17, 17]]
+
+    th = _ps("fyth", 6, bold=True, alignment=1)
+    td = _ps("fytd", 6)
+    tr_ = _ps("fytr", 6, alignment=2)
+    tm = _ps("fytm", 6, mono=True)
+    td_muted = _ps("fytdm", 6, color=colors.HexColor("#aaaaaa"), alignment=2)
+
+    header = (
+        [Paragraph("Lp.", th), Paragraph("Kod", th), Paragraph("Nazwa", th), Paragraph("BO", th)]
+        + [Paragraph(m, th) for m in months_rom]
+        + [Paragraph("Suma", th), Paragraph("BZ", th)]
+    )
+
+    data = [header]
+    for i, row in enumerate(rows, 1):
+        cells = [
+            Paragraph(str(i), tr_),
+            Paragraph(row["inventory_number"], tm),
+            Paragraph(row["name"], td),
+            Paragraph(f"{row['bo']:.2f}", tr_),
+        ]
+        for charge in row["months"]:
+            cells.append(Paragraph(f"{charge:.2f}", tr_) if charge else Paragraph("—", td_muted))
+        cells += [
+            Paragraph(f"{row['suma']:.2f}", _ps("fyts", 6, bold=True, alignment=2)),
+            Paragraph(f"{row['bz']:.2f}", _ps("fytbz", 6, bold=True, alignment=2)),
+        ]
+        data.append(cells)
+
+    if len(data) == 1:
+        data.append([Paragraph("—", tr_), Paragraph("Brak danych dla wybranego roku", td)] + [""] * 16)
+
+    n_last = len(data)
+    sum_row = (
+        [Paragraph("", th), Paragraph("RAZEM:", _ps("fyrs", 6, bold=True)), "", Paragraph(f"{totals['bo']:.2f}", _ps("fyrbo", 6, bold=True, alignment=2))]
+        + [Paragraph(f"{m:.2f}", _ps(f"fyrm{i}", 6, bold=True, alignment=2)) for i, m in enumerate(totals["months"])]
+        + [
+            Paragraph(f"{totals['suma']:.2f}", _ps("fyrs2", 6, bold=True, alignment=2)),
+            Paragraph(f"{totals['bz']:.2f}", _ps("fyrbz", 6, bold=True, alignment=2)),
+        ]
+    )
+    data.append(sum_row)
+
+    tbl = Table(data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), _C_HDR_BG),
+        ("FONT", (0, 0), (-1, 0), _BODY_FONT_BOLD, 6),
+        ("LINEBELOW", (0, 0), (-1, 0), _C_BORDER_HEAVY, _C_BLACK),
+        ("BACKGROUND", (0, n_last), (-1, n_last), _C_SUM_BG),
+        ("LINEABOVE", (0, n_last), (-1, n_last), _C_BORDER_HEAVY, _C_BLACK),
+        ("SPAN", (1, n_last), (2, n_last)),
+        ("BOX", (0, 0), (-1, -1), _C_BORDER_OUTER, _C_BLACK),
+        ("INNERGRID", (0, 0), (-1, -1), _C_BORDER_INNER, _C_RULE),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    return tbl
+
+
 # ---------------------------------------------------------------------------
 # LT document helpers
 # ---------------------------------------------------------------------------
