@@ -609,6 +609,10 @@
                                     <span class="detail-label">Metoda</span>
                                     <div class="detail-value">{{ plan.get_method_display|default:"-" }}</div>
                                 </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Data startu amortyzacji</span>
+                                    <div class="detail-value is-mono">{{ plan.depreciation_start_date|date:"Y-m-d"|default:"-" }}</div>
+                                </div>
                                 {% if plan.kst_category %}
                                 <div class="detail-item">
                                     <span class="detail-label">KŚT</span>
