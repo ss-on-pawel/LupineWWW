@@ -182,12 +182,14 @@ class DepreciationPlanForm(forms.ModelForm):
             "kst_category",
             "initial_value",
             "residual_value",
+            "depreciation_start_date",
             "annual_rate_percent",
             "notes",
         ]
         widgets = {
             "initial_value": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
             "residual_value": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
+            "depreciation_start_date": forms.DateInput(attrs={"type": "date"}),
             "annual_rate_percent": forms.NumberInput(attrs={"step": "0.01", "min": "0", "max": "100"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }

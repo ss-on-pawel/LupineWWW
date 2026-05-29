@@ -73,6 +73,11 @@
                     </div>
                 </div>
                 <div class="form-field">
+                    {{ form.depreciation_start_date.label_tag }}
+                    {{ form.depreciation_start_date }}
+                    {{ form.depreciation_start_date.errors }}
+                </div>
+                <div class="form-field">
                     {{ form.annual_rate_percent.label_tag }}
                     {{ form.annual_rate_percent }}
                     {{ form.annual_rate_percent.errors }}
