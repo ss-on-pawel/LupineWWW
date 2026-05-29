@@ -15,6 +15,8 @@ from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
@@ -432,6 +434,7 @@ def get_asset_change_list_summary(change_request):
     }
 
 
+@method_decorator(never_cache, name="dispatch")
 class AssetListView(LoginRequiredMixin, TemplateView):
     template_name = "assets/asset_list.html"
     asset_list_mode = "active"
