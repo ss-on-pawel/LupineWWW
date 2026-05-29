@@ -181,9 +181,12 @@ def build_depreciation_report_full_year(year: int):
 
         last = _last_active_date(plan)
 
-        # BO: net_value at 1 January of selected year
+        # BO: net_value at 1 January of selected year.
+        # Assets commissioned after 1 Jan were not on the books at year-start → BO = 0.
+        year_start = date(year, 1, 1)
         if start > prev_year_end:
-            bo = initial
+            acc_prev = Decimal("0")
+            bo = Decimal("0") if start > year_start else initial
         else:
             n_prev = _months_elapsed(start, prev_year_end)
             if plan.useful_life_months:
@@ -222,7 +225,7 @@ def build_depreciation_report_full_year(year: int):
         if suma == Decimal("0"):
             continue
 
-        bz = max(bo - suma, residual).quantize(_MONEY, rounding=ROUND_HALF_UP)
+        bz = max(initial - acc_prev - suma, residual).quantize(_MONEY, rounding=ROUND_HALF_UP)
 
         rows.append({
             "inventory_number": plan.asset.inventory_number or "—",
