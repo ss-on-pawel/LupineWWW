@@ -535,9 +535,6 @@
                                 </div>
                             </div>
                         {% endif %}
-                        {% if request.user.is_superuser or request.user.is_staff %}
-                            <a class="{% if request.path|slice:':10' == '/settings/' %}is-active{% endif %}" href="{% url 'settings:asset-types' %}">Słowniki</a>
-                        {% endif %}
                     {% endif %}
                 {% endblock %}
             </nav>

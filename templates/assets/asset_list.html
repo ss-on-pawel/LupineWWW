@@ -358,6 +358,12 @@
         .asset-list-mode-link {
             flex: 0 0 auto;
         }
+        .asset-list-heading-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
         .asset-layout-table {
             overflow-x: clip;
         }
@@ -1642,12 +1648,17 @@
                         <h1>{{ page_title|default:"Ewidencja środków" }}</h1>
                         <p>{{ asset_list_description|default:"Przeglądaj, filtruj i zarządzaj składnikami majątku w ewidencji." }}</p>
                     </div>
-                    <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
-                        {{ asset_mode_switch_label }}
-                    </a>
-                    {% if request.user.is_superuser or request.user.profile.role == "admin" %}
-                        <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import' %}">Import XLSX</a>
-                    {% endif %}
+                    <div class="asset-list-heading-actions">
+                        {% if request.user.is_superuser or request.user.is_staff %}
+                            <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Słowniki</a>
+                        {% endif %}
+                        {% if request.user.is_superuser or request.user.profile.role == "admin" %}
+                            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import' %}">Import XLSX</a>
+                        {% endif %}
+                        <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
+                            {{ asset_mode_switch_label }}
+                        </a>
+                    </div>
                 </div>
             </div>
             <div class="asset-layout-toolbar">
