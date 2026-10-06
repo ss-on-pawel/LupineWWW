@@ -16,7 +16,9 @@ from users.models import User
 
 from .models import (
     InventoryObservedItem,
+    InventoryRawScan,
     InventoryScanBatch,
+    InventoryScanTerminal,
     InventorySession,
     InventorySessionManualConfirmation,
     InventorySessionManualQuantity,
@@ -3093,6 +3095,174 @@ class MobileScannerTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(InventoryObservedItem.objects.filter(session=self.session_b, code="SCAN-MOB-001").count(), 0)
+
+
+class TerminalScannerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username="terminal-test-user",
+            password="test-pass",
+            is_superuser=True,
+        )
+        cls.root = Location.objects.create(name="TerminalRoot")
+        cls.child = Location.objects.create(name="TerminalChild", parent=cls.root)
+        cls.asset = Asset.objects.create(
+            name="Terminal Asset",
+            inventory_number="INV-TERM-001",
+            asset_type=Asset.AssetType.FIXED,
+            barcode="SCAN-TERM-001",
+            location_fk=cls.child,
+            location=cls.child.path,
+            status=Asset.Status.ACTIVE,
+            current_quantity=1,
+        )
+        cls.session = start_inventory_session(
+            created_by=cls.user,
+            root_locations=[cls.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+
+    def _create_terminal(self, name="Terminal 1"):
+        return InventoryScanTerminal.objects.create(
+            session=self.session,
+            name=name,
+            created_by=self.user,
+        )
+
+    def _sync_url(self, terminal):
+        return reverse(
+            "inventory:terminal-sync-api",
+            kwargs={"session_id": self.session.pk, "terminal_id": terminal.pk},
+        )
+
+    def test_terminal_page_requires_login(self):
+        response = self.client.get(reverse("inventory:terminal-app"))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_sessions_api_returns_active_sessions_for_logged_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:terminal-sessions-api"))
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertIn(self.session.number, {item["number"] for item in data["sessions"]})
+
+    def test_create_terminal_returns_existing_terminal_for_same_name(self):
+        self.client.force_login(self.user)
+        url = reverse("inventory:terminal-create-api", kwargs={"session_id": self.session.pk})
+
+        first = self.client.post(
+            url,
+            data=json.dumps({"name": "Terminal A"}),
+            content_type="application/json",
+        )
+        second = self.client.post(
+            url,
+            data=json.dumps({"name": "Terminal A"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(InventoryScanTerminal.objects.filter(session=self.session, name="Terminal A").count(), 1)
+        self.assertEqual(first.json()["terminal"]["id"], second.json()["terminal"]["id"])
+
+    def test_sync_records_raw_scan_and_updates_observed_items(self):
+        terminal = self._create_terminal()
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self._sync_url(terminal),
+            data=json.dumps(
+                {
+                    "scans": [
+                        {
+                            "client_scan_id": "scan-1",
+                            "code": "SCAN-TERM-001",
+                            "current_location_code": self.child.code,
+                            "scanned_at": timezone.now().isoformat(),
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(InventoryRawScan.objects.filter(terminal=terminal, client_scan_id="scan-1").count(), 1)
+        observed = InventoryObservedItem.objects.get(session=self.session, code="SCAN-TERM-001")
+        self.assertEqual(observed.status, InventoryObservedItem.Status.FOUND_OK)
+        self.assertEqual(observed.scanned_location, self.child)
+
+    def test_sync_is_idempotent_for_same_client_scan_id(self):
+        terminal = self._create_terminal()
+        self.client.force_login(self.user)
+        payload = {
+            "scans": [
+                {
+                    "client_scan_id": "same-scan",
+                    "code": "SCAN-TERM-001",
+                    "current_location_code": self.child.code,
+                    "scanned_at": timezone.now().isoformat(),
+                }
+            ]
+        }
+
+        first = self.client.post(self._sync_url(terminal), data=json.dumps(payload), content_type="application/json")
+        second = self.client.post(self._sync_url(terminal), data=json.dumps(payload), content_type="application/json")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(InventoryRawScan.objects.filter(terminal=terminal, client_scan_id="same-scan").count(), 1)
+        self.assertFalse(second.json()["accepted"][0]["created"])
+
+    def test_location_scan_does_not_create_unknown_observed_item(self):
+        terminal = self._create_terminal()
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self._sync_url(terminal),
+            data=json.dumps(
+                {
+                    "scans": [
+                        {
+                            "client_scan_id": "location-scan",
+                            "code": self.child.code,
+                            "scanned_at": timezone.now().isoformat(),
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        raw_scan = InventoryRawScan.objects.get(terminal=terminal, client_scan_id="location-scan")
+        self.assertEqual(raw_scan.processing_status, InventoryRawScan.ProcessingStatus.LOCATION)
+        self.assertFalse(
+            InventoryObservedItem.objects.filter(
+                session=self.session,
+                code=self.child.code,
+                status=InventoryObservedItem.Status.UNKNOWN_CODE,
+            ).exists()
+        )
+
+    def test_closed_session_rejects_terminal_sync(self):
+        terminal = self._create_terminal()
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.save(update_fields=["status"])
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self._sync_url(terminal),
+            data=json.dumps({"scans": []}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
 
 
 class SessionStatsApiTests(TestCase):

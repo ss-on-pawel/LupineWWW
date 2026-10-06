@@ -15,6 +15,11 @@ from .views import (
     mobile_scan_view,
     scan_file_import_api,
     session_stats_api,
+    terminal_app_view,
+    terminal_create_api,
+    terminal_session_bootstrap_api,
+    terminal_sessions_api,
+    terminal_sync_api,
 )
 
 
@@ -24,8 +29,13 @@ urlpatterns = [
     path("api/inventory/scan-files/", scan_file_import_api, name="scan-file-import-api"),
     path("api/inventory/sessions/<int:session_id>/manual-quantity/", manual_quantity_api, name="manual-quantity-api"),
     path("api/inventory/sessions/<int:session_id>/manual-confirmation/", manual_confirmation_api, name="manual-confirmation-api"),
+    path("api/inventory/terminal/sessions/", terminal_sessions_api, name="terminal-sessions-api"),
+    path("api/inventory/terminal/sessions/<int:session_id>/bootstrap/", terminal_session_bootstrap_api, name="terminal-session-bootstrap-api"),
+    path("api/inventory/terminal/sessions/<int:session_id>/terminals/", terminal_create_api, name="terminal-create-api"),
+    path("api/inventory/terminal/sessions/<int:session_id>/terminals/<int:terminal_id>/sync/", terminal_sync_api, name="terminal-sync-api"),
     path("inventory/", InventorySessionListView.as_view(), name="session-list"),
     path("inventory/start/", InventorySessionStartView.as_view(), name="session-start"),
+    path("inventory/terminal/", terminal_app_view, name="terminal-app"),
     path("inventory/<int:pk>/", InventorySessionDetailView.as_view(), name="session-detail"),
     path("inventory/<int:pk>/report/", InventorySessionReportView.as_view(), name="session-report"),
     path("inventory/<int:pk>/discrepancies/", InventorySessionDiscrepancyReportView.as_view(), name="session-discrepancy-report"),

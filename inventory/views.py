@@ -12,9 +12,10 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from accounts.utils import get_accessible_location_ids
@@ -24,12 +25,14 @@ from locations.models import Location
 from .forms import DEFAULT_ASSET_TYPES, InventorySessionStartForm, SimpleInventorySessionStartForm
 from .models import (
     InventoryObservedItem,
+    InventoryRawScan,
     InventoryScanBatch,
+    InventoryScanTerminal,
     InventorySession,
     InventorySessionManualConfirmation,
     InventorySessionManualQuantity,
 )
-from .services import import_inventory_scan_text, record_mobile_scan, start_inventory_session
+from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
 
 
 class InventorySessionListView(LoginRequiredMixin, ListView):
@@ -389,6 +392,7 @@ def _build_inventory_session_analysis(session):
             .filter(session=session)
             .order_by("-created_at", "-id")[:10]
         )
+        context["terminal_summaries"] = _get_terminal_summaries(session)
         return context
 
 
@@ -487,7 +491,45 @@ def _get_scanned_code_counts(session):
             if code.startswith("LOC-"):
                 continue
             code_counts[code] += 1
+    terminal_codes = (
+        InventoryRawScan.objects
+        .filter(session=session)
+        .exclude(processing_status=InventoryRawScan.ProcessingStatus.LOCATION)
+        .values_list("code", flat=True)
+    )
+    for code in terminal_codes:
+        if code and not code.startswith("LOC-"):
+            code_counts[code] += 1
     return code_counts
+
+
+def _get_terminal_summaries(session):
+    terminals = (
+        InventoryScanTerminal.objects
+        .filter(session=session)
+        .annotate(raw_scan_count=Count("raw_scans"))
+        .order_by("name", "id")
+    )
+    summaries = []
+    for terminal in terminals:
+        summaries.append(
+            {
+                "terminal": terminal,
+                "raw_scan_count": terminal.raw_scan_count,
+                "last_scan_at": (
+                    InventoryRawScan.objects
+                    .filter(terminal=terminal)
+                    .order_by("-scanned_at", "-id")
+                    .values_list("scanned_at", flat=True)
+                    .first()
+                ),
+                "unknown_count": InventoryRawScan.objects.filter(
+                    terminal=terminal,
+                    processing_result__type="unknown",
+                ).count(),
+            }
+        )
+    return summaries
 
 
 def _get_snapshot_expected_quantity(snapshot_item):
@@ -743,6 +785,200 @@ def session_stats_api(request, pk):
         + summary["unknown_code_count"]
     )
     return JsonResponse({"ok": True, "summary": summary})
+
+
+@login_required
+def terminal_app_view(request):
+    return render(
+        request,
+        "inventory/terminal_app.html",
+        {
+            "page_title": "Terminal inwentaryzacyjny",
+            "terminal_data": {
+                "sessions_url": reverse("inventory:terminal-sessions-api"),
+                "bootstrap_url_template": reverse("inventory:terminal-session-bootstrap-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
+                "terminal_create_url_template": reverse("inventory:terminal-create-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
+                "sync_url_template": reverse("inventory:terminal-sync-api", kwargs={"session_id": 0, "terminal_id": 0}).replace("/0/terminals/0/", "/__SESSION_ID__/terminals/__TERMINAL_ID__/"),
+            },
+        },
+    )
+
+
+@login_required
+@require_GET
+def terminal_sessions_api(request):
+    sessions = (
+        get_visible_inventory_sessions(request.user)
+        .filter(status=InventorySession.Status.ACTIVE)
+        .order_by("-started_at", "-id")
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "sessions": [
+                {
+                    "id": session.id,
+                    "number": session.number,
+                    "started_at": session.started_at.isoformat(),
+                    "root_locations": ", ".join(location.path for location in session.scope_root_locations.all()),
+                    "snapshot_items_count": session.snapshot_items_count,
+                }
+                for session in sessions
+            ],
+        }
+    )
+
+
+@login_required
+@require_GET
+def terminal_session_bootstrap_api(request, session_id):
+    session = get_object_or_404(
+        get_visible_inventory_sessions(request.user).filter(status=InventorySession.Status.ACTIVE),
+        pk=session_id,
+    )
+    locations = [
+        {"code": location.code, "name": location.name, "path": location.path}
+        for location in Location.objects.filter(is_active=True).order_by("code", "id")
+    ]
+    terminals = [
+        {
+            "id": terminal.id,
+            "name": terminal.name,
+            "description": terminal.description,
+            "last_seen_at": terminal.last_seen_at.isoformat() if terminal.last_seen_at else None,
+        }
+        for terminal in session.scan_terminals.filter(is_active=True).order_by("name", "id")
+    ]
+    return JsonResponse(
+        {
+            "ok": True,
+            "session": {
+                "id": session.id,
+                "number": session.number,
+                "status": session.status,
+            },
+            "locations": locations,
+            "terminals": terminals,
+        }
+    )
+
+
+@login_required
+@require_POST
+def terminal_create_api(request, session_id):
+    session = get_object_or_404(
+        get_visible_inventory_sessions(request.user).filter(status=InventorySession.Status.ACTIVE),
+        pk=session_id,
+    )
+    payload, error_response = _get_json_payload(request)
+    if error_response is not None:
+        return error_response
+
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Nazwa terminala jest wymagana."}, status=400)
+    description = str(payload.get("description") or "").strip()
+
+    terminal, _created = InventoryScanTerminal.objects.get_or_create(
+        session=session,
+        name=name,
+        defaults={
+            "description": description,
+            "created_by": request.user,
+        },
+    )
+    if description and terminal.description != description:
+        terminal.description = description
+        terminal.save(update_fields=["description", "updated_at"])
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "terminal": {
+                "id": terminal.id,
+                "name": terminal.name,
+                "description": terminal.description,
+            },
+        }
+    )
+
+
+@login_required
+@require_POST
+def terminal_sync_api(request, session_id, terminal_id):
+    session = get_object_or_404(
+        get_visible_inventory_sessions(request.user),
+        pk=session_id,
+    )
+    if session.status == InventorySession.Status.CLOSED:
+        return _closed_inventory_session_response()
+
+    terminal = get_object_or_404(
+        InventoryScanTerminal.objects.filter(session=session, is_active=True),
+        pk=terminal_id,
+    )
+    payload, error_response = _get_json_payload(request)
+    if error_response is not None:
+        return error_response
+
+    scans = payload.get("scans")
+    if not isinstance(scans, list):
+        return JsonResponse({"ok": False, "error": "scans must be a list."}, status=400)
+
+    accepted = []
+    errors = []
+    for index, scan in enumerate(scans):
+        if not isinstance(scan, dict):
+            errors.append({"index": index, "error": "scan must be an object."})
+            continue
+        client_scan_id = str(scan.get("client_scan_id") or "").strip()
+        code = str(scan.get("code") or "").strip()
+        if not client_scan_id or not code:
+            errors.append({"index": index, "error": "client_scan_id and code are required."})
+            continue
+        scanned_at = _parse_client_datetime(scan.get("scanned_at"))
+        raw_scan, created = record_terminal_raw_scan(
+            session=session,
+            terminal=terminal,
+            client_scan_id=client_scan_id,
+            code=code,
+            scanned_at=scanned_at,
+            current_location_code=scan.get("current_location_code") or None,
+        )
+        accepted.append(
+            {
+                "client_scan_id": client_scan_id,
+                "raw_scan_id": raw_scan.id,
+                "created": created,
+                "result": raw_scan.processing_result,
+            }
+        )
+
+    return JsonResponse(
+        {
+            "ok": not errors,
+            "accepted": accepted,
+            "errors": errors,
+            "server_scan_count": InventoryRawScan.objects.filter(terminal=terminal).count(),
+        },
+        status=207 if errors and accepted else (400 if errors else 200),
+    )
+
+
+def _get_json_payload(request):
+    try:
+        return json.loads(request.body.decode("utf-8") or "{}"), None
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None, JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+
+
+def _parse_client_datetime(value):
+    parsed = parse_datetime(str(value or ""))
+    if parsed is None:
+        return timezone.now()
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
 
 
 @csrf_exempt

@@ -10,7 +10,9 @@ from locations.models import Location
 
 from .models import (
     InventoryObservedItem,
+    InventoryRawScan,
     InventoryScanBatch,
+    InventoryScanTerminal,
     InventorySession,
     InventorySnapshotItem,
 )
@@ -159,6 +161,62 @@ def record_mobile_scan(session: "InventorySession", code: str, current_location_
         observed_item.save(update_fields=["code", "scanned_location", "status", "last_seen_at"])
 
     return {"ok": True, "type": "asset", "status": status}
+
+
+@transaction.atomic
+def record_terminal_raw_scan(
+    *,
+    session: InventorySession,
+    terminal: InventoryScanTerminal,
+    client_scan_id: str,
+    code: str,
+    scanned_at,
+    current_location_code: str | None = None,
+) -> tuple[InventoryRawScan, bool]:
+    """Store one terminal scan idempotently and update the inventory result."""
+    normalized_code = str(code or "").strip()
+    normalized_location_code = str(current_location_code or "").strip()
+    raw_scan, created = InventoryRawScan.objects.get_or_create(
+        terminal=terminal,
+        client_scan_id=str(client_scan_id or "").strip(),
+        defaults={
+            "session": session,
+            "code": normalized_code,
+            "current_location": _get_location_by_code(normalized_location_code) if normalized_location_code else None,
+            "current_location_code": normalized_location_code,
+            "scanned_at": scanned_at,
+        },
+    )
+    if created:
+        process_terminal_raw_scan(raw_scan)
+    terminal.last_seen_at = timezone.now()
+    terminal.save(update_fields=["last_seen_at", "updated_at"])
+    return raw_scan, created
+
+
+@transaction.atomic
+def process_terminal_raw_scan(raw_scan: InventoryRawScan) -> dict:
+    code = (raw_scan.code or "").strip()
+    now = timezone.now()
+    location = _get_location_by_code(code)
+    if location is not None:
+        raw_scan.processing_status = InventoryRawScan.ProcessingStatus.LOCATION
+        raw_scan.processing_result = {
+            "ok": True,
+            "type": "location",
+            "location_code": location.code,
+            "location_name": location.name,
+        }
+        raw_scan.processed_at = now
+        raw_scan.save(update_fields=["processing_status", "processing_result", "processed_at"])
+        return raw_scan.processing_result
+
+    result = record_mobile_scan(raw_scan.session, code, raw_scan.current_location_code or None)
+    raw_scan.processing_status = InventoryRawScan.ProcessingStatus.PROCESSED
+    raw_scan.processing_result = result
+    raw_scan.processed_at = now
+    raw_scan.save(update_fields=["processing_status", "processing_result", "processed_at"])
+    return result
 
 
 def _record_unknown_code(

@@ -766,6 +766,38 @@
         </section>
         </div>
 
+        <section class="inventory-section" aria-labelledby="inventory-terminals-title">
+            <h2 id="inventory-terminals-title">Terminale i zespoły spisowe</h2>
+            {% if terminal_summaries %}
+                <div class="inventory-table-wrap">
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>Terminal / zespół</th>
+                                <th>Surowe skany</th>
+                                <th>Nieznane kody</th>
+                                <th>Ostatni skan</th>
+                                <th>Ostatnia synchronizacja</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in terminal_summaries %}
+                                <tr>
+                                    <td>{{ item.terminal.name }}</td>
+                                    <td class="inventory-mono">{{ item.raw_scan_count }}</td>
+                                    <td class="inventory-mono">{{ item.unknown_count }}</td>
+                                    <td>{% if item.last_scan_at %}{{ item.last_scan_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                                    <td>{% if item.terminal.last_seen_at %}{{ item.terminal.last_seen_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="inventory-empty">Brak terminali przypisanych do tej sesji.</div>
+            {% endif %}
+        </section>
+
         <section class="inventory-section" aria-labelledby="inventory-problems-title">
             <h2 id="inventory-problems-title">Problemy i odczyty spoza ewidencji</h2>
             {% if problem_items %}

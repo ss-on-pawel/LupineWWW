@@ -127,6 +127,97 @@ class InventoryScanBatch(models.Model):
         return f"{self.session.number}: import {self.pk or '-'}"
 
 
+class InventoryScanTerminal(models.Model):
+    session = models.ForeignKey(
+        InventorySession,
+        on_delete=models.CASCADE,
+        related_name="scan_terminals",
+    )
+    name = models.CharField(max_length=80)
+    description = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inventory_scan_terminals",
+    )
+    is_active = models.BooleanField(default=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["session", "name", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "name"],
+                name="inv_terminal_unique_session_name",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["session", "is_active"], name="inv_term_session_active_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.session.number}: {self.name}"
+
+
+class InventoryRawScan(models.Model):
+    class ProcessingStatus(models.TextChoices):
+        RECEIVED = "received", "Received"
+        PROCESSED = "processed", "Processed"
+        LOCATION = "location", "Location"
+        ERROR = "error", "Error"
+
+    session = models.ForeignKey(
+        InventorySession,
+        on_delete=models.CASCADE,
+        related_name="raw_scans",
+    )
+    terminal = models.ForeignKey(
+        InventoryScanTerminal,
+        on_delete=models.CASCADE,
+        related_name="raw_scans",
+    )
+    code = models.CharField(max_length=120)
+    current_location = models.ForeignKey(
+        "locations.Location",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inventory_raw_scans",
+    )
+    current_location_code = models.CharField(max_length=32, blank=True)
+    client_scan_id = models.CharField(max_length=64)
+    scanned_at = models.DateTimeField()
+    received_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    processing_status = models.CharField(
+        max_length=16,
+        choices=ProcessingStatus.choices,
+        default=ProcessingStatus.RECEIVED,
+    )
+    processing_result = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-scanned_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["terminal", "client_scan_id"],
+                name="inv_raw_scan_unique_terminal_client_id",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["session", "terminal"], name="inv_raw_session_term_idx"),
+            models.Index(fields=["session", "code"], name="inv_raw_scan_session_code_idx"),
+            models.Index(fields=["session", "processing_status"], name="inv_raw_session_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.session.number}: {self.terminal.name}: {self.code}"
+
+
 class InventoryObservedItem(models.Model):
     class Status(models.TextChoices):
         FOUND_OK = "found_ok", "Found OK"
