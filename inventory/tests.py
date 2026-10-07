@@ -3138,7 +3138,28 @@ class TerminalScannerTests(TestCase):
 
     def test_terminal_page_requires_login(self):
         response = self.client.get(reverse("inventory:terminal-app"))
-        self.assertNotEqual(response.status_code, 200)
+        self.assertRedirects(
+            response,
+            f"{reverse('inventory:terminal-login')}?next={reverse('inventory:terminal-app')}",
+        )
+
+    def test_terminal_login_uses_terminal_template(self):
+        response = self.client.get(reverse("inventory:terminal-login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Terminal")
+        self.assertNotContains(response, "Django Admin")
+
+    def test_terminal_page_uses_dedicated_layout_without_main_menu(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:terminal-app"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Licznik skanów")
+        self.assertContains(response, "Ostatni skan")
+        self.assertNotContains(response, "Ewidencja")
+        self.assertNotContains(response, "Lokalizacje")
 
     def test_sessions_api_returns_active_sessions_for_logged_user(self):
         self.client.force_login(self.user)

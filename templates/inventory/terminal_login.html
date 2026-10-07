@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Terminal | Logowanie</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            display: grid;
+            place-items: center;
+            margin: 0;
+            padding: 16px;
+            background: #f4f6f8;
+            color: #101828;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        .terminal-login {
+            width: min(100%, 360px);
+            padding: 18px;
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
+        }
+
+        .terminal-title {
+            margin: 0 0 16px;
+            font-size: 1.35rem;
+            line-height: 1.2;
+            letter-spacing: 0;
+        }
+
+        .terminal-error {
+            margin: 0 0 12px;
+            padding: 10px;
+            border: 1px solid #fda29b;
+            background: #fff1f0;
+            color: #b42318;
+            font-size: 0.95rem;
+        }
+
+        .terminal-field {
+            display: grid;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .terminal-field label {
+            color: #475467;
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .terminal-field input {
+            width: 100%;
+            min-height: 48px;
+            padding: 8px 10px;
+            border: 1px solid #98a2b3;
+            background: #ffffff;
+            color: #101828;
+            font: inherit;
+            font-size: 1.05rem;
+        }
+
+        .terminal-button {
+            width: 100%;
+            min-height: 48px;
+            border: 1px solid #101828;
+            background: #101828;
+            color: #ffffff;
+            font: inherit;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <main class="terminal-login">
+        <h1 class="terminal-title">Terminal</h1>
+        {% if form.errors %}
+            <p class="terminal-error">Nieprawidłowy login lub hasło.</p>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <div class="terminal-field">
+                <label for="{{ form.username.id_for_label }}">Login</label>
+                {{ form.username }}
+            </div>
+            <div class="terminal-field">
+                <label for="{{ form.password.id_for_label }}">Hasło</label>
+                {{ form.password }}
+            </div>
+            {% if next %}
+                <input type="hidden" name="next" value="{{ next }}">
+            {% endif %}
+            <button class="terminal-button" type="submit">Zaloguj</button>
+        </form>
+    </main>
+</body>
+</html>

@@ -1,221 +1,276 @@
-{% extends "base.html" %}
-
-{% block title %}Terminal inwentaryzacyjny{% endblock %}
-
-{% block extra_head %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Terminal inwentaryzacyjny</title>
     <style>
-        .terminal-page {
-            display: grid;
-            gap: 12px;
-            max-width: 760px;
-            margin: 0 auto;
+        * { box-sizing: border-box; }
+        html, body { min-height: 100%; }
+        body {
+            margin: 0;
+            background: #f4f6f8;
+            color: #101828;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
-
+        button, input, select { font: inherit; }
+        .terminal-shell {
+            display: grid;
+            min-height: 100vh;
+            padding: 10px;
+        }
         .terminal-panel {
             display: grid;
-            gap: 12px;
-            padding: 14px;
-            border: 1px solid rgba(15, 23, 42, 0.1);
-            background: rgba(255, 255, 255, 0.94);
+            grid-template-rows: auto 1fr;
+            gap: 10px;
+            width: min(100%, 720px);
+            min-height: calc(100vh - 20px);
+            margin: 0 auto;
         }
-
-        .terminal-header {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            align-items: flex-start;
-            flex-wrap: wrap;
+        .terminal-top {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            align-items: start;
         }
-
+        .terminal-id {
+            display: grid;
+            gap: 2px;
+            min-width: 0;
+        }
         .terminal-kicker,
         .terminal-label {
             margin: 0;
-            color: var(--app-muted);
-            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-        }
-
-        .terminal-title {
-            margin: 4px 0 0;
-            font-size: 1.45rem;
-            line-height: 1.15;
+            color: #667085;
+            font-size: 0.74rem;
+            font-weight: 800;
             letter-spacing: 0;
-        }
-
-        .terminal-status {
-            min-height: 28px;
-            padding: 6px 9px;
-            border: 1px solid rgba(15, 23, 42, 0.12);
-            background: #f8fafc;
-            color: #475467;
-            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
-            font-size: 0.76rem;
-            font-weight: 700;
             text-transform: uppercase;
         }
-
+        .terminal-title {
+            margin: 0;
+            overflow: hidden;
+            color: #101828;
+            font-size: 1.1rem;
+            font-weight: 800;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .terminal-status {
+            min-height: 30px;
+            padding: 6px 9px;
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
+            color: #475467;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
         .terminal-status.is-online {
-            border-color: rgba(22, 101, 52, 0.18);
-            background: #f0fdf4;
+            border-color: #75c895;
+            background: #ecfdf3;
             color: #166534;
         }
-
         .terminal-status.is-offline {
-            border-color: rgba(146, 64, 14, 0.18);
-            background: #fffbeb;
+            border-color: #fdb022;
+            background: #fffaeb;
             color: #92400e;
         }
-
-        .terminal-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            border-top: 1px solid rgba(15, 23, 42, 0.1);
-            border-left: 1px solid rgba(15, 23, 42, 0.1);
-        }
-
-        .terminal-stat {
-            min-height: 72px;
-            padding: 10px;
-            border-right: 1px solid rgba(15, 23, 42, 0.1);
-            border-bottom: 1px solid rgba(15, 23, 42, 0.1);
-            background: #ffffff;
-        }
-
-        .terminal-value {
-            margin: 6px 0 0;
-            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
-            font-size: 1.55rem;
-            font-weight: 800;
-            line-height: 1;
-        }
-
-        .terminal-form {
+        .terminal-card {
             display: grid;
             gap: 10px;
+            padding: 12px;
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
         }
-
+        .terminal-setup { align-self: center; }
+        .terminal-scan-card { align-content: start; }
         .terminal-row {
             display: grid;
             gap: 6px;
         }
-
-        .terminal-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
+        .terminal-row input,
+        .terminal-row select {
+            width: 100%;
+            min-height: 48px;
+            padding: 8px 10px;
+            border: 1px solid #98a2b3;
+            background: #ffffff;
+            color: #101828;
+            font-size: 1rem;
         }
-
         .terminal-scan-input {
-            min-height: 52px;
-            font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
-            font-size: 1.05rem;
+            height: 56px;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-size: 1.1rem;
             font-weight: 800;
         }
-
+        .terminal-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .terminal-button {
+            min-height: 46px;
+            border: 1px solid #101828;
+            background: #101828;
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-weight: 800;
+        }
+        .terminal-button.secondary {
+            border-color: #98a2b3;
+            background: #ffffff;
+            color: #101828;
+        }
+        .terminal-counter {
+            display: grid;
+            place-items: center;
+            min-height: 150px;
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
+        }
+        .terminal-counter-label {
+            margin: 0 0 4px;
+            color: #667085;
+            font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .terminal-counter-value {
+            margin: 0;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-size: clamp(4rem, 22vw, 8rem);
+            font-weight: 900;
+            line-height: 0.95;
+        }
+        .terminal-last {
+            display: grid;
+            gap: 5px;
+            padding: 12px;
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
+        }
+        .terminal-last-code {
+            min-height: 38px;
+            overflow: hidden;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-size: 1.2rem;
+            font-weight: 900;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .terminal-meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .terminal-meta {
+            min-height: 64px;
+            padding: 9px;
+            border: 1px solid #d0d5dd;
+            background: #ffffff;
+        }
+        .terminal-meta-value {
+            margin: 5px 0 0;
+            overflow: hidden;
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-size: 1.05rem;
+            font-weight: 900;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .terminal-message {
-            min-height: 24px;
+            min-height: 22px;
             margin: 0;
             color: #475467;
-            font-size: 0.92rem;
-            line-height: 1.4;
+            font-size: 0.9rem;
+            line-height: 1.35;
         }
-
-        .terminal-message.is-error {
-            color: #991b1b;
-        }
-
-        .terminal-message.is-ok {
-            color: #166534;
-        }
-
-        .terminal-hidden {
-            display: none;
-        }
-
-        @media (max-width: 640px) {
-            .terminal-grid {
-                grid-template-columns: 1fr;
-            }
+        .terminal-message.is-error { color: #b42318; }
+        .terminal-message.is-ok { color: #166534; }
+        .terminal-hidden { display: none; }
+        @media (max-width: 480px) {
+            .terminal-shell { padding: 6px; }
+            .terminal-panel { min-height: calc(100vh - 12px); }
+            .terminal-meta-grid,
+            .terminal-actions { grid-template-columns: 1fr; }
         }
     </style>
-{% endblock %}
-
-{% block content %}
+</head>
+<body>
     {{ terminal_data|json_script:"terminal-data" }}
-    <section class="terminal-page" data-terminal-app>
-        <div class="terminal-panel">
-            <header class="terminal-header">
-                <div>
-                    <p class="terminal-kicker">Inwentaryzacja</p>
-                    <h1 class="terminal-title">Terminal</h1>
+    <form class="terminal-hidden" aria-hidden="true">{% csrf_token %}</form>
+    <main class="terminal-shell" data-terminal-app>
+        <section class="terminal-panel">
+            <header class="terminal-top">
+                <div class="terminal-id">
+                    <p class="terminal-kicker" data-current-session>Terminal</p>
+                    <h1 class="terminal-title" data-current-terminal>Inwentaryzacja</h1>
                 </div>
-                <span class="terminal-status" data-online-status>Sprawdzanie</span>
+                <span class="terminal-status" data-online-status>...</span>
             </header>
 
-            <p class="terminal-message" data-message>Ładowanie aplikacji terminalowej...</p>
-        </div>
-
-        <section class="terminal-panel" data-setup-panel>
-            <div class="terminal-form">
+            <section class="terminal-card terminal-setup" data-setup-panel>
                 <div class="terminal-row">
-                    <label class="terminal-label" for="terminal-session-select">Aktywna inwentaryzacja</label>
+                    <label class="terminal-label" for="terminal-session-select">Inwentaryzacja</label>
                     <select id="terminal-session-select" data-session-select></select>
                 </div>
                 <div class="terminal-row">
                     <label class="terminal-label" for="terminal-name-input">Terminal / zespół</label>
-                    <input id="terminal-name-input" data-terminal-name type="text" autocomplete="off" placeholder="np. Terminal 1">
+                    <input id="terminal-name-input" data-terminal-name type="text" autocomplete="off" placeholder="Terminal 1">
                 </div>
                 <div class="terminal-actions">
-                    <button class="ui-btn ui-btn--primary" type="button" data-start-button>Rozpocznij</button>
-                    <button class="ui-btn ui-btn--secondary" type="button" data-refresh-button>Odśwież listę</button>
+                    <button class="terminal-button" type="button" data-start-button>Start</button>
+                    <button class="terminal-button secondary" type="button" data-refresh-button>Odśwież</button>
                 </div>
-            </div>
+                <p class="terminal-message" data-message>Ładowanie...</p>
+            </section>
+
+            <section class="terminal-card terminal-scan-card terminal-hidden" data-scan-panel>
+                <div class="terminal-counter" aria-label="Licznik skanów">
+                    <div>
+                        <p class="terminal-counter-label">Licznik skanów</p>
+                        <p class="terminal-counter-value" data-local-count>0</p>
+                    </div>
+                </div>
+                <div class="terminal-last">
+                    <p class="terminal-label">Ostatni skan</p>
+                    <div class="terminal-last-code" data-last-scan>-</div>
+                </div>
+                <div class="terminal-meta-grid">
+                    <div class="terminal-meta">
+                        <p class="terminal-label">Do wysłania</p>
+                        <p class="terminal-meta-value" data-pending-count>0</p>
+                    </div>
+                    <div class="terminal-meta">
+                        <p class="terminal-label">Lokalizacja</p>
+                        <p class="terminal-meta-value" data-current-location>-</p>
+                    </div>
+                </div>
+                <div class="terminal-row">
+                    <label class="terminal-label" for="terminal-scan-input">Pole skanowania</label>
+                    <input id="terminal-scan-input" class="terminal-scan-input" data-scan-input type="text" inputmode="none" autocomplete="off" autofocus>
+                </div>
+                <div class="terminal-actions">
+                    <button class="terminal-button" type="button" data-sync-button>Synchronizuj</button>
+                    <button class="terminal-button secondary" type="button" data-change-session-button>Zmień sesję</button>
+                </div>
+                <p class="terminal-message" data-scan-message>Gotowy.</p>
+            </section>
         </section>
+    </main>
 
-        <section class="terminal-panel terminal-hidden" data-scan-panel>
-            <div>
-                <p class="terminal-kicker" data-current-session>Sesja</p>
-                <h2 class="terminal-title" data-current-terminal>Terminal</h2>
-            </div>
-
-            <div class="terminal-grid" aria-label="Liczniki terminala">
-                <div class="terminal-stat">
-                    <p class="terminal-label">Skany lokalne</p>
-                    <p class="terminal-value" data-local-count>0</p>
-                </div>
-                <div class="terminal-stat">
-                    <p class="terminal-label">Do wysłania</p>
-                    <p class="terminal-value" data-pending-count>0</p>
-                </div>
-                <div class="terminal-stat">
-                    <p class="terminal-label">Lokalizacja</p>
-                    <p class="terminal-value" data-current-location>-</p>
-                </div>
-            </div>
-
-            <div class="terminal-row">
-                <label class="terminal-label" for="terminal-scan-input">Skan</label>
-                <input id="terminal-scan-input" class="terminal-scan-input" data-scan-input type="text" inputmode="none" autocomplete="off" autofocus>
-            </div>
-
-            <div class="terminal-actions">
-                <button class="ui-btn ui-btn--primary" type="button" data-sync-button>Synchronizuj</button>
-                <button class="ui-btn ui-btn--secondary" type="button" data-change-session-button>Zmień sesję</button>
-            </div>
-        </section>
-    </section>
-{% endblock %}
-
-{% block extra_scripts %}
     <script>
         (function () {
             const config = JSON.parse(document.getElementById("terminal-data").textContent);
             const els = {
                 status: document.querySelector("[data-online-status]"),
-                message: document.querySelector("[data-message]"),
+                setupMessage: document.querySelector("[data-message]"),
+                scanMessage: document.querySelector("[data-scan-message]"),
                 setupPanel: document.querySelector("[data-setup-panel]"),
                 scanPanel: document.querySelector("[data-scan-panel]"),
                 sessionSelect: document.querySelector("[data-session-select]"),
@@ -230,8 +285,8 @@
                 currentLocation: document.querySelector("[data-current-location]"),
                 currentSession: document.querySelector("[data-current-session]"),
                 currentTerminal: document.querySelector("[data-current-terminal]"),
+                lastScan: document.querySelector("[data-last-scan]"),
             };
-
             const DB_NAME = "lupine-terminal-v1";
             const STORE = "scans";
             const STATE_KEY = "lupine-terminal-state";
@@ -250,29 +305,21 @@
                 }
                 return "";
             }
-
             function loadState() {
-                try {
-                    return JSON.parse(localStorage.getItem(STATE_KEY) || "{}");
-                } catch {
-                    return {};
-                }
+                try { return JSON.parse(localStorage.getItem(STATE_KEY) || "{}"); } catch { return {}; }
             }
-
             function saveState() {
                 localStorage.setItem(STATE_KEY, JSON.stringify(state));
             }
-
-            function setMessage(text, type) {
-                els.message.textContent = text;
-                els.message.className = "terminal-message" + (type ? " is-" + type : "");
+            function setMessage(text, type, target) {
+                const element = target || (els.scanPanel.classList.contains("terminal-hidden") ? els.setupMessage : els.scanMessage);
+                element.textContent = text;
+                element.className = "terminal-message" + (type ? " is-" + type : "");
             }
-
             function updateOnlineStatus() {
                 els.status.textContent = navigator.onLine ? "Online" : "Offline";
                 els.status.className = "terminal-status " + (navigator.onLine ? "is-online" : "is-offline");
             }
-
             function urlFromTemplate(template, replacements) {
                 let url = template;
                 Object.keys(replacements).forEach(key => {
@@ -280,7 +327,6 @@
                 });
                 return url;
             }
-
             function openDB() {
                 return new Promise((resolve, reject) => {
                     const req = indexedDB.open(DB_NAME, 1);
@@ -295,51 +341,42 @@
                     req.onerror = event => reject(event.target.error);
                 });
             }
-
             function dbPut(scan) {
                 return new Promise((resolve, reject) => {
                     const tx = db.transaction(STORE, "readwrite");
-                    const store = tx.objectStore(STORE);
-                    const req = store.put(scan);
+                    const req = tx.objectStore(STORE).put(scan);
                     req.onsuccess = () => resolve();
                     req.onerror = event => reject(event.target.error);
                 });
             }
-
             function dbGetAll() {
                 return new Promise((resolve, reject) => {
                     const tx = db.transaction(STORE, "readonly");
-                    const store = tx.objectStore(STORE);
-                    const req = store.getAll();
+                    const req = tx.objectStore(STORE).getAll();
                     req.onsuccess = () => resolve(req.result || []);
                     req.onerror = event => reject(event.target.error);
                 });
             }
-
             function dbDelete(id) {
                 return new Promise((resolve, reject) => {
                     const tx = db.transaction(STORE, "readwrite");
-                    const store = tx.objectStore(STORE);
-                    const req = store.delete(id);
+                    const req = tx.objectStore(STORE).delete(id);
                     req.onsuccess = () => resolve();
                     req.onerror = event => reject(event.target.error);
                 });
             }
-
             async function loadSessions() {
                 if (!navigator.onLine) {
                     if (state.session_id && state.terminal_id) {
-                        setMessage("Tryb offline. Skany będą zapisane lokalnie.", "");
+                        setMessage("Tryb offline. Skany będą zapisane lokalnie.", "", els.scanMessage);
                     } else {
-                        setMessage("Brak internetu. Do pierwszego uruchomienia potrzebne jest połączenie.", "error");
+                        setMessage("Do pierwszego uruchomienia potrzebny jest internet.", "error", els.setupMessage);
                     }
                     return;
                 }
                 const resp = await fetch(config.sessions_url, {headers: {"Accept": "application/json"}});
                 const data = await resp.json();
-                if (!data.ok) {
-                    throw new Error(data.error || "Nie można pobrać sesji.");
-                }
+                if (!data.ok) throw new Error(data.error || "Nie można pobrać sesji.");
                 els.sessionSelect.textContent = "";
                 data.sessions.forEach(session => {
                     const option = document.createElement("option");
@@ -348,53 +385,33 @@
                     option.dataset.number = session.number;
                     els.sessionSelect.appendChild(option);
                 });
-                if (state.session_id) {
-                    els.sessionSelect.value = String(state.session_id);
-                }
-                if (state.terminal_name) {
-                    els.terminalName.value = state.terminal_name;
-                }
-                if (!data.sessions.length) {
-                    setMessage("Brak aktywnych inwentaryzacji dostępnych dla tego użytkownika.", "error");
-                } else {
-                    setMessage("Wybierz inwentaryzację i terminal.", "");
-                }
+                if (state.session_id) els.sessionSelect.value = String(state.session_id);
+                if (state.terminal_name) els.terminalName.value = state.terminal_name;
+                setMessage(data.sessions.length ? "Wybierz inwentaryzację i terminal." : "Brak aktywnych inwentaryzacji.", data.sessions.length ? "" : "error", els.setupMessage);
             }
-
             async function startTerminal() {
                 const sessionId = Number.parseInt(els.sessionSelect.value, 10);
                 const terminalName = els.terminalName.value.trim();
                 if (!sessionId || !terminalName) {
-                    setMessage("Wybierz sesję i wpisz nazwę terminala.", "error");
+                    setMessage("Wybierz sesję i wpisz terminal.", "error", els.setupMessage);
                     return;
                 }
                 if (!navigator.onLine) {
-                    setMessage("Start terminala wymaga połączenia z serwerem.", "error");
+                    setMessage("Start terminala wymaga internetu.", "error", els.setupMessage);
                     return;
                 }
-
                 const bootstrapUrl = urlFromTemplate(config.bootstrap_url_template, {SESSION_ID: sessionId});
                 const bootstrapResp = await fetch(bootstrapUrl, {headers: {"Accept": "application/json"}});
                 const bootstrap = await bootstrapResp.json();
-                if (!bootstrap.ok) {
-                    throw new Error(bootstrap.error || "Nie można pobrać danych sesji.");
-                }
-
+                if (!bootstrap.ok) throw new Error(bootstrap.error || "Nie można pobrać danych sesji.");
                 const createUrl = urlFromTemplate(config.terminal_create_url_template, {SESSION_ID: sessionId});
                 const createResp = await fetch(createUrl, {
                     method: "POST",
-                    headers: {
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                        "X-CSRFToken": getCookie("csrftoken"),
-                    },
+                    headers: {"Accept": "application/json", "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken")},
                     body: JSON.stringify({name: terminalName}),
                 });
                 const created = await createResp.json();
-                if (!created.ok) {
-                    throw new Error(created.error || "Nie można utworzyć terminala.");
-                }
-
+                if (!created.ok) throw new Error(created.error || "Nie można utworzyć terminala.");
                 const keepLocalCount = state.session_id === bootstrap.session.id && state.terminal_id === created.terminal.id;
                 state = {
                     session_id: bootstrap.session.id,
@@ -404,61 +421,47 @@
                     current_location_code: keepLocalCount ? (state.current_location_code || "") : "",
                     current_location_label: keepLocalCount ? (state.current_location_label || "-") : "-",
                     local_count: keepLocalCount ? (state.local_count || 0) : 0,
+                    last_scan: keepLocalCount ? (state.last_scan || "-") : "-",
                 };
                 locationsByCode = {};
-                bootstrap.locations.forEach(location => {
-                    locationsByCode[location.code] = location;
-                });
+                bootstrap.locations.forEach(location => { locationsByCode[location.code] = location; });
                 localStorage.setItem("lupine-terminal-locations", JSON.stringify(locationsByCode));
                 saveState();
                 showScanPanel();
                 await updateCounters();
                 syncPending();
             }
-
             function restoreCachedLocations() {
-                try {
-                    locationsByCode = JSON.parse(localStorage.getItem("lupine-terminal-locations") || "{}");
-                } catch {
-                    locationsByCode = {};
-                }
+                try { locationsByCode = JSON.parse(localStorage.getItem("lupine-terminal-locations") || "{}"); } catch { locationsByCode = {}; }
             }
-
             function showScanPanel() {
                 els.setupPanel.classList.add("terminal-hidden");
                 els.scanPanel.classList.remove("terminal-hidden");
                 els.currentSession.textContent = state.session_number || "Sesja";
                 els.currentTerminal.textContent = state.terminal_name || "Terminal";
                 els.currentLocation.textContent = state.current_location_label || "-";
-                setMessage("Gotowy do skanowania.", "ok");
+                els.lastScan.textContent = state.last_scan || "-";
+                setMessage("Gotowy do skanowania.", "ok", els.scanMessage);
                 setTimeout(() => els.scanInput.focus(), 50);
             }
-
             function showSetupPanel() {
                 els.scanPanel.classList.add("terminal-hidden");
                 els.setupPanel.classList.remove("terminal-hidden");
-                setMessage("Wybierz inwentaryzację i terminal.", "");
+                setMessage("Wybierz inwentaryzację i terminal.", "", els.setupMessage);
             }
-
             function makeScanId() {
-                if (window.crypto && window.crypto.randomUUID) {
-                    return window.crypto.randomUUID();
-                }
+                if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
                 return String(Date.now()) + "-" + Math.random().toString(16).slice(2);
             }
-
             async function handleCode(code) {
                 const value = String(code || "").trim();
-                if (!value || !state.session_id || !state.terminal_id) {
-                    return;
-                }
+                if (!value || !state.session_id || !state.terminal_id) return;
                 if (locationsByCode[value]) {
                     state.current_location_code = value;
                     state.current_location_label = locationsByCode[value].path || locationsByCode[value].name || value;
                     els.currentLocation.textContent = state.current_location_label;
-                    saveState();
                 }
-                const scan = {
+                await dbPut({
                     client_scan_id: makeScanId(),
                     session_id: state.session_id,
                     terminal_id: state.terminal_id,
@@ -466,91 +469,66 @@
                     current_location_code: state.current_location_code || "",
                     scanned_at: new Date().toISOString(),
                     synced: false,
-                };
-                await dbPut(scan);
+                });
                 state.local_count = Number.parseInt(state.local_count || 0, 10) + 1;
+                state.last_scan = value;
+                els.lastScan.textContent = value;
                 saveState();
                 await updateCounters();
-                setMessage("Zapisano skan lokalnie.", "ok");
-                if (navigator.onLine) {
-                    syncPending();
-                }
+                setMessage("Zapisano.", "ok", els.scanMessage);
+                if (navigator.onLine) syncPending();
             }
-
             async function updateCounters() {
                 const scans = await dbGetAll();
                 const pendingScans = scans.filter(scan => scan.session_id === state.session_id && scan.terminal_id === state.terminal_id && !scan.synced);
                 els.localCount.textContent = String(state.local_count || 0);
                 els.pendingCount.textContent = String(pendingScans.length);
             }
-
             async function syncPending() {
-                if (syncing || !navigator.onLine || !state.session_id || !state.terminal_id) {
-                    return;
-                }
+                if (syncing || !navigator.onLine || !state.session_id || !state.terminal_id) return;
                 const allScans = await dbGetAll();
-                const pending = allScans
-                    .filter(scan => scan.session_id === state.session_id && scan.terminal_id === state.terminal_id && !scan.synced)
-                    .slice(0, 100);
+                const pending = allScans.filter(scan => scan.session_id === state.session_id && scan.terminal_id === state.terminal_id && !scan.synced).slice(0, 100);
                 if (!pending.length) {
                     await updateCounters();
                     return;
                 }
                 syncing = true;
                 try {
-                    const syncUrl = urlFromTemplate(config.sync_url_template, {
-                        SESSION_ID: state.session_id,
-                        TERMINAL_ID: state.terminal_id,
-                    });
+                    const syncUrl = urlFromTemplate(config.sync_url_template, {SESSION_ID: state.session_id, TERMINAL_ID: state.terminal_id});
                     const resp = await fetch(syncUrl, {
                         method: "POST",
-                        headers: {
-                            "Accept": "application/json",
-                            "Content-Type": "application/json",
-                            "X-CSRFToken": getCookie("csrftoken"),
-                        },
+                        headers: {"Accept": "application/json", "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken")},
                         body: JSON.stringify({scans: pending}),
                     });
                     const data = await resp.json();
-                    if (!resp.ok && !data.accepted) {
-                        throw new Error(data.error || "Synchronizacja nie powiodła się.");
-                    }
-                    for (const item of data.accepted || []) {
-                        await dbDelete(item.client_scan_id);
-                    }
+                    if (!resp.ok && !data.accepted) throw new Error(data.error || "Synchronizacja nie powiodła się.");
+                    for (const item of data.accepted || []) await dbDelete(item.client_scan_id);
                     await updateCounters();
-                    setMessage("Synchronizacja zakończona.", "ok");
+                    setMessage("Zsynchronizowano.", "ok", els.scanMessage);
                 } catch (err) {
-                    setMessage(err.message || "Synchronizacja nie powiodła się.", "error");
+                    setMessage(err.message || "Brak synchronizacji.", "error", els.scanMessage);
                 } finally {
                     syncing = false;
+                    setTimeout(() => els.scanInput.focus(), 50);
                 }
             }
-
-            els.startButton.addEventListener("click", () => {
-                startTerminal().catch(err => setMessage(err.message, "error"));
+            document.addEventListener("click", () => {
+                if (!els.scanPanel.classList.contains("terminal-hidden")) els.scanInput.focus();
             });
-            els.refreshButton.addEventListener("click", () => {
-                loadSessions().catch(err => setMessage(err.message, "error"));
-            });
+            els.startButton.addEventListener("click", () => { startTerminal().catch(err => setMessage(err.message, "error", els.setupMessage)); });
+            els.refreshButton.addEventListener("click", () => { loadSessions().catch(err => setMessage(err.message, "error", els.setupMessage)); });
             els.syncButton.addEventListener("click", syncPending);
             els.changeSessionButton.addEventListener("click", showSetupPanel);
             els.scanInput.addEventListener("keydown", event => {
-                if (event.key !== "Enter") {
-                    return;
-                }
+                if (event.key !== "Enter") return;
                 event.preventDefault();
                 const value = els.scanInput.value;
                 els.scanInput.value = "";
                 handleCode(value);
             });
-            window.addEventListener("online", () => {
-                updateOnlineStatus();
-                syncPending();
-            });
+            window.addEventListener("online", () => { updateOnlineStatus(); syncPending(); });
             window.addEventListener("offline", updateOnlineStatus);
             setInterval(syncPending, 5000);
-
             openDB().then(database => {
                 db = database;
                 restoreCachedLocations();
@@ -562,8 +540,9 @@
                 }
                 return loadSessions();
             }).catch(err => {
-                setMessage(err.message || "Nie można uruchomić lokalnego bufora.", "error");
+                setMessage(err.message || "Nie można uruchomić bufora.", "error");
             });
         }());
     </script>
-{% endblock %}
+</body>
+</html>

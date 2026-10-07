@@ -4,6 +4,7 @@ from collections import defaultdict
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
@@ -15,6 +16,7 @@ from django.urls import reverse
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
@@ -33,6 +35,14 @@ from .models import (
     InventorySessionManualQuantity,
 )
 from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
+
+
+class TerminalLoginView(LoginView):
+    template_name = "inventory/terminal_login.html"
+    redirect_authenticated_user = True
+
+    def get_success_url(self):
+        return self.get_redirect_url() or reverse("inventory:terminal-app")
 
 
 class InventorySessionListView(LoginRequiredMixin, ListView):
@@ -787,7 +797,8 @@ def session_stats_api(request, pk):
     return JsonResponse({"ok": True, "summary": summary})
 
 
-@login_required
+@ensure_csrf_cookie
+@login_required(login_url="inventory:terminal-login")
 def terminal_app_view(request):
     return render(
         request,
