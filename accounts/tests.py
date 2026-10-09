@@ -67,10 +67,44 @@ class UiModeFeatureTests(TestCase):
         self.assertEqual(self.client.session[UI_MODE_SESSION_KEY], LITE)
 
     @override_settings(LUPINE_EDITION="lite")
-    def test_lite_product_edition_blocks_user_admin_even_without_session_toggle(self):
+    def test_lite_product_edition_keeps_user_admin_available_for_admin(self):
         response = self.client.get(reverse("accounts:user-list"))
 
+        self.assertEqual(response.status_code, 200)
+
+    def test_user_profile_lite_mode_hides_advanced_navigation_without_switch_button(self):
+        user = User.objects.create_user(username="lite-assigned-user", password="pass123")
+        user.profile.interface_mode = UserProfile.InterfaceMode.LITE
+        user.profile.save(update_fields=["interface_mode"])
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Widok Lite")
+        self.assertNotContains(response, "Pełny widok")
+        self.assertNotContains(response, "Kolejka zmian")
+        self.assertNotContains(response, "Amortyzacja")
+
+    def test_regular_user_cannot_switch_ui_mode(self):
+        user = User.objects.create_user(username="mode-switch-user", password="pass123")
+        self.client.force_login(user)
+
+        response = self.client.post(reverse("accounts:ui-mode-switch"), {"ui_mode": "lite"})
+
         self.assertEqual(response.status_code, 403)
+
+    def test_create_form_in_lite_mode_uses_two_roles_and_lite_initial_mode(self):
+        session = self.client.session
+        session[UI_MODE_SESSION_KEY] = LITE
+        session.save()
+
+        response = self.client.get(reverse("accounts:user-create"))
+
+        self.assertEqual(response.status_code, 200)
+        role_values = [value for value, _label in response.context["form"].fields["role"].choices]
+        self.assertEqual(role_values, [UserProfile.Role.ADMIN, UserProfile.Role.USER])
+        self.assertEqual(response.context["form"].fields["interface_mode"].initial, LITE)
 
 
 class UserListAccessTests(TestCase):

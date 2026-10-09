@@ -184,7 +184,17 @@
                             <label for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>
                             {{ form.role }}
                             {% if form.role.errors %}<ul class="errorlist">{% for e in form.role.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-                            <span class="user-form-helptext">admin i manager mogą zatwierdzać zmiany środków.</span>
+                            {% if lupine_is_lite_mode %}
+                                <span class="user-form-helptext">Administrator widzi całość i zarządza użytkownikami. Użytkownik widzi tylko przypisane lokalizacje.</span>
+                            {% else %}
+                                <span class="user-form-helptext">admin i manager mogą zatwierdzać zmiany środków.</span>
+                            {% endif %}
+                        </div>
+                        <div class="user-form-field">
+                            <label for="{{ form.interface_mode.id_for_label }}">{{ form.interface_mode.label }}</label>
+                            {{ form.interface_mode }}
+                            {% if form.interface_mode.errors %}<ul class="errorlist">{% for e in form.interface_mode.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                            <span class="user-form-helptext">Określa domyślny widok po zalogowaniu użytkownika.</span>
                         </div>
                         <div class="user-form-field" style="align-items:flex-start;">
                             <label>{{ form.is_active.label }}</label>

@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from config.features import FULL, LITE, UI_MODE_SESSION_KEY, require_feature
+from config.features import FULL, LITE, UI_MODE_SESSION_KEY, is_lite_mode, require_feature, user_can_switch_ui_mode
 
 from .forms import UserCreateForm, UserEditForm
 from .mail import send_system_email
@@ -74,13 +74,13 @@ def user_list(request):
 def user_create(request):
     require_feature(request, "user_admin")
     if request.method == "POST":
-        form = UserCreateForm(request.POST)
+        form = UserCreateForm(request.POST, lite_mode=is_lite_mode(request))
         if form.is_valid():
             form.save()
             messages.success(request, "Użytkownik został utworzony.")
             return redirect("accounts:user-list")
     else:
-        form = UserCreateForm()
+        form = UserCreateForm(lite_mode=is_lite_mode(request))
     return render(request, "accounts/user_form.html", {"form": form, "is_create": True})
 
 
@@ -89,13 +89,13 @@ def user_edit(request, pk):
     require_feature(request, "user_admin")
     edited_user = get_object_or_404(User, pk=pk)
     if request.method == "POST":
-        form = UserEditForm(request.POST, instance=edited_user)
+        form = UserEditForm(request.POST, instance=edited_user, lite_mode=is_lite_mode(request))
         if form.is_valid():
             form.save()
             messages.success(request, "Dane użytkownika zostały zaktualizowane.")
             return redirect("accounts:user-list")
     else:
-        form = UserEditForm(instance=edited_user)
+        form = UserEditForm(instance=edited_user, lite_mode=is_lite_mode(request))
     return render(
         request,
         "accounts/user_form.html",
@@ -143,12 +143,15 @@ def user_reset_password(request, pk):
 @login_required
 @require_POST
 def ui_mode_switch(request):
+    if not user_can_switch_ui_mode(request.user):
+        return HttpResponseForbidden()
+
     mode = request.POST.get("ui_mode", FULL)
     if mode == LITE:
         request.session[UI_MODE_SESSION_KEY] = LITE
         messages.info(request, "Włączono widok Lite.")
     else:
-        request.session.pop(UI_MODE_SESSION_KEY, None)
+        request.session[UI_MODE_SESSION_KEY] = FULL
         messages.info(request, "Włączono pełny widok.")
 
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"

@@ -10,6 +10,10 @@ class UserProfile(models.Model):
         MANAGER = "manager", "Zarzadzajacy"
         USER = "user", "Uzytkownik"
 
+    class InterfaceMode(models.TextChoices):
+        FULL = "full", "Pełna wersja"
+        LITE = "lite", "Lite"
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -36,6 +40,12 @@ class UserProfile(models.Model):
     asset_changes_require_approval = models.BooleanField(
         default=False,
         verbose_name="Zmiany srodkow wymagaja akceptacji",
+    )
+    interface_mode = models.CharField(
+        max_length=16,
+        choices=InterfaceMode.choices,
+        default=InterfaceMode.FULL,
+        verbose_name="Tryb interfejsu",
     )
 
     class Meta:

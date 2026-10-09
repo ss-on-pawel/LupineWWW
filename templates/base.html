@@ -558,7 +558,7 @@
             <div class="app-header-actions">
                 {% block app_header_actions %}
                     {% if request.user.is_authenticated %}
-                        {% if lupine_product_edition == "full" %}
+                        {% if lupine_product_edition == "full" and lupine_can_switch_ui_mode %}
                             <form class="app-inline-form" method="post" action="{% url 'accounts:ui-mode-switch' %}">
                                 {% csrf_token %}
                                 <input type="hidden" name="next" value="{{ request.get_full_path }}">

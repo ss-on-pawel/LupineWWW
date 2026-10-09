@@ -41,7 +41,6 @@ LITE_DISABLED_FEATURES = {
     "depreciation",
     "inventory_reports",
     "service_alerts",
-    "user_admin",
 }
 
 
@@ -56,7 +55,23 @@ def get_ui_mode(request) -> str:
     if request is not None and getattr(request, "session", None):
         if request.session.get(UI_MODE_SESSION_KEY) == LITE:
             return LITE
+        if request.session.get(UI_MODE_SESSION_KEY) == FULL:
+            return FULL
+    user = getattr(request, "user", None)
+    if getattr(user, "is_authenticated", False):
+        profile = getattr(user, "profile", None)
+        if profile is not None and getattr(profile, "interface_mode", FULL) == LITE:
+            return LITE
     return FULL
+
+
+def user_can_switch_ui_mode(user) -> bool:
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return True
+    profile = getattr(user, "profile", None)
+    return bool(profile and getattr(profile, "role", None) == profile.Role.ADMIN)
 
 
 def is_lite_mode(request) -> bool:
@@ -107,4 +122,5 @@ def feature_context(request) -> dict:
         "lupine_product_edition": get_product_edition(),
         "lupine_ui_mode": get_ui_mode(request),
         "lupine_is_lite_mode": is_lite_mode(request),
+        "lupine_can_switch_ui_mode": user_can_switch_ui_mode(getattr(request, "user", None)),
     }

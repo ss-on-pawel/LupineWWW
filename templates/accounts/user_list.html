@@ -58,6 +58,22 @@
             background: rgba(14, 116, 144, 0.07);
             color: #155e75;
         }
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 0 8px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            color: #344054;
+            font-size: 0.8rem;
+            font-family: var(--mono-font);
+            letter-spacing: 0.06em;
+        }
+        .mode-badge--lite {
+            border-color: rgba(14, 116, 144, 0.18);
+            background: rgba(240, 249, 255, 0.72);
+            color: #155e75;
+        }
         .active-dot {
             display: inline-block;
             width: 8px;
@@ -102,6 +118,7 @@
                             <th>Login</th>
                             <th>Imię i nazwisko</th>
                             <th>Rola</th>
+                            <th>Tryb</th>
                             <th>Lokalizacje</th>
                             <th>Aktywny</th>
                             <th></th>
@@ -127,6 +144,13 @@
                                         <span class="role-badge role-badge--manager">{{ u.profile.get_role_display }}</span>
                                     {% else %}
                                         <span class="role-badge">{{ u.profile.get_role_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td data-label="Tryb">
+                                    {% if u.profile.interface_mode == "lite" %}
+                                        <span class="mode-badge mode-badge--lite">Lite</span>
+                                    {% else %}
+                                        <span class="mode-badge">Pełna</span>
                                     {% endif %}
                                 </td>
                                 <td data-label="Lokalizacje">
