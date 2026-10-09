@@ -537,7 +537,6 @@
                     <a class="{% if request.path == '/' or request.path|slice:':8' == '/assets/' and not request.path|slice:':16' == '/assets/reports/' %}is-active{% endif %}" href="{% url 'assets:list' %}">Ewidencja</a>
                     <a class="{% if request.path|slice:':13' == '/lokalizacje/' %}is-active{% endif %}" href="{% url 'locations:list' %}">Lokalizacje</a>
                     <a class="{% if request.path|slice:':11' == '/inventory/' and request.path != '/inventory/terminal/' %}is-active{% endif %}" href="{% url 'inventory:session-list' %}">Inwentaryzacje</a>
-                    <a class="{% if request.path == '/inventory/terminal/' %}is-active{% endif %}" href="{% url 'inventory:terminal-app' %}">Terminal</a>
                     {% if request.user.is_authenticated %}
                         {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.role == "manager" %}
                             {% if features.approval_queue %}
