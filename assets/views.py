@@ -4,6 +4,7 @@ import json
 from datetime import date
 
 from accounts.utils import get_accessible_location_ids
+from config.features import FeatureRequiredMixin, require_feature
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -258,6 +259,7 @@ def _get_asset_form_location_queryset(user):
 
 class AssetTypeManagePermissionMixin(LoginRequiredMixin):
     def dispatch(self, request, *args, **kwargs):
+        require_feature(request, "asset_type_settings")
         if not _user_can_manage_asset_types(request.user):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
@@ -312,6 +314,7 @@ class AssetTypeUpdateView(AssetTypeManagePermissionMixin, UpdateView):
 @login_required
 @require_POST
 def asset_type_deactivate(request, pk):
+    require_feature(request, "asset_type_settings")
     if not _user_can_manage_asset_types(request.user):
         raise PermissionDenied
     asset_type = get_object_or_404(AssetTypeDictionary, pk=pk)
@@ -324,6 +327,7 @@ def asset_type_deactivate(request, pk):
 @login_required
 @require_POST
 def asset_type_activate(request, pk):
+    require_feature(request, "asset_type_settings")
     if not _user_can_manage_asset_types(request.user):
         raise PermissionDenied
     asset_type = get_object_or_404(AssetTypeDictionary, pk=pk)
@@ -496,7 +500,8 @@ class AssetListView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class AssetArchiveListView(AssetListView):
+class AssetArchiveListView(FeatureRequiredMixin, AssetListView):
+    feature_key = "asset_archive"
     asset_list_mode = "archive"
     page_title = "Archiwum środków"
     api_url = "/api/assets/?asset_scope=archive"
@@ -505,7 +510,8 @@ class AssetArchiveListView(AssetListView):
     mode_switch_url_name = "assets:list"
 
 
-class AssetChangeRequestListView(LoginRequiredMixin, ListView):
+class AssetChangeRequestListView(FeatureRequiredMixin, LoginRequiredMixin, ListView):
+    feature_key = "approval_queue"
     model = AssetChangeRequest
     template_name = "assets/asset_change_list.html"
     context_object_name = "change_requests"
@@ -553,7 +559,8 @@ class AssetChangeRequestListView(LoginRequiredMixin, ListView):
         return context
 
 
-class AssetChangeRequestDetailView(LoginRequiredMixin, DetailView):
+class AssetChangeRequestDetailView(FeatureRequiredMixin, LoginRequiredMixin, DetailView):
+    feature_key = "approval_queue"
     model = AssetChangeRequest
     template_name = "assets/asset_change_detail.html"
     context_object_name = "change_request"
@@ -582,6 +589,7 @@ class AssetChangeRequestDetailView(LoginRequiredMixin, DetailView):
 @login_required
 @require_POST
 def asset_change_approve(request, pk):
+    require_feature(request, "approval_queue")
     if not _user_can_review_asset_changes(request.user):
         raise PermissionDenied
 
@@ -602,6 +610,7 @@ def asset_change_approve(request, pk):
 @login_required
 @require_POST
 def asset_change_bulk_approve(request):
+    require_feature(request, "approval_queue")
     if not _user_can_review_asset_changes(request.user):
         raise PermissionDenied
 
@@ -639,6 +648,7 @@ def asset_change_bulk_approve(request):
 @login_required
 @require_POST
 def asset_change_bulk_reject(request):
+    require_feature(request, "approval_queue")
     if not _user_can_review_asset_changes(request.user):
         raise PermissionDenied
 
@@ -684,6 +694,7 @@ def asset_change_bulk_reject(request):
 @login_required
 @require_POST
 def asset_change_reject(request, pk):
+    require_feature(request, "approval_queue")
     if not _user_can_review_asset_changes(request.user):
         raise PermissionDenied
 
@@ -816,6 +827,8 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
 @login_required
 def asset_detail(request, id):
     asset = get_object_or_404(Asset.objects.select_related("asset_type_ref"), pk=id)
+    if not asset.is_active:
+        require_feature(request, "asset_archive")
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
         raise Http404
@@ -855,6 +868,7 @@ def asset_detail(request, id):
 @login_required
 @require_POST
 def asset_restore(request, id):
+    require_feature(request, "asset_archive")
     if not _user_can_restore_asset(request.user):
         raise PermissionDenied
 
@@ -887,6 +901,7 @@ def asset_restore(request, id):
 @login_required
 @require_POST
 def asset_withdraw(request, id):
+    require_feature(request, "asset_archive")
     asset = get_object_or_404(Asset.objects.select_related("asset_type_ref", "location_fk"), pk=id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
@@ -965,6 +980,7 @@ def asset_withdraw(request, id):
 @login_required
 @require_POST
 def asset_attachment_upload(request, asset_id):
+    require_feature(request, "asset_attachments")
     asset = get_object_or_404(Asset, pk=asset_id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
@@ -991,6 +1007,7 @@ def asset_attachment_upload(request, asset_id):
 
 @login_required
 def asset_attachment_download(request, asset_id, attachment_id):
+    require_feature(request, "asset_attachments")
     asset = get_object_or_404(Asset, pk=asset_id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
@@ -1011,6 +1028,7 @@ def asset_attachment_download(request, asset_id, attachment_id):
 @login_required
 @require_POST
 def asset_attachment_delete(request, asset_id, attachment_id):
+    require_feature(request, "asset_attachments")
     if not _user_can_restore_asset(request.user):
         raise PermissionDenied
 
@@ -1032,6 +1050,7 @@ def asset_attachment_delete(request, asset_id, attachment_id):
 @login_required
 @require_POST
 def asset_service_alert_create(request, asset_id):
+    require_feature(request, "service_alerts")
     asset = get_object_or_404(Asset, pk=asset_id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
@@ -1068,6 +1087,7 @@ def asset_service_alert_create(request, asset_id):
 @login_required
 @require_POST
 def asset_service_alert_resolve(request, alert_id):
+    require_feature(request, "service_alerts")
     if not _user_can_restore_asset(request.user):
         raise PermissionDenied
 
@@ -1413,6 +1433,7 @@ def _parse_asset_id_list_payload(payload):
 @login_required
 @require_GET
 def asset_labels_pdf(request):
+    require_feature(request, "asset_labels")
     from .labels import generate_labels_pdf
     from locations.models import OrganizationSettings
 
@@ -1442,6 +1463,7 @@ def asset_labels_pdf(request):
 @login_required
 @require_GET
 def asset_lt_document(request):
+    require_feature(request, "asset_lt_documents")
     from locations.models import OrganizationSettings
 
     raw = request.GET.get("ids", "").strip()
@@ -1482,6 +1504,7 @@ def asset_lt_document(request):
 
 @login_required
 def asset_generate_lt_pdf(request):
+    require_feature(request, "asset_lt_documents")
     from django.core.files.base import ContentFile
     from locations.models import OrganizationSettings
     from .documents import generate_lt_pdf
@@ -1600,6 +1623,7 @@ def asset_generate_lt_pdf(request):
 @login_required
 @require_POST
 def asset_bulk_withdraw_api(request):
+    require_feature(request, "asset_archive")
     if not _user_can_bulk_withdraw_assets(request.user):
         return JsonResponse({"success": False, "error": "Forbidden."}, status=403)
 
@@ -1811,6 +1835,7 @@ def _user_can_import_assets(user):
 
 @login_required
 def asset_import(request):
+    require_feature(request, "asset_import")
     if not _user_can_import_assets(request.user):
         raise PermissionDenied
 
@@ -1896,6 +1921,7 @@ def asset_import(request):
 
 @login_required
 def asset_import_template(request):
+    require_feature(request, "asset_import")
     if not _user_can_import_assets(request.user):
         raise PermissionDenied
     buf = build_import_template_xlsx()
@@ -1909,6 +1935,7 @@ def asset_import_template(request):
 
 @login_required
 def asset_depreciation_plan(request, asset_id):
+    require_feature(request, "depreciation")
     asset = get_object_or_404(Asset, pk=asset_id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
@@ -1970,6 +1997,7 @@ def asset_depreciation_plan(request, asset_id):
 
 @login_required
 def depreciation_report(request):
+    require_feature(request, "depreciation")
     today = date.today()
     period_type = request.GET.get("period_type", "monthly")
     year_str = request.GET.get("year", "")
@@ -2108,6 +2136,7 @@ def _build_depreciation_xlsx(rows, totals, period_label):
 
 @login_required
 def depreciation_report_monthly(request):
+    require_feature(request, "depreciation")
     from .report_utils import build_depreciation_report_full_year
 
     today = date.today()

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 
@@ -8,6 +9,8 @@ SECRET_KEY = "django-insecure-change-me-in-production"
 DEBUG = True
 
 ALLOWED_HOSTS: list[str] = []
+
+LUPINE_EDITION = os.getenv("LUPINE_EDITION", "full").strip().lower() or "full"
 
 
 INSTALLED_APPS = [
@@ -46,6 +49,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.features.feature_context",
             ],
         },
     },

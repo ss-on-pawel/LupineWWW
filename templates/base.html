@@ -232,6 +232,19 @@
             font-size: 0.82rem;
             letter-spacing: 0.04em;
         }
+        .app-mode-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 36px;
+            padding: 0 10px;
+            border: 1px solid rgba(14, 116, 144, 0.18);
+            background: rgba(240, 249, 255, 0.78);
+            color: #155e75;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
         .app-inline-form {
             margin: 0;
         }
@@ -527,14 +540,18 @@
                     <a class="{% if request.path == '/inventory/terminal/' %}is-active{% endif %}" href="{% url 'inventory:terminal-app' %}">Terminal</a>
                     {% if request.user.is_authenticated %}
                         {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.role == "manager" %}
-                            <a class="{% if request.path|slice:':16' == '/assets/changes/' %}is-active{% endif %}" href="{% url 'assets:change-list' %}">Kolejka zmian</a>
-                            <div class="nav-dropdown">
-                                <span class="nav-dropdown-trigger {% if '/assets/reports/depreciation' in request.path %}is-active{% endif %}">Amortyzacja</span>
-                                <div class="nav-dropdown-panel">
-                                    <a class="{% if request.path == '/assets/reports/depreciation/' %}is-active{% endif %}" href="{% url 'assets:depreciation-report' %}">Zestawienie odpisów amortyzacyjnych</a>
-                                    <a class="{% if request.path == '/assets/reports/depreciation/monthly/' %}is-active{% endif %}" href="{% url 'assets:depreciation-report-monthly' %}">Zestawienie miesięczne</a>
+                            {% if features.approval_queue %}
+                                <a class="{% if request.path|slice:':16' == '/assets/changes/' %}is-active{% endif %}" href="{% url 'assets:change-list' %}">Kolejka zmian</a>
+                            {% endif %}
+                            {% if features.depreciation %}
+                                <div class="nav-dropdown">
+                                    <span class="nav-dropdown-trigger {% if '/assets/reports/depreciation' in request.path %}is-active{% endif %}">Amortyzacja</span>
+                                    <div class="nav-dropdown-panel">
+                                        <a class="{% if request.path == '/assets/reports/depreciation/' %}is-active{% endif %}" href="{% url 'assets:depreciation-report' %}">Zestawienie odpisów amortyzacyjnych</a>
+                                        <a class="{% if request.path == '/assets/reports/depreciation/monthly/' %}is-active{% endif %}" href="{% url 'assets:depreciation-report-monthly' %}">Zestawienie miesięczne</a>
+                                    </div>
                                 </div>
-                            </div>
+                            {% endif %}
                         {% endif %}
                     {% endif %}
                 {% endblock %}
@@ -542,8 +559,25 @@
             <div class="app-header-actions">
                 {% block app_header_actions %}
                     {% if request.user.is_authenticated %}
-                        {% if request.user.is_superuser or request.user.is_staff or request.user.profile.role == "admin" %}
-                            <a class="ui-btn ui-btn--secondary" href="{% url 'accounts:user-create' %}" title="Dodaj użytkownika" style="padding:0 10px;min-height:36px;font-size:0.88rem;font-weight:700;">+</a>
+                        {% if lupine_product_edition == "full" %}
+                            <form class="app-inline-form" method="post" action="{% url 'accounts:ui-mode-switch' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                {% if lupine_is_lite_mode %}
+                                    <input type="hidden" name="ui_mode" value="full">
+                                    <button class="ui-btn ui-btn--secondary" type="submit">Pełny widok</button>
+                                {% else %}
+                                    <input type="hidden" name="ui_mode" value="lite">
+                                    <button class="ui-btn ui-btn--secondary" type="submit">Widok Lite</button>
+                                {% endif %}
+                            </form>
+                        {% else %}
+                            <span class="app-mode-badge">Lite</span>
+                        {% endif %}
+                        {% if features.user_admin %}
+                            {% if request.user.is_superuser or request.user.is_staff or request.user.profile.role == "admin" %}
+                                <a class="ui-btn ui-btn--secondary" href="{% url 'accounts:user-create' %}" title="Dodaj użytkownika" style="padding:0 10px;min-height:36px;font-size:0.88rem;font-weight:700;">+</a>
+                            {% endif %}
                         {% endif %}
                         <span class="app-user-badge">{{ request.user.get_username }}</span>
                         <form class="app-inline-form" method="post" action="{% url 'accounts:logout' %}">

@@ -15,6 +15,7 @@ urlpatterns = [
         name="login",
     ),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("ui-mode/", views.ui_mode_switch, name="ui-mode-switch"),
     path("users/", views.user_list, name="user-list"),
     path("users/new/", views.user_create, name="user-create"),
     path("users/<int:pk>/edit/", views.user_edit, name="user-edit"),

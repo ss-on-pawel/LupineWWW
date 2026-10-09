@@ -1649,15 +1649,21 @@
                         <p>{{ asset_list_description|default:"Przeglądaj, filtruj i zarządzaj składnikami majątku w ewidencji." }}</p>
                     </div>
                     <div class="asset-list-heading-actions">
-                        {% if request.user.is_superuser or request.user.is_staff or request.user.profile.role == "admin" %}
-                            <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Słowniki</a>
+                        {% if features.asset_type_settings %}
+                            {% if request.user.is_superuser or request.user.is_staff or request.user.profile.role == "admin" %}
+                                <a class="ui-btn ui-btn--secondary" href="{% url 'settings:asset-types' %}">Słowniki</a>
+                            {% endif %}
                         {% endif %}
-                        {% if request.user.is_superuser or request.user.profile.role == "admin" %}
-                            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import' %}">Import XLSX</a>
+                        {% if features.asset_import %}
+                            {% if request.user.is_superuser or request.user.profile.role == "admin" %}
+                                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:import' %}">Import XLSX</a>
+                            {% endif %}
                         {% endif %}
-                        <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
-                            {{ asset_mode_switch_label }}
-                        </a>
+                        {% if features.asset_archive %}
+                            <a class="ui-btn ui-btn--secondary asset-list-mode-link" href="{{ asset_mode_switch_url }}">
+                                {{ asset_mode_switch_label }}
+                            </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -2199,6 +2205,11 @@
             const exportUrl = shell.dataset.exportUrl;
             const assetListMode = shell.dataset.assetListMode || "active";
             const isArchiveMode = assetListMode === "archive";
+            const enabledFeatures = {
+                assetArchive: {{ features.asset_archive|yesno:"true,false" }},
+                assetLabels: {{ features.asset_labels|yesno:"true,false" }},
+                assetLtDocuments: {{ features.asset_lt_documents|yesno:"true,false" }}
+            };
             const createUrl = shell.dataset.createUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
             const bulkMoveApiUrl = "/api/assets/bulk-move/";
@@ -3916,10 +3927,12 @@ let searchDebounceId = null;
                 }
                 elements.managementToolbar.hidden = false;
                 elements.managementAddButton.hidden = false;
-                elements.managementDeleteButton.hidden = false;
+                elements.managementDeleteButton.hidden = !enabledFeatures.assetArchive;
                 elements.moveTrigger.hidden = false;
                 elements.moveTarget.hidden = false;
-                elements.printLabelsButton.hidden = false;
+                elements.printLabelsButton.hidden = !enabledFeatures.assetLabels;
+                elements.ltButton.hidden = !enabledFeatures.assetLtDocuments;
+                elements.ltDateGroup.hidden = !enabledFeatures.assetLtDocuments;
             }
 
             function syncToolbarControls() {
@@ -3930,9 +3943,9 @@ let searchDebounceId = null;
 
                 elements.managementDeleteButton.textContent = "Wycofaj";
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
-                elements.managementDeleteButton.disabled = state.withdrawSubmitting || getSelectedAssetIds().length < 1;
-                elements.printLabelsButton.disabled = getSelectedAssetIds().length < 1;
-                elements.ltButton.disabled = state.ltSubmitting || getSelectedAssetIds().length < 1;
+                elements.managementDeleteButton.disabled = !enabledFeatures.assetArchive || state.withdrawSubmitting || getSelectedAssetIds().length < 1;
+                elements.printLabelsButton.disabled = !enabledFeatures.assetLabels || getSelectedAssetIds().length < 1;
+                elements.ltButton.disabled = !enabledFeatures.assetLtDocuments || state.ltSubmitting || getSelectedAssetIds().length < 1;
                 if (state.ltSubmitting) {
                     elements.ltButton.textContent = "Generuję...";
                 } else {

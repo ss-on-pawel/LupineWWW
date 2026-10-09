@@ -422,7 +422,7 @@
                     {% if is_in_active_inventory %}
                         <span class="meta-pill meta-pill-runtime">PROCES / {{ runtime_status_display }}</span>
                     {% endif %}
-                    {% if service_alerts %}
+                    {% if features.service_alerts and service_alerts %}
                         <span class="meta-pill meta-pill-alert">ALERT / {{ service_alerts.0.reason|truncatechars:40 }}</span>
                     {% endif %}
                     <span class="meta-pill">RODZAJ / {{ asset_type_display }}</span>
@@ -433,7 +433,7 @@
         <div class="asset-actions">
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
-            {% if asset.is_active %}
+            {% if features.asset_archive and asset.is_active %}
                 <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
                     {% csrf_token %}
                     <select name="status" aria-label="Status wycofania">
@@ -450,14 +450,14 @@
                     <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
                 </form>
             {% endif %}
-            {% if can_restore_asset %}
+            {% if features.asset_archive and can_restore_asset %}
                 <form method="post" action="{% url 'assets:asset-restore' asset.id %}" onsubmit="return window.confirm('Przywrócić środek do aktywnej Ewidencji?');">
                     {% csrf_token %}
                     <button class="ui-btn ui-btn--success" type="submit">Przywróć do Ewidencji</button>
                 </form>
             {% endif %}
         </div>
-        {% if not asset.is_active %}
+        {% if features.asset_archive and not asset.is_active %}
             <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>
         {% endif %}
 
@@ -596,55 +596,58 @@
                         </div>
                     </div>
 
-                    <div class="depreciation-block">
-                        <span class="section-label">Plan amortyzacji</span>
-                        {% with plan=asset.depreciation_plan %}
-                        {% if plan and plan.enabled %}
-                            <div class="section-grid" style="margin-top: 10px;">
-                                <div class="detail-item">
-                                    <span class="detail-label">Status</span>
-                                    <div class="detail-value"><span class="badge badge-active">Włączona</span></div>
+                    {% if features.depreciation %}
+                        <div class="depreciation-block">
+                            <span class="section-label">Plan amortyzacji</span>
+                            {% with plan=asset.depreciation_plan %}
+                            {% if plan and plan.enabled %}
+                                <div class="section-grid" style="margin-top: 10px;">
+                                    <div class="detail-item">
+                                        <span class="detail-label">Status</span>
+                                        <div class="detail-value"><span class="badge badge-active">Włączona</span></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Metoda</span>
+                                        <div class="detail-value">{{ plan.get_method_display|default:"-" }}</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Data startu amortyzacji</span>
+                                        <div class="detail-value is-mono">{{ plan.depreciation_start_date|date:"Y-m-d"|default:"-" }}</div>
+                                    </div>
+                                    {% if plan.kst_category %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">KŚT</span>
+                                        <div class="detail-value is-mono">{{ plan.kst_category }}</div>
+                                    </div>
+                                    {% endif %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Wartość początkowa</span>
+                                        <div class="detail-value is-mono">{% if plan.initial_value %}{{ plan.initial_value }} zł{% else %}-{% endif %}</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Wartość rezydualna</span>
+                                        <div class="detail-value is-mono">{% if plan.residual_value %}{{ plan.residual_value }} zł{% else %}-{% endif %}</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Stawka roczna</span>
+                                        <div class="detail-value is-mono">{% if plan.annual_rate_percent %}{{ plan.annual_rate_percent }} %{% else %}-{% endif %}</div>
+                                    </div>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Metoda</span>
-                                    <div class="detail-value">{{ plan.get_method_display|default:"-" }}</div>
+                            {% else %}
+                                <p style="margin: 8px 0 0; font-size: 0.88rem; color: #66758a; font-weight: 600;">Brak aktywnego planu amortyzacji.</p>
+                            {% endif %}
+                            {% endwith %}
+                            {% if asset.is_active %}
+                                <div style="padding-top: 12px;">
+                                    <a href="{% url 'assets:depreciation-plan' asset_id=asset.pk %}" class="ui-btn ui-btn--secondary">Konfiguruj plan amortyzacji</a>
                                 </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Data startu amortyzacji</span>
-                                    <div class="detail-value is-mono">{{ plan.depreciation_start_date|date:"Y-m-d"|default:"-" }}</div>
-                                </div>
-                                {% if plan.kst_category %}
-                                <div class="detail-item">
-                                    <span class="detail-label">KŚT</span>
-                                    <div class="detail-value is-mono">{{ plan.kst_category }}</div>
-                                </div>
-                                {% endif %}
-                                <div class="detail-item">
-                                    <span class="detail-label">Wartość początkowa</span>
-                                    <div class="detail-value is-mono">{% if plan.initial_value %}{{ plan.initial_value }} zł{% else %}-{% endif %}</div>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Wartość rezydualna</span>
-                                    <div class="detail-value is-mono">{% if plan.residual_value %}{{ plan.residual_value }} zł{% else %}-{% endif %}</div>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">Stawka roczna</span>
-                                    <div class="detail-value is-mono">{% if plan.annual_rate_percent %}{{ plan.annual_rate_percent }} %{% else %}-{% endif %}</div>
-                                </div>
-                            </div>
-                        {% else %}
-                            <p style="margin: 8px 0 0; font-size: 0.88rem; color: #66758a; font-weight: 600;">Brak aktywnego planu amortyzacji.</p>
-                        {% endif %}
-                        {% endwith %}
-                        {% if asset.is_active %}
-                            <div style="padding-top: 12px;">
-                                <a href="{% url 'assets:depreciation-plan' asset_id=asset.pk %}" class="ui-btn ui-btn--secondary">Konfiguruj plan amortyzacji</a>
-                            </div>
-                        {% endif %}
-                    </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
                 </div>
             </section>
 
+            {% if features.service_alerts %}
             <section class="detail-section">
                 <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-eksploatacja">
                     <span class="section-icon">▶</span>
@@ -728,7 +731,9 @@
                     </form>
                 </div>
             </section>
+            {% endif %}
 
+            {% if features.asset_attachments %}
             <section class="detail-section">
                 <div class="section-head-static">
                     <span class="section-icon">▼</span>
@@ -774,6 +779,7 @@
                     {% endif %}
                 </div>
             </section>
+            {% endif %}
 
             <section class="detail-section">
                 <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-dokumenty">

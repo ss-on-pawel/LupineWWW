@@ -22,6 +22,7 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 
 from accounts.utils import get_accessible_location_ids
 from assets.models import Asset, AssetHistoryEntry, AssetTypeDictionary
+from config.features import FeatureRequiredMixin, require_feature
 from locations.models import Location
 
 from .forms import DEFAULT_ASSET_TYPES, InventorySessionStartForm, SimpleInventorySessionStartForm
@@ -154,7 +155,8 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class InventorySessionReportView(LoginRequiredMixin, DetailView):
+class InventorySessionReportView(FeatureRequiredMixin, LoginRequiredMixin, DetailView):
+    feature_key = "inventory_reports"
     model = InventorySession
     template_name = "inventory/session_report.html"
     context_object_name = "session"
@@ -193,7 +195,8 @@ class InventorySessionReportView(LoginRequiredMixin, DetailView):
         return context
 
 
-class InventorySessionDiscrepancyReportView(LoginRequiredMixin, DetailView):
+class InventorySessionDiscrepancyReportView(FeatureRequiredMixin, LoginRequiredMixin, DetailView):
+    feature_key = "inventory_reports"
     model = InventorySession
     template_name = "inventory/session_discrepancy_report.html"
     context_object_name = "session"
@@ -239,7 +242,8 @@ class InventorySessionDiscrepancyReportView(LoginRequiredMixin, DetailView):
         return context
 
 
-class InventorySessionSheetView(LoginRequiredMixin, DetailView):
+class InventorySessionSheetView(FeatureRequiredMixin, LoginRequiredMixin, DetailView):
+    feature_key = "inventory_reports"
     model = InventorySession
     template_name = "inventory/session_sheet.html"
     context_object_name = "session"
@@ -420,6 +424,7 @@ class InventorySessionCloseView(LoginRequiredMixin, View):
 @login_required
 @require_POST
 def apply_inventory_session_to_assets(request, pk):
+    require_feature(request, "inventory_reports")
     with transaction.atomic():
         session = get_object_or_404(
             get_visible_inventory_sessions(request.user).select_for_update(),

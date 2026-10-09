@@ -1,9 +1,10 @@
 from unittest.mock import patch
 
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from config.features import LITE, UI_MODE_SESSION_KEY
 from users.models import User
 
 from .models import UserProfile
@@ -25,6 +26,51 @@ class LoginViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Logowanie")
+
+
+class UiModeFeatureTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(username="ui-mode-admin", password="pass123")
+        self.client.force_login(self.superuser)
+
+    def test_full_view_shows_advanced_navigation(self):
+        response = self.client.get(reverse("assets:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Widok Lite")
+        self.assertContains(response, "Kolejka zmian")
+        self.assertContains(response, "Amortyzacja")
+        self.assertContains(response, "Import XLSX")
+
+    def test_session_lite_view_hides_advanced_navigation_and_blocks_url(self):
+        session = self.client.session
+        session[UI_MODE_SESSION_KEY] = LITE
+        session.save()
+
+        response = self.client.get(reverse("assets:list"))
+        blocked_response = self.client.get(reverse("assets:depreciation-report"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pełny widok")
+        self.assertNotContains(response, "Kolejka zmian")
+        self.assertNotContains(response, "Amortyzacja")
+        self.assertNotContains(response, "Import XLSX")
+        self.assertEqual(blocked_response.status_code, 403)
+
+    def test_switch_to_lite_redirects_advanced_page_to_asset_list(self):
+        response = self.client.post(
+            reverse("accounts:ui-mode-switch"),
+            {"ui_mode": "lite", "next": reverse("assets:depreciation-report")},
+        )
+
+        self.assertRedirects(response, reverse("assets:list"))
+        self.assertEqual(self.client.session[UI_MODE_SESSION_KEY], LITE)
+
+    @override_settings(LUPINE_EDITION="lite")
+    def test_lite_product_edition_blocks_user_admin_even_without_session_toggle(self):
+        response = self.client.get(reverse("accounts:user-list"))
+
+        self.assertEqual(response.status_code, 403)
 
 
 class UserListAccessTests(TestCase):

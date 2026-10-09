@@ -607,14 +607,16 @@
         <section class="inventory-session-actions" aria-label="Akcje sesji">
             <div class="inventory-session-action-group">
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-list' %}">Wróć do listy</a>
-                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
-                {% if is_session_closed %}
-                    <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-discrepancy-report' session.pk %}">Raport rozbieżności</a>
+                {% if features.inventory_reports %}
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
+                    {% if is_session_closed %}
+                        <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-discrepancy-report' session.pk %}">Raport rozbieżności</a>
+                    {% endif %}
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Arkusz spisu</a>
                 {% endif %}
-                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Arkusz spisu</a>
             </div>
             <div class="inventory-session-action-group">
-                {% if is_session_closed %}
+                {% if features.inventory_reports and is_session_closed %}
                     {% if not session.applied_to_assets_at %}
                         <form method="post" action="{% url 'inventory:session-apply-to-assets' session.pk %}" onsubmit="return confirm('Naniesienie wyników zapisze wynik spisu w Ewidencji Głównej. Nie zmieni ilości ewidencyjnej, lokalizacji ani danych księgowych. Kontynuować?');">
                             {% csrf_token %}
