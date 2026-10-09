@@ -901,7 +901,7 @@ def asset_restore(request, id):
 @login_required
 @require_POST
 def asset_withdraw(request, id):
-    require_feature(request, "asset_archive")
+    require_feature(request, "asset_withdraw")
     asset = get_object_or_404(Asset.objects.select_related("asset_type_ref", "location_fk"), pk=id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
@@ -1623,7 +1623,7 @@ def asset_generate_lt_pdf(request):
 @login_required
 @require_POST
 def asset_bulk_withdraw_api(request):
-    require_feature(request, "asset_archive")
+    require_feature(request, "asset_withdraw")
     if not _user_can_bulk_withdraw_assets(request.user):
         return JsonResponse({"success": False, "error": "Forbidden."}, status=403)
 

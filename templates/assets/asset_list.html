@@ -2208,7 +2208,8 @@
             const enabledFeatures = {
                 assetArchive: {{ features.asset_archive|yesno:"true,false" }},
                 assetLabels: {{ features.asset_labels|yesno:"true,false" }},
-                assetLtDocuments: {{ features.asset_lt_documents|yesno:"true,false" }}
+                assetLtDocuments: {{ features.asset_lt_documents|yesno:"true,false" }},
+                assetWithdraw: {{ features.asset_withdraw|yesno:"true,false" }}
             };
             const createUrl = shell.dataset.createUrl;
             const locationOptionsApiUrl = "/api/locations/options/";
@@ -3927,7 +3928,7 @@ let searchDebounceId = null;
                 }
                 elements.managementToolbar.hidden = false;
                 elements.managementAddButton.hidden = false;
-                elements.managementDeleteButton.hidden = !enabledFeatures.assetArchive;
+                elements.managementDeleteButton.hidden = !enabledFeatures.assetWithdraw;
                 elements.moveTrigger.hidden = false;
                 elements.moveTarget.hidden = false;
                 elements.printLabelsButton.hidden = !enabledFeatures.assetLabels;
@@ -3943,7 +3944,7 @@ let searchDebounceId = null;
 
                 elements.managementDeleteButton.textContent = "Wycofaj";
                 elements.managementDeleteButton.className = "ui-btn ui-btn--danger";
-                elements.managementDeleteButton.disabled = !enabledFeatures.assetArchive || state.withdrawSubmitting || getSelectedAssetIds().length < 1;
+                elements.managementDeleteButton.disabled = !enabledFeatures.assetWithdraw || state.withdrawSubmitting || getSelectedAssetIds().length < 1;
                 elements.printLabelsButton.disabled = !enabledFeatures.assetLabels || getSelectedAssetIds().length < 1;
                 elements.ltButton.disabled = !enabledFeatures.assetLtDocuments || state.ltSubmitting || getSelectedAssetIds().length < 1;
                 if (state.ltSubmitting) {

@@ -12,7 +12,7 @@ from django.core.management import call_command
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -5411,6 +5411,19 @@ class AssetBulkWithdrawApiTests(TestCase):
             self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
             self.assertEqual(asset.current_quantity, 7)
             self.assertEqual(asset.location_fk, self.child_location)
+
+    @override_settings(LUPINE_EDITION="lite")
+    def test_bulk_withdraw_is_available_in_lite_edition(self):
+        asset = self._create_asset("BULK-WITHDRAW-LITE-001")
+        self.client.force_login(self.manager_user)
+
+        response = self._post_bulk_withdraw([asset.id])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success"], True)
+        asset.refresh_from_db()
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
 
     def test_manager_can_bulk_withdraw_assets_in_scope(self):
         asset = self._create_asset("BULK-WITHDRAW-SCOPE-001")

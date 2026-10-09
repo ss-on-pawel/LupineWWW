@@ -19,6 +19,7 @@ FEATURES = {
     "asset_labels",
     "asset_lt_documents",
     "asset_type_settings",
+    "asset_withdraw",
     "approval_queue",
     "depreciation",
     "inventory_core",

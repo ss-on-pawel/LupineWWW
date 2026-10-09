@@ -433,7 +433,7 @@
         <div class="asset-actions">
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
-            {% if features.asset_archive and asset.is_active %}
+            {% if features.asset_withdraw and asset.is_active %}
                 <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
                     {% csrf_token %}
                     <select name="status" aria-label="Status wycofania">
