@@ -196,12 +196,9 @@
                             {% if form.interface_mode.errors %}<ul class="errorlist">{% for e in form.interface_mode.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
                             <span class="user-form-helptext">Określa domyślny widok po zalogowaniu użytkownika.</span>
                         </div>
-                        <div class="user-form-field" style="align-items:flex-start;">
-                            <label>{{ form.is_active.label }}</label>
-                            <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
-                                {{ form.is_active }}
-                                <span>Konto aktywne</span>
-                            </label>
+                        <div class="user-form-field">
+                            <label for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+                            {{ form.is_active }}
                             {% if form.is_active.errors %}<ul class="errorlist">{% for e in form.is_active.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
                         </div>
                         <div class="user-form-field field-full">

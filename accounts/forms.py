@@ -18,9 +18,45 @@ INTERFACE_MODE_CHOICES = [
     (LITE, "Lite"),
 ]
 
+ACTIVE_STATUS_CHOICES = [
+    ("true", "Konto aktywne"),
+    ("false", "Konto nieaktywne"),
+]
+
+ACTIVE_TRUE_VALUES = {True, "true", "True", "1", "on", "yes"}
+ACTIVE_FALSE_VALUES = {False, "false", "False", "0", "off", "no", "", None}
+
+
+class ActiveChoiceField(forms.Field):
+    default_error_messages = {
+        "invalid": "Wybierz status konta.",
+    }
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("label", "Aktywny")
+        kwargs.setdefault("initial", True)
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("widget", forms.Select(choices=ACTIVE_STATUS_CHOICES))
+        super().__init__(*args, **kwargs)
+
+    def prepare_value(self, value):
+        if value in ACTIVE_TRUE_VALUES:
+            return "true"
+        if value in ACTIVE_FALSE_VALUES:
+            return "false"
+        return value
+
+    def to_python(self, value):
+        if value in ACTIVE_TRUE_VALUES:
+            return True
+        if value in ACTIVE_FALSE_VALUES:
+            return False
+        raise forms.ValidationError(self.error_messages["invalid"], code="invalid")
+
 
 class UserCreateForm(forms.ModelForm):
     password = forms.CharField(widget=forms.PasswordInput, label="Hasło")
+    is_active = ActiveChoiceField()
     role = forms.ChoiceField(
         choices=UserProfile.Role.choices,
         label="Rola",
@@ -68,6 +104,7 @@ class UserCreateForm(forms.ModelForm):
 
 
 class UserEditForm(forms.ModelForm):
+    is_active = ActiveChoiceField()
     role = forms.ChoiceField(
         choices=UserProfile.Role.choices,
         label="Rola",
