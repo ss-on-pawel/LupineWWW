@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.paginator import Paginator
 from django.contrib.auth.views import redirect_to_login
 from django.db import transaction
 from django.db.models import Count
@@ -36,6 +37,8 @@ from .models import (
     InventorySessionManualQuantity,
 )
 from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
+
+INVENTORY_DETAIL_PAGE_SIZE = 200
 
 
 class TerminalLoginView(LoginView):
@@ -147,8 +150,15 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         session = self.object
         analysis = _build_inventory_session_analysis(session)
+        work_items_page = Paginator(
+            analysis["inventory_work_items"],
+            INVENTORY_DETAIL_PAGE_SIZE,
+        ).get_page(self.request.GET.get("items_page"))
 
         context.update(analysis)
+        context["inventory_work_items"] = list(work_items_page.object_list)
+        context["inventory_work_page"] = work_items_page
+        context["inventory_work_page_size"] = INVENTORY_DETAIL_PAGE_SIZE
         context["page_title"] = session.number
         mobile_scan_path = reverse("inventory:mobile-scan", kwargs={"token": session.mobile_scan_token})
         context["mobile_scan_url"] = self.request.build_absolute_uri(mobile_scan_path)

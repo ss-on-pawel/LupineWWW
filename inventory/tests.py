@@ -371,6 +371,33 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertContains(response, "Detail Root / Detail Child")
         self.assertContains(response, "BC-DETAIL")
 
+    def test_detail_paginates_snapshot_items(self):
+        for index in range(205):
+            self._create_asset(
+                f"DETAIL-PAGE-{index:03d}",
+                self.child,
+                name=f"Paged Asset {index:03d}",
+            )
+        session = self._start_session(self.root)
+        self.client.force_login(self.admin_user)
+
+        first_page = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        second_page = self.client.get(
+            reverse("inventory:session-detail", kwargs={"pk": session.pk}),
+            {"items_page": 2},
+        )
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.context["snapshot_total"], 205)
+        self.assertEqual(len(first_page.context["inventory_work_items"]), 200)
+        self.assertContains(first_page, "Wyświetlono 1-200 z 205 pozycji")
+        self.assertContains(first_page, "Paged Asset 000")
+        self.assertNotContains(first_page, "Paged Asset 204")
+        self.assertEqual(second_page.status_code, 200)
+        self.assertEqual(len(second_page.context["inventory_work_items"]), 5)
+        self.assertContains(second_page, "Wyświetlono 201-205 z 205 pozycji")
+        self.assertContains(second_page, "Paged Asset 204")
+
     def test_detail_uses_snapshot_data_after_asset_update(self):
         asset = self._create_asset("DETAIL-SNAP-001", self.child, name="Snapshot Name", barcode="BC-SNAPSHOT")
         session = self._start_session(self.root)

@@ -306,6 +306,27 @@
             color: var(--app-text, #111827);
         }
 
+        .inventory-table-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 8px 0;
+        }
+
+        .inventory-table-pagination-summary {
+            color: var(--app-muted);
+            font-size: 0.84rem;
+        }
+
+        .inventory-table-pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
         .inventory-table-wrap {
             position: relative;
             overflow-x: auto;
@@ -706,8 +727,24 @@
                 </div>
             </div>
             {% if inventory_work_items %}
+                {% if inventory_work_page.paginator.num_pages > 1 %}
+                    <nav class="inventory-table-pagination" aria-label="Paginacja składników inwentaryzacji">
+                        <span class="inventory-table-pagination-summary">
+                            Wyświetlono {{ inventory_work_page.start_index }}-{{ inventory_work_page.end_index }} z {{ inventory_work_page.paginator.count }} pozycji
+                        </span>
+                        <span class="inventory-table-pagination-controls">
+                            {% if inventory_work_page.has_previous %}
+                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                            {% endif %}
+                            <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
+                            {% if inventory_work_page.has_next %}
+                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                            {% endif %}
+                        </span>
+                    </nav>
+                {% endif %}
                 <div class="inventory-table-wrap">
-                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}">
+                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}" data-inventory-paginated="{% if inventory_work_page.paginator.num_pages > 1 %}true{% else %}false{% endif %}">
                         <thead>
                             <tr>
                                 <th class="inventory-col-number">Numer inwentarzowy</th>
@@ -762,6 +799,22 @@
                         </tbody>
                     </table>
                 </div>
+                {% if inventory_work_page.paginator.num_pages > 1 %}
+                    <nav class="inventory-table-pagination" aria-label="Paginacja składników inwentaryzacji">
+                        <span class="inventory-table-pagination-summary">
+                            Wyświetlono {{ inventory_work_page.start_index }}-{{ inventory_work_page.end_index }} z {{ inventory_work_page.paginator.count }} pozycji
+                        </span>
+                        <span class="inventory-table-pagination-controls">
+                            {% if inventory_work_page.has_previous %}
+                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                            {% endif %}
+                            <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
+                            {% if inventory_work_page.has_next %}
+                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                            {% endif %}
+                        </span>
+                    </nav>
+                {% endif %}
             {% else %}
                 <div class="inventory-empty">Brak pozycji ewidencji na dzień spisu dla tej sesji.</div>
             {% endif %}
@@ -871,6 +924,7 @@
             const manualQuantityUrl = workTable ? workTable.dataset.manualQuantityUrl : "";
             const manualConfirmationUrl = workTable ? workTable.dataset.manualConfirmationUrl : "";
             const isSessionClosed = workTable ? workTable.dataset.sessionClosed === "true" : false;
+            const isInventoryPaginated = workTable ? workTable.dataset.inventoryPaginated === "true" : false;
 
             function getCookie(name) {
                 const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -966,6 +1020,9 @@
             }
 
             function updateInventorySummary() {
+                if (isInventoryPaginated) {
+                    return;
+                }
                 const summary = {
                     snapshot_total: 0,
                     read_count: 0,
@@ -1144,9 +1201,7 @@
                         saveManualConfirmation(row, confirmationInput);
                     });
                 }
-                updateActualQuantity(row);
             });
-            updateInventorySummary();
         })();
     </script>
     <script>
