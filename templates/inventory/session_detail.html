@@ -765,7 +765,7 @@
                         </thead>
                         <tbody>
                             {% for item in inventory_work_items %}
-                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-expected-quantity="{{ item.expected_quantity }}" data-observed-status="{{ item.observed.status|default:'' }}" data-is-quantity-based="{% if item.is_quantity_based %}true{% else %}false{% endif %}">
+                                <tr data-inventory-work-row data-asset-id="{{ item.snapshot.asset_id_snapshot }}" data-read-quantity="{{ item.read_quantity }}" data-expected-quantity="{{ item.expected_quantity }}" data-observed-status="{{ item.observed.status|default:'' }}" data-uses-quantity-count="{% if item.uses_quantity_count %}true{% else %}false{% endif %}">
                                     <td class="inventory-col-number inventory-mono">{{ item.snapshot.inventory_number }}</td>
                                     <td class="inventory-col-name">{{ item.snapshot.name }}</td>
                                     <td class="inventory-col-type">{{ item.snapshot.asset_type_display|default:"-" }}</td>
@@ -778,14 +778,14 @@
                                     <td class="inventory-col-read inventory-mono">{{ item.read_quantity }}</td>
                                     <td class="inventory-col-barcode inventory-mono">{{ item.scan_code_display|default:"-" }}</td>
                                     <td class="inventory-col-confirm inventory-mono">
-                                        {% if item.is_quantity_based %}
+                                        {% if item.uses_quantity_count %}
                                             <span class="inventory-disabled-mark">-</span>
                                         {% else %}
                                             <input class="inventory-confirmation-checkbox" type="checkbox" aria-label="Potwierdź {{ item.snapshot.inventory_number }}" data-role="inventory-manual-confirmation" {% if item.manual_confirmed %}checked{% endif %} {% if is_session_closed %}disabled{% endif %}>
                                         {% endif %}
                                     </td>
                                     <td class="inventory-col-manual inventory-mono">
-                                        {% if item.is_quantity_based %}
+                                        {% if item.uses_quantity_count %}
                                             <input class="inventory-quantity-input" type="number" min="0" step="1" value="{{ item.manual_quantity }}" inputmode="numeric" aria-label="Ilość ręczna dla {{ item.snapshot.inventory_number }}" data-role="inventory-manual-quantity" {% if is_session_closed %}disabled{% endif %}>
                                         {% else %}
                                             <span class="inventory-disabled-mark">—</span>
@@ -1062,7 +1062,7 @@
                     if (confirmationInput && confirmationInput.checked) {
                         summary.manual_confirmation_count += 1;
                     }
-                    if (row.dataset.isQuantityBased === "true" && difference !== 0) {
+                    if (row.dataset.usesQuantityCount === "true" && difference !== 0) {
                         summary.quantity_difference_count += 1;
                     }
                 });
@@ -1086,7 +1086,7 @@
                 if (!actualCell) {
                     return;
                 }
-                if (row.dataset.isQuantityBased !== "true") {
+                if (row.dataset.usesQuantityCount !== "true") {
                     const actualQuantity = readQuantity === 1 || (confirmationInput && confirmationInput.checked) ? 1 : 0;
                     actualCell.textContent = String(actualQuantity);
                     updateDifference(row, actualQuantity);

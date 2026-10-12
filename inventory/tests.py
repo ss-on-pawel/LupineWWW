@@ -371,6 +371,30 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertContains(response, "Detail Root / Detail Child")
         self.assertContains(response, "BC-DETAIL")
 
+    def test_detail_treats_regular_asset_with_expected_quantity_above_one_as_quantity_counted(self):
+        asset = self._create_asset(
+            "DETAIL-MULTI-001",
+            self.child,
+            current_quantity=5,
+            record_quantity=5,
+        )
+        session = self._start_session(self.root)
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": session.pk}))
+        work_item = next(
+            item for item in response.context["inventory_work_items"]
+            if item["snapshot"].asset_id_snapshot == asset.pk
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(work_item["is_quantity_based"])
+        self.assertTrue(work_item["uses_quantity_count"])
+        self.assertEqual(work_item["expected_quantity"], 5)
+        self.assertEqual(work_item["actual_quantity"], 0)
+        self.assertContains(response, 'data-role="inventory-manual-quantity"')
+        self.assertNotContains(response, f'aria-label="Potwierdź {asset.inventory_number}"')
+
     def test_detail_paginates_snapshot_items(self):
         for index in range(205):
             self._create_asset(
@@ -2436,6 +2460,14 @@ class InventoryManualQuantityApiTests(TestCase):
             barcode="BC-MANUAL-FIXED",
             asset_type=Asset.AssetType.FIXED,
         )
+        self.fixed_multi_asset = self._create_asset(
+            "MANUAL-FIXED-MULTI-001",
+            self.child,
+            barcode="BC-MANUAL-FIXED-MULTI",
+            asset_type=Asset.AssetType.FIXED,
+            current_quantity=4,
+            record_quantity=4,
+        )
         self.session = start_inventory_session(
             created_by=self.user,
             root_locations=[self.root],
@@ -2443,16 +2475,18 @@ class InventoryManualQuantityApiTests(TestCase):
         )
         self.url = reverse("inventory:manual-quantity-api", kwargs={"session_id": self.session.pk})
 
-    def _create_asset(self, inventory_number, location, barcode, asset_type):
-        return Asset.objects.create(
-            name=f"Asset {inventory_number}",
-            inventory_number=inventory_number,
-            asset_type=asset_type,
-            barcode=barcode,
-            location=location.path,
-            location_fk=location,
-            status=Asset.Status.ACTIVE,
-        )
+    def _create_asset(self, inventory_number, location, barcode, asset_type, **overrides):
+        defaults = {
+            "name": f"Asset {inventory_number}",
+            "inventory_number": inventory_number,
+            "asset_type": asset_type,
+            "barcode": barcode,
+            "location": location.path,
+            "location_fk": location,
+            "status": Asset.Status.ACTIVE,
+        }
+        defaults.update(overrides)
+        return Asset.objects.create(**defaults)
 
     def _post(self, payload):
         self.client.force_login(self.user)
@@ -2530,6 +2564,21 @@ class InventoryManualQuantityApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(
             InventorySessionManualQuantity.objects.filter(session=self.session, asset=self.fixed_asset).exists()
+        )
+
+    def test_regular_asset_with_expected_quantity_above_one_accepts_manual_quantity(self):
+        response = self._post({"asset_id": self.fixed_multi_asset.id, "quantity": 4})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["manual_quantity"], 4)
+        self.assertEqual(payload["actual_quantity"], 4)
+        self.assertEqual(
+            InventorySessionManualQuantity.objects.get(
+                session=self.session,
+                asset=self.fixed_multi_asset,
+            ).quantity,
+            4,
         )
 
 

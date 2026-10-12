@@ -192,7 +192,7 @@ class InventorySessionReportView(FeatureRequiredMixin, LoginRequiredMixin, Detai
         ]
         context["quantity_difference_items"] = [
             item for item in inventory_work_items
-            if item["is_quantity_based"] and item["difference"] != 0
+            if item["uses_quantity_count"] and item["difference"] != 0
         ]
         context["unknown_code_items"] = [
             item for item in analysis["observed_items"]
@@ -327,6 +327,12 @@ def _build_inventory_session_analysis(session):
                 scanned_location_display = observed_item.scanned_location_display
                 last_seen_at = observed_item.last_seen_at
             is_quantity_based = is_quantity_based_by_type.get(snapshot_item.asset_type, False)
+            expected_quantity = _get_snapshot_expected_quantity(snapshot_item)
+            uses_quantity_count = _uses_quantity_count(
+                snapshot_item=snapshot_item,
+                is_quantity_based=is_quantity_based,
+                expected_quantity=expected_quantity,
+            )
             scan_code_display = snapshot_item.barcode or snapshot_item.inventory_number
             read_quantity = _get_inventory_read_quantity(
                 snapshot_item=snapshot_item,
@@ -335,19 +341,18 @@ def _build_inventory_session_analysis(session):
                 scanned_code_counts=scanned_code_counts,
             )
             manual_quantity = manual_quantities_by_asset_id.get(snapshot_item.asset_id_snapshot, 0)
-            if not is_quantity_based:
+            if not uses_quantity_count:
                 manual_quantity = 0
             manual_confirmed = (
-                not is_quantity_based
+                not uses_quantity_count
                 and snapshot_item.asset_id_snapshot in manually_confirmed_asset_ids
             )
             actual_quantity = _get_inventory_actual_quantity(
                 read_quantity=read_quantity,
                 manual_quantity=manual_quantity,
                 manual_confirmed=manual_confirmed,
-                is_quantity_based=is_quantity_based,
+                uses_quantity_count=uses_quantity_count,
             )
-            expected_quantity = _get_snapshot_expected_quantity(snapshot_item)
             purchase_value = _get_snapshot_purchase_value(snapshot_item)
             difference = actual_quantity - expected_quantity
             work_item = {
@@ -357,6 +362,7 @@ def _build_inventory_session_analysis(session):
                 "scanned_location_display": scanned_location_display,
                 "last_seen_at": last_seen_at,
                 "is_quantity_based": is_quantity_based,
+                "uses_quantity_count": uses_quantity_count,
                 "read_quantity": read_quantity,
                 "manual_quantity": manual_quantity,
                 "manual_confirmed": manual_confirmed,
@@ -589,8 +595,16 @@ def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_ba
     return sum(scanned_code_counts.get(code, 0) for code in scan_codes)
 
 
-def _get_inventory_actual_quantity(*, read_quantity, manual_quantity, manual_confirmed, is_quantity_based):
+def _uses_quantity_count(*, snapshot_item, is_quantity_based, expected_quantity=None):
     if is_quantity_based:
+        return True
+    if expected_quantity is None:
+        expected_quantity = _get_snapshot_expected_quantity(snapshot_item)
+    return expected_quantity > 1
+
+
+def _get_inventory_actual_quantity(*, read_quantity, manual_quantity, manual_confirmed, uses_quantity_count):
+    if uses_quantity_count:
         return read_quantity + manual_quantity
     return 1 if read_quantity == 1 or manual_confirmed else 0
 
@@ -634,7 +648,7 @@ def _get_inventory_summary(*, inventory_work_items, observed_items):
         ),
         "manual_confirmation_count": sum(1 for item in inventory_work_items if item["manual_confirmed"]),
         "quantity_difference_count": sum(
-            1 for item in inventory_work_items if item["is_quantity_based"] and item["difference"] != 0
+            1 for item in inventory_work_items if item["uses_quantity_count"] and item["difference"] != 0
         ),
     }
 
@@ -678,8 +692,12 @@ def manual_quantity_api(request, session_id):
         return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
 
     is_quantity_based = _is_snapshot_item_quantity_based(snapshot_item)
-    if not is_quantity_based:
-        return JsonResponse({"ok": False, "error": "Manual quantity is only available for quantity-based asset types."}, status=400)
+    uses_quantity_count = _uses_quantity_count(
+        snapshot_item=snapshot_item,
+        is_quantity_based=is_quantity_based,
+    )
+    if not uses_quantity_count:
+        return JsonResponse({"ok": False, "error": "Manual quantity is only available for quantity-counted assets."}, status=400)
 
     manual_quantity, _created = InventorySessionManualQuantity.objects.update_or_create(
         session=session,
@@ -707,7 +725,7 @@ def manual_quantity_api(request, session_id):
                 read_quantity=read_quantity,
                 manual_quantity=manual_quantity.quantity,
                 manual_confirmed=False,
-                is_quantity_based=True,
+                uses_quantity_count=True,
             ),
         }
     )
@@ -741,8 +759,12 @@ def manual_confirmation_api(request, session_id):
         return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
 
     is_quantity_based = _is_snapshot_item_quantity_based(snapshot_item)
-    if is_quantity_based:
-        return JsonResponse({"ok": False, "error": "Manual confirmation is only available for regular assets."}, status=400)
+    uses_quantity_count = _uses_quantity_count(
+        snapshot_item=snapshot_item,
+        is_quantity_based=is_quantity_based,
+    )
+    if uses_quantity_count:
+        return JsonResponse({"ok": False, "error": "Manual confirmation is only available for single regular assets."}, status=400)
 
     if confirmed:
         InventorySessionManualConfirmation.objects.update_or_create(
@@ -773,7 +795,7 @@ def manual_confirmation_api(request, session_id):
                 read_quantity=read_quantity,
                 manual_quantity=0,
                 manual_confirmed=confirmed,
-                is_quantity_based=False,
+                uses_quantity_count=False,
             ),
         }
     )
