@@ -1462,7 +1462,7 @@ class InventorySessionSheetViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Spis rozpoczęto dn.")
-        self.assertContains(response, self.session.started_at.strftime("%Y-%m-%d"))
+        self.assertNotContains(response, self.session.started_at.strftime("%Y-%m-%d"))
 
     def test_closed_sheet_is_available_and_shows_final_note(self):
         self.session.status = InventorySession.Status.CLOSED
@@ -1474,7 +1474,7 @@ class InventorySessionSheetViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "zakończono dn.")
-        self.assertContains(response, self.session.closed_at.strftime("%Y-%m-%d"))
+        self.assertNotContains(response, self.session.closed_at.strftime("%Y-%m-%d"))
 
     def test_sheet_contains_snapshot_items_and_quantities(self):
         self.client.force_login(self.user)
@@ -1503,6 +1503,8 @@ class InventorySessionSheetViewTests(TestCase):
         self.assertContains(response, "Skład komisji inwentaryzacyjnej")
         self.assertContains(response, "Inne osoby obecne przy spisie")
         self.assertContains(response, "Podpis osoby materialnie odpowiedzialnej")
+        self.assertNotContains(response, "spis z natury")
+        self.assertNotContains(response, self.root.name)
 
     def test_unknown_code_is_not_rendered_as_sheet_item(self):
         self.client.force_login(self.user)

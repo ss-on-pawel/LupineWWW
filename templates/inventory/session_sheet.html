@@ -307,7 +307,7 @@
                 <div>Rodzaj inwentaryzacji</div>
                 <div class="inventory-sheet-inline-field">
                     <span>-</span>
-                    <span class="inventory-sheet-line is-filled">spis z natury</span>
+                    <span class="inventory-sheet-line"></span>
                 </div>
             </div>
             <div class="inventory-sheet-field-row">
@@ -320,7 +320,7 @@
 
             <div class="inventory-sheet-two-column-row">
                 <div>
-                    <span class="inventory-sheet-line is-filled">{{ root_locations_display|default:"" }}</span>
+                    <span class="inventory-sheet-line"></span>
                     <p class="inventory-sheet-caption">(Nazwa i adres jednostki inwentaryzowanej)</p>
                 </div>
                 <div>
@@ -353,15 +353,15 @@
             <div class="inventory-sheet-time-row">
                 <div class="inventory-sheet-time-field">
                     <span>Spis rozpoczęto dn.</span>
-                    <span class="inventory-sheet-line is-filled">{{ session.started_at|date:"Y-m-d" }}</span>
+                    <span class="inventory-sheet-line"></span>
                     <span>o godz.</span>
-                    <span class="inventory-sheet-line is-filled">{{ session.started_at|date:"H:i" }}</span>
+                    <span class="inventory-sheet-line"></span>
                 </div>
                 <div class="inventory-sheet-time-field">
                     <span>zakończono dn.</span>
-                    <span class="inventory-sheet-line is-filled">{{ session.closed_at|date:"Y-m-d"|default:"" }}</span>
+                    <span class="inventory-sheet-line"></span>
                     <span>o godz.</span>
-                    <span class="inventory-sheet-line is-filled">{{ session.closed_at|date:"H:i"|default:"" }}</span>
+                    <span class="inventory-sheet-line"></span>
                 </div>
             </div>
 
