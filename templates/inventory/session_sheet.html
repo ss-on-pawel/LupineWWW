@@ -22,8 +22,11 @@
         }
 
         .inventory-sheet-document {
-            min-width: 270mm;
-            min-height: 194mm;
+            box-sizing: border-box;
+            width: 281mm;
+            height: 194mm;
+            margin: 0 auto 8mm;
+            overflow: hidden;
             padding: 5mm 5mm 7mm;
             border: 1.2pt solid #111827;
             background: #ffffff;
@@ -97,11 +100,23 @@
         }
 
         .inventory-sheet-time-row {
-            display: grid;
-            grid-template-columns: auto 34mm auto 24mm auto 34mm auto 24mm;
-            gap: 4px;
-            align-items: end;
+            display: flex;
+            align-items: flex-end;
+            gap: 0;
             margin: 4mm 0;
+            white-space: nowrap;
+        }
+
+        .inventory-sheet-time-line {
+            display: inline-block;
+            width: 31mm;
+            min-height: 1.12em;
+            margin-right: 6mm;
+            border-bottom: 1px dotted #111827;
+        }
+
+        .inventory-sheet-time-line.is-short {
+            width: 21mm;
         }
 
         .inventory-sheet-line {
@@ -261,8 +276,9 @@
             }
 
             .inventory-sheet-document {
-                min-width: 0;
-                min-height: 194mm;
+                width: 281mm;
+                height: 194mm;
+                margin: 0;
                 padding: 4mm;
                 border: 1.2pt solid #111827;
             }
@@ -345,14 +361,7 @@
                     </div>
 
                     <div class="inventory-sheet-time-row">
-                        <span>Spis rozpoczęto dn.</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span>o godz.</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span>zakończono dn.</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span>o godz.</span>
-                        <span class="inventory-sheet-line"></span>
+                        <span>Spis rozpoczęto dn.</span><span class="inventory-sheet-time-line"></span><span>o godz.</span><span class="inventory-sheet-time-line is-short"></span><span>zakończono dn.</span><span class="inventory-sheet-time-line"></span><span>o godzinie</span><span class="inventory-sheet-time-line is-short"></span>
                     </div>
                 {% endif %}
 
