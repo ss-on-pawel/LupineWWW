@@ -55,6 +55,8 @@ class UiModeFeatureTests(TestCase):
         self.assertNotContains(response, "Kolejka zmian")
         self.assertNotContains(response, "Amortyzacja")
         self.assertNotContains(response, "Import XLSX")
+        self.assertContains(response, "Drukuj etykiety")
+        self.assertContains(response, "assetLabels: true")
         self.assertEqual(blocked_response.status_code, 403)
 
     def test_switch_to_lite_redirects_advanced_page_to_asset_list(self):

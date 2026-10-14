@@ -7811,6 +7811,13 @@ class AssetLabelsPdfViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
+    @override_settings(LUPINE_EDITION="lite")
+    def test_lite_mode_keeps_labels_pdf_available(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"ids": str(self.asset.id)})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
     def test_empty_ids_returns_400(self):
         self.client.force_login(self.user)
         response = self.client.get(self.url, {"ids": ""})

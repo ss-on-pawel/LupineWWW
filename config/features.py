@@ -34,7 +34,6 @@ LITE_DISABLED_FEATURES = {
     "asset_archive",
     "asset_attachments",
     "asset_import",
-    "asset_labels",
     "asset_lt_documents",
     "asset_type_settings",
     "approval_queue",
