@@ -8,6 +8,8 @@ from reportlab.graphics.barcode.code128 import Code128
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
+from .documents import _BODY_FONT
+
 PAGE_W = 50 * mm
 PAGE_H = 30 * mm
 MARGIN = 1.5 * mm
@@ -36,7 +38,7 @@ def _draw_label(c, asset, org_short_name: str) -> None:
 
 
 def _draw_org_name(c, org_short_name: str) -> None:
-    c.setFont("Helvetica", 4)
+    c.setFont(_BODY_FONT, 4)
     c.setFillColorRGB(0.3, 0.3, 0.3)
     c.drawCentredString(PAGE_W / 2, PAGE_H - MARGIN - 0.5 * mm, org_short_name)
     c.setFillColorRGB(0, 0, 0)
@@ -69,12 +71,12 @@ def _draw_barcode_text(c, barcode_value: str) -> None:
 
 def _draw_asset_name(c, name: str) -> None:
     display = name[:_MAX_NAME_CHARS] + "…" if len(name) > _MAX_NAME_CHARS else name
-    c.setFont("Helvetica", 6)
+    c.setFont(_BODY_FONT, 6)
     c.drawCentredString(PAGE_W / 2, 4 * mm, display)
 
 
 def _draw_inventory_number(c, inventory_number: str) -> None:
-    c.setFont("Helvetica", 5)
+    c.setFont(_BODY_FONT, 5)
     c.setFillColorRGB(0.35, 0.35, 0.35)
     c.drawCentredString(PAGE_W / 2, MARGIN, f"Nr inw.: {inventory_number}")
     c.setFillColorRGB(0, 0, 0)
