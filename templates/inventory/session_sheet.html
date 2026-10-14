@@ -13,7 +13,8 @@
         }
 
         .inventory-sheet-page {
-            max-width: none;
+            width: min(100%, 297mm);
+            overflow-x: auto;
             margin: 0 auto;
             color: #111827;
             background: #ffffff;
@@ -22,53 +23,59 @@
 
         .inventory-sheet-document {
             display: grid;
-            gap: 12px;
-            padding: 18px;
-            border: 1px solid #111827;
+            gap: 8px;
+            min-width: 270mm;
+            padding: 5mm 4mm 7mm;
+            border: 1.2pt solid #111827;
             background: #ffffff;
         }
 
         .inventory-sheet-title {
-            margin: 0 0 6px;
+            margin: 0 0 2px;
             text-align: center;
-            font-size: 1.25rem;
+            font-size: 18pt;
             font-weight: 800;
             letter-spacing: 0.04em;
+            line-height: 1.1;
         }
 
         .inventory-sheet-note {
-            margin: 0 0 10px;
+            margin: 0 0 8px;
             text-align: center;
-            font-size: 0.86rem;
+            font-size: 10pt;
             font-weight: 700;
+            line-height: 1.2;
         }
 
         .inventory-sheet-meta,
         .inventory-sheet-formal {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 5px 18px;
+            gap: 3px 14mm;
             margin: 0;
-            font-size: 0.82rem;
+            font-size: 9pt;
+            line-height: 1.2;
         }
 
         .inventory-sheet-meta div,
         .inventory-sheet-formal div {
             display: grid;
-            grid-template-columns: 130px 1fr;
-            gap: 6px;
+            grid-template-columns: 33mm 1fr;
+            gap: 4px;
             min-width: 0;
         }
 
         .inventory-sheet-meta dt,
         .inventory-sheet-formal dt {
             font-weight: 700;
+            line-height: 1.15;
         }
 
         .inventory-sheet-meta dd,
         .inventory-sheet-formal dd {
             margin: 0;
             min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .inventory-sheet-line {
@@ -78,30 +85,35 @@
         }
 
         .inventory-sheet-section-title {
-            margin: 0;
-            font-size: 0.9rem;
+            margin: 8px 0 2px;
+            font-size: 11pt;
             font-weight: 800;
             text-transform: uppercase;
+            letter-spacing: 0.01em;
         }
 
         .inventory-sheet-table {
             width: 100%;
+            table-layout: fixed;
             border-collapse: collapse;
-            font-size: 0.72rem;
-            line-height: 1.2;
+            font-size: 8pt;
+            line-height: 1.15;
         }
 
         .inventory-sheet-table th,
         .inventory-sheet-table td {
-            padding: 4px 5px;
+            padding: 3px 4px;
             border: 1px solid #111827;
-            vertical-align: top;
+            vertical-align: middle;
+            overflow-wrap: anywhere;
+            hyphens: auto;
         }
 
         .inventory-sheet-table th {
             text-align: center;
             font-weight: 800;
             background: #f3f4f6;
+            line-height: 1.1;
         }
 
         .inventory-sheet-table td:nth-child(1),
@@ -112,18 +124,24 @@
             font-variant-numeric: tabular-nums;
         }
 
+        .inventory-sheet-table td:nth-child(4),
+        .inventory-sheet-table td:nth-child(5),
+        .inventory-sheet-table td:nth-child(9) {
+            text-align: center;
+        }
+
         .inventory-sheet-empty-note {
             padding: 8px;
             border: 1px solid #111827;
-            font-size: 0.82rem;
+            font-size: 9pt;
         }
 
         .inventory-sheet-footer {
             display: grid;
-            gap: 14px;
+            gap: 10px;
             break-inside: avoid;
             page-break-inside: avoid;
-            font-size: 0.82rem;
+            font-size: 9pt;
         }
 
         .inventory-sheet-signatures {
@@ -142,17 +160,18 @@
         }
 
         @page {
-            size: A4;
-            margin: 10mm;
+            size: A4 landscape;
+            margin: 8mm;
         }
 
         @media print {
+            html,
             body {
+                width: auto !important;
                 background: #ffffff !important;
             }
 
-            .app-sidebar,
-            .topbar,
+            .app-header,
             .inventory-sheet-screenbar {
                 display: none !important;
             }
@@ -168,16 +187,18 @@
 
             .inventory-sheet-page {
                 width: auto;
+                overflow: visible;
                 margin: 0;
             }
 
             .inventory-sheet-document {
-                padding: 0;
-                border: 0;
+                min-width: 0;
+                padding: 4mm;
+                border: 1.2pt solid #111827;
             }
 
             .inventory-sheet-table {
-                font-size: 0.66rem;
+                font-size: 7.2pt;
             }
 
             .inventory-sheet-table thead {
@@ -270,6 +291,17 @@
                 <h2 class="inventory-sheet-section-title" id="inventory-sheet-items-title">Pozycje arkusza</h2>
                 {% if inventory_work_items %}
                     <table class="inventory-sheet-table">
+                        <colgroup>
+                            <col style="width: 4%;">
+                            <col style="width: 19%;">
+                            <col style="width: 40%;">
+                            <col style="width: 7%;">
+                            <col style="width: 7%;">
+                            <col style="width: 7%;">
+                            <col style="width: 7%;">
+                            <col style="width: 5%;">
+                            <col style="width: 4%;">
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>Lp.</th>
