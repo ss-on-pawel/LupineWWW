@@ -1461,7 +1461,8 @@ class InventorySessionSheetViewTests(TestCase):
         response = self.client.get(self._sheet_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Arkusz roboczy")
+        self.assertContains(response, "Spis rozpoczęto dn.")
+        self.assertContains(response, self.session.started_at.strftime("%Y-%m-%d"))
 
     def test_closed_sheet_is_available_and_shows_final_note(self):
         self.session.status = InventorySession.Status.CLOSED
@@ -1472,7 +1473,8 @@ class InventorySessionSheetViewTests(TestCase):
         response = self.client.get(self._sheet_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Arkusz końcowy")
+        self.assertContains(response, "zakończono dn.")
+        self.assertContains(response, self.session.closed_at.strftime("%Y-%m-%d"))
 
     def test_sheet_contains_snapshot_items_and_quantities(self):
         self.client.force_login(self.user)
@@ -1481,11 +1483,26 @@ class InventorySessionSheetViewTests(TestCase):
 
         self.assertContains(response, self.no_read_asset.inventory_number)
         self.assertContains(response, self.scanned_asset.inventory_number)
-        self.assertContains(response, "Ilość oczekiwana")
-        self.assertContains(response, "Ilość faktyczna")
-        self.assertContains(response, "Różnica")
-        self.assertContains(response, "-1")
-        self.assertContains(response, "0")
+        self.assertContains(response, "Arkusz spisu z natury")
+        self.assertContains(response, "KTM - symbol indeksu")
+        self.assertContains(response, "Ilość")
+        self.assertContains(response, "stwierdzona")
+        self.assertContains(response, "Cena")
+        self.assertContains(response, "Wartość")
+        self.assertContains(response, "szt.")
+        self.assertNotContains(response, "Ilość oczekiwana")
+        self.assertNotContains(response, "Różnica")
+
+    def test_sheet_contains_formal_fields_from_template(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertContains(response, "Rodzaj inwentaryzacji")
+        self.assertContains(response, "Sposób przeprowadzenia")
+        self.assertContains(response, "Skład komisji inwentaryzacyjnej")
+        self.assertContains(response, "Inne osoby obecne przy spisie")
+        self.assertContains(response, "Podpis osoby materialnie odpowiedzialnej")
 
     def test_unknown_code_is_not_rendered_as_sheet_item(self):
         self.client.force_login(self.user)

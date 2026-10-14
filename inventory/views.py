@@ -354,6 +354,7 @@ def _build_inventory_session_analysis(session):
                 uses_quantity_count=uses_quantity_count,
             )
             purchase_value = _get_snapshot_purchase_value(snapshot_item)
+            sheet_total_value = purchase_value * actual_quantity if purchase_value is not None else None
             difference = actual_quantity - expected_quantity
             work_item = {
                 "snapshot": snapshot_item,
@@ -370,6 +371,9 @@ def _build_inventory_session_analysis(session):
                 "expected_quantity": expected_quantity,
                 "purchase_value": purchase_value,
                 "purchase_value_display": _format_inventory_purchase_value(purchase_value),
+                "sheet_unit_label": "szt.",
+                "sheet_unit_price_display": _format_inventory_sheet_money(purchase_value),
+                "sheet_total_value_display": _format_inventory_sheet_money(sheet_total_value),
                 "difference": difference,
                 "difference_display": _format_inventory_difference(difference),
                 "scan_code_display": scan_code_display,
@@ -581,6 +585,10 @@ def _get_snapshot_purchase_value(snapshot_item):
 
 def _format_inventory_purchase_value(value):
     return f"{value} zł" if value is not None else "-"
+
+
+def _format_inventory_sheet_money(value):
+    return f"{value:.2f}" if value is not None else ""
 
 
 def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_based, scanned_code_counts):
