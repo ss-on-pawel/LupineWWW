@@ -195,6 +195,10 @@
             font-size: 9pt;
         }
 
+        .inventory-sheet-js-template {
+            display: none;
+        }
+
         .inventory-sheet-signature-block {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
@@ -301,7 +305,7 @@
         <button class="ui-btn ui-btn--secondary" type="button" onclick="window.print()">Drukuj / PDF</button>
     </div>
 
-    <section class="inventory-sheet-page">
+    <section class="inventory-sheet-page" id="inventorySheetPages">
         {% for sheet_page in inventory_sheet_pages %}
             <article class="inventory-sheet-document">
                 <div class="inventory-sheet-topline">
@@ -471,4 +475,276 @@
             </article>
         {% endfor %}
     </section>
+
+    <template id="inventorySheetFirstHeader">
+        <h1 class="inventory-sheet-title">Arkusz spisu z natury</h1>
+        <p class="inventory-sheet-subtitle">uniwersalny</p>
+
+        <div class="inventory-sheet-field-row">
+            <div>Rodzaj inwentaryzacji</div>
+            <div class="inventory-sheet-inline-field">
+                <span>-</span>
+                <span class="inventory-sheet-line"></span>
+            </div>
+        </div>
+        <div class="inventory-sheet-field-row">
+            <div>Sposób przeprowadzenia</div>
+            <div class="inventory-sheet-inline-field">
+                <span>-</span>
+                <span class="inventory-sheet-line"></span>
+            </div>
+        </div>
+
+        <div class="inventory-sheet-two-column-row">
+            <div>
+                <span class="inventory-sheet-line"></span>
+                <p class="inventory-sheet-caption">(Nazwa i adres jednostki inwentaryzowanej)</p>
+            </div>
+            <div>
+                <span class="inventory-sheet-line"></span>
+                <p class="inventory-sheet-caption">(Imię i nazwisko osoby materialnie odpowiedzialnej)</p>
+            </div>
+        </div>
+
+        <div class="inventory-sheet-committee-grid">
+            <div>
+                <div class="inventory-sheet-committee-title">Skład komisji inwentaryzacyjnej: <span class="inventory-sheet-small-label">(zespołu spisującego)</span></div>
+                <div class="inventory-sheet-small-label">(Imię, nazwisko i stanowisko służbowe)</div>
+                <div class="inventory-sheet-person-lines">
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+            </div>
+            <div>
+                <div class="inventory-sheet-committee-title">Inne osoby obecne przy spisie:</div>
+                <div class="inventory-sheet-small-label">(Imię, nazwisko i stanowisko służbowe)</div>
+                <div class="inventory-sheet-person-lines">
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="inventory-sheet-time-row">
+            <span>Spis rozpoczęto dn.</span><span class="inventory-sheet-time-line"></span><span>o godz.</span><span class="inventory-sheet-time-line is-short"></span><span>zakończono dn.</span><span class="inventory-sheet-time-line"></span><span>o godzinie</span><span class="inventory-sheet-time-line is-short"></span>
+        </div>
+    </template>
+
+    <template id="inventorySheetTableShell">
+        <table class="inventory-sheet-table">
+            <colgroup>
+                <col style="width: 5%;">
+                <col style="width: 15%;">
+                <col style="width: 39%;">
+                <col style="width: 7%;">
+                <col style="width: 10%;">
+                <col style="width: 8%;">
+                <col style="width: 8%;">
+                <col style="width: 8%;">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Lp.</th>
+                    <th>KTM - symbol indeksu</th>
+                    <th>Nazwa<br>(określenie) przedmiotu<br>spisywanego</th>
+                    <th>J.m.</th>
+                    <th>Ilość<br>stwierdzona</th>
+                    <th>Cena</th>
+                    <th>Wartość</th>
+                    <th>Uwagi</th>
+                </tr>
+                <tr class="inventory-sheet-column-numbers">
+                    <td>1</td>
+                    <td>2</td>
+                    <td>3</td>
+                    <td>4</td>
+                    <td>5</td>
+                    <td>6</td>
+                    <td>7</td>
+                    <td>8</td>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </template>
+
+    <template id="inventorySheetRows">
+        {% for item in inventory_work_items %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ item.snapshot.inventory_number }}</td>
+                <td>{{ item.snapshot.name }}</td>
+                <td>{{ item.sheet_unit_label }}</td>
+                <td>{{ item.actual_quantity }}</td>
+                <td>{{ item.sheet_unit_price_display }}</td>
+                <td>{{ item.sheet_total_value_display }}</td>
+                <td></td>
+            </tr>
+        {% endfor %}
+    </template>
+
+    <template id="inventorySheetEmptyNote">
+        <div class="inventory-sheet-empty-note">Brak pozycji objętych arkuszem.</div>
+    </template>
+
+    <template id="inventorySheetSignature">
+        <section class="inventory-sheet-signature-block" aria-label="Podpisy">
+            <div class="inventory-sheet-material-signature">
+                <div>Podpis osoby materialnie odpowiedzialnej</div>
+                <span class="inventory-sheet-line"></span>
+                <div class="inventory-sheet-small-label">(podpis)</div>
+            </div>
+            <div>
+                <div class="inventory-sheet-valuation-row">
+                    <span>Wycenił</span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+                <div class="inventory-sheet-signature-caption">
+                    <span>(Imię i nazwisko)</span>
+                    <span>(podpis)</span>
+                </div>
+                <div class="inventory-sheet-committee-signatures-title">Skład Komisji Inwentaryzacyjnej</div>
+                <div class="inventory-sheet-signature-row">
+                    <span>Przewodniczący</span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+                <div class="inventory-sheet-signature-caption">
+                    <span>(Imię i nazwisko)</span>
+                    <span>(podpis)</span>
+                </div>
+                <div class="inventory-sheet-signature-row">
+                    <span>Członkowie</span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+                <div class="inventory-sheet-signature-row">
+                    <span></span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+                <div class="inventory-sheet-signature-row">
+                    <span></span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+                <div class="inventory-sheet-signature-row">
+                    <span>Sprawdził</span>
+                    <span class="inventory-sheet-line"></span>
+                    <span class="inventory-sheet-line"></span>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <script>
+        (function () {
+            const pagesContainer = document.getElementById("inventorySheetPages");
+            const firstHeaderTemplate = document.getElementById("inventorySheetFirstHeader");
+            const tableTemplate = document.getElementById("inventorySheetTableShell");
+            const rowsTemplate = document.getElementById("inventorySheetRows");
+            const emptyNoteTemplate = document.getElementById("inventorySheetEmptyNote");
+            const signatureTemplate = document.getElementById("inventorySheetSignature");
+
+            if (!pagesContainer || !tableTemplate || !rowsTemplate) {
+                return;
+            }
+
+            const sourceRows = Array.from(rowsTemplate.content.querySelectorAll("tr"));
+            let isPaginating = false;
+
+            function createPage(pageIndex) {
+                const page = document.createElement("article");
+                page.className = "inventory-sheet-document";
+
+                const topLine = document.createElement("div");
+                topLine.className = "inventory-sheet-topline";
+                topLine.innerHTML = "<div class=\"inventory-sheet-stamp\">" + (pageIndex === 0 ? "pieczęć" : "") + "</div><div class=\"inventory-sheet-page-no\">Str. ...............</div>";
+                page.appendChild(topLine);
+
+                if (pageIndex === 0 && firstHeaderTemplate) {
+                    page.appendChild(firstHeaderTemplate.content.cloneNode(true));
+                }
+
+                const table = tableTemplate.content.firstElementChild.cloneNode(true);
+                page.appendChild(table);
+                pagesContainer.appendChild(page);
+                return page;
+            }
+
+            function overflows(page) {
+                return page.scrollHeight > page.clientHeight + 1;
+            }
+
+            function addSignature(page) {
+                const signature = signatureTemplate.content.firstElementChild.cloneNode(true);
+                page.appendChild(signature);
+                return signature;
+            }
+
+            function paginateInventorySheet() {
+                if (isPaginating) {
+                    return;
+                }
+                isPaginating = true;
+                pagesContainer.innerHTML = "";
+
+                if (!sourceRows.length) {
+                    const emptyPage = createPage(0);
+                    emptyPage.querySelector(".inventory-sheet-table").remove();
+                    if (emptyNoteTemplate) {
+                        emptyPage.appendChild(emptyNoteTemplate.content.cloneNode(true));
+                    }
+                    addSignature(emptyPage);
+                    isPaginating = false;
+                    return;
+                }
+
+                let pageIndex = 0;
+                let currentPage = createPage(pageIndex);
+                let currentBody = currentPage.querySelector("tbody");
+
+                sourceRows.forEach(function (sourceRow) {
+                    const row = sourceRow.cloneNode(true);
+                    currentBody.appendChild(row);
+
+                    if (overflows(currentPage) && currentBody.rows.length > 1) {
+                        currentBody.removeChild(row);
+                        pageIndex += 1;
+                        currentPage = createPage(pageIndex);
+                        currentBody = currentPage.querySelector("tbody");
+                        currentBody.appendChild(row);
+                    }
+                });
+
+                const signature = addSignature(currentPage);
+                if (overflows(currentPage)) {
+                    currentPage.removeChild(signature);
+                    pageIndex += 1;
+                    currentPage = createPage(pageIndex);
+                    currentPage.querySelector(".inventory-sheet-table").remove();
+                    addSignature(currentPage);
+                }
+
+                isPaginating = false;
+            }
+
+            function schedulePagination() {
+                window.requestAnimationFrame(paginateInventorySheet);
+            }
+
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(schedulePagination);
+            } else {
+                window.addEventListener("load", schedulePagination);
+            }
+
+            window.addEventListener("beforeprint", paginateInventorySheet);
+            window.addEventListener("resize", schedulePagination);
+            document.addEventListener("DOMContentLoaded", schedulePagination);
+        })();
+    </script>
 {% endblock %}

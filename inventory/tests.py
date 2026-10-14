@@ -1525,8 +1525,9 @@ class InventorySessionSheetViewTests(TestCase):
         self.assertEqual(len(response.context["inventory_sheet_pages"]), 2)
         self.assertEqual(len(response.context["inventory_sheet_pages"][0]["items"]), 24)
         self.assertTrue(response.context["inventory_sheet_pages"][-1]["show_summary"])
-        self.assertContains(response, "Podpis osoby materialnie odpowiedzialnej", count=1)
-        self.assertContains(response, "pieczęć", count=1)
+        self.assertContains(response, "inventorySheetRows")
+        self.assertContains(response, "Podpis osoby materialnie odpowiedzialnej")
+        self.assertContains(response, "pieczęć")
 
     def test_unknown_code_is_not_rendered_as_sheet_item(self):
         self.client.force_login(self.user)
