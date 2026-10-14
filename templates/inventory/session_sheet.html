@@ -13,7 +13,7 @@
         }
 
         .inventory-sheet-page {
-            width: min(100%, 297mm);
+            width: min(100%, 210mm);
             overflow-x: auto;
             margin: 0 auto;
             color: #111827;
@@ -23,11 +23,11 @@
 
         .inventory-sheet-document {
             box-sizing: border-box;
-            width: 297mm;
-            height: 210mm;
+            width: 210mm;
+            height: 297mm;
             margin: 0 auto 8mm;
             overflow: hidden;
-            padding: 8mm 10mm 10mm;
+            padding: 8mm 9mm 10mm;
             border: 1.2pt solid #111827;
             background: #ffffff;
             font-size: 10pt;
@@ -101,10 +101,10 @@
 
         .inventory-sheet-time-row {
             display: flex;
+            flex-wrap: wrap;
             align-items: flex-end;
             gap: 0;
             margin: 4mm 0;
-            white-space: nowrap;
         }
 
         .inventory-sheet-time-line {
@@ -150,13 +150,13 @@
             width: 100%;
             table-layout: fixed;
             border-collapse: collapse;
-            font-size: 8pt;
-            line-height: 1.12;
+            font-size: 7.2pt;
+            line-height: 1.08;
         }
 
         .inventory-sheet-table th,
         .inventory-sheet-table td {
-            padding: 3px 4px;
+            padding: 2px 3px;
             border: 1px solid #111827;
             vertical-align: middle;
             overflow-wrap: anywhere;
@@ -244,7 +244,7 @@
         }
 
         @page {
-            size: A4 landscape;
+            size: A4 portrait;
             margin: 0;
         }
 
@@ -276,15 +276,15 @@
             }
 
             .inventory-sheet-document {
-                width: 297mm;
-                height: 210mm;
+                width: 210mm;
+                height: 297mm;
                 margin: 0;
-                padding: 8mm 10mm 10mm;
+                padding: 8mm 9mm 10mm;
                 border: 1.2pt solid #111827;
             }
 
             .inventory-sheet-table {
-                font-size: 7.2pt;
+                font-size: 7pt;
             }
 
             .inventory-sheet-table tr {
@@ -305,7 +305,7 @@
         {% for sheet_page in inventory_sheet_pages %}
             <article class="inventory-sheet-document">
                 <div class="inventory-sheet-topline">
-                    <div class="inventory-sheet-stamp">pieczęć</div>
+                    <div class="inventory-sheet-stamp">{% if forloop.first %}pieczęć{% endif %}</div>
                     <div class="inventory-sheet-page-no">Str. ...............</div>
                 </div>
 
@@ -369,13 +369,13 @@
                     <table class="inventory-sheet-table">
                         <colgroup>
                             <col style="width: 5%;">
-                            <col style="width: 17%;">
-                            <col style="width: 42%;">
+                            <col style="width: 15%;">
+                            <col style="width: 39%;">
                             <col style="width: 7%;">
-                            <col style="width: 9%;">
+                            <col style="width: 10%;">
                             <col style="width: 8%;">
                             <col style="width: 8%;">
-                            <col style="width: 4%;">
+                            <col style="width: 8%;">
                         </colgroup>
                         <thead>
                             <tr>

@@ -39,9 +39,9 @@ from .models import (
 from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
 
 INVENTORY_DETAIL_PAGE_SIZE = 200
-INVENTORY_SHEET_FIRST_PAGE_ROWS = 16
-INVENTORY_SHEET_CONTINUATION_ROWS = 24
-INVENTORY_SHEET_SIGNATURE_ROWS_LIMIT = 12
+INVENTORY_SHEET_FIRST_PAGE_ROWS = 24
+INVENTORY_SHEET_CONTINUATION_ROWS = 42
+INVENTORY_SHEET_SIGNATURE_ROWS_LIMIT = 28
 
 
 class TerminalLoginView(LoginView):
