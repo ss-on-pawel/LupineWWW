@@ -1506,6 +1506,25 @@ class InventorySessionSheetViewTests(TestCase):
         self.assertNotContains(response, "spis z natury")
         self.assertNotContains(response, self.root.name)
 
+    def test_sheet_paginates_items_and_keeps_signature_summary_once(self):
+        for index in range(25):
+            self._create_asset(
+                f"SHEET-PAGE-{index:03d}",
+                self.child,
+                barcode=f"BC-SHEET-PAGE-{index:03d}",
+            )
+        session = start_inventory_session(
+            created_by=self.user,
+            root_locations=[self.root],
+            asset_types=[Asset.AssetType.FIXED],
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url(session))
+
+        self.assertEqual(len(response.context["inventory_sheet_pages"]), 2)
+        self.assertContains(response, "Podpis osoby materialnie odpowiedzialnej", count=1)
+
     def test_unknown_code_is_not_rendered_as_sheet_item(self):
         self.client.force_login(self.user)
 

@@ -23,25 +23,33 @@
 
         .inventory-sheet-document {
             min-width: 270mm;
+            min-height: 194mm;
             padding: 5mm 5mm 7mm;
             border: 1.2pt solid #111827;
             background: #ffffff;
             font-size: 10pt;
             line-height: 1.15;
+            page-break-after: always;
+            break-after: page;
+        }
+
+        .inventory-sheet-document:last-child {
+            page-break-after: auto;
+            break-after: auto;
         }
 
         .inventory-sheet-topline {
             display: grid;
             grid-template-columns: 1fr auto;
             align-items: start;
-            margin-bottom: 4mm;
+            margin-bottom: 2mm;
             font-size: 9pt;
         }
 
         .inventory-sheet-stamp {
             min-width: 42mm;
-            min-height: 12mm;
-            text-align: center;
+            min-height: 6mm;
+            text-align: left;
         }
 
         .inventory-sheet-page-no {
@@ -65,8 +73,7 @@
 
         .inventory-sheet-field-row,
         .inventory-sheet-two-column-row,
-        .inventory-sheet-committee-grid,
-        .inventory-sheet-time-row {
+        .inventory-sheet-committee-grid {
             display: grid;
             gap: 5mm;
             margin-bottom: 2mm;
@@ -77,40 +84,30 @@
         }
 
         .inventory-sheet-two-column-row,
-        .inventory-sheet-committee-grid,
-        .inventory-sheet-time-row {
+        .inventory-sheet-committee-grid {
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         }
 
-        .inventory-sheet-time-row {
-            margin: 4mm 0;
-        }
-
-        .inventory-sheet-inline-field,
-        .inventory-sheet-time-field {
+        .inventory-sheet-inline-field {
             display: grid;
+            grid-template-columns: auto 1fr;
             gap: 4px;
             align-items: end;
             min-width: 0;
         }
 
-        .inventory-sheet-inline-field {
-            grid-template-columns: auto 1fr;
-        }
-
-        .inventory-sheet-time-field {
-            grid-template-columns: auto 28mm auto 20mm;
+        .inventory-sheet-time-row {
+            display: grid;
+            grid-template-columns: auto 34mm auto 24mm auto 34mm auto 24mm;
+            gap: 4px;
+            align-items: end;
+            margin: 4mm 0;
         }
 
         .inventory-sheet-line {
             display: block;
             min-height: 1.12em;
             border-bottom: 1px dotted #111827;
-        }
-
-        .inventory-sheet-line.is-filled {
-            padding: 0 2px;
-            overflow-wrap: anywhere;
         }
 
         .inventory-sheet-caption {
@@ -158,8 +155,9 @@
 
         .inventory-sheet-table .inventory-sheet-column-numbers td {
             height: 5mm;
-            text-align: center;
+            text-align: center !important;
             font-weight: 700;
+            font-variant-numeric: tabular-nums;
         }
 
         .inventory-sheet-table td:nth-child(1),
@@ -264,16 +262,13 @@
 
             .inventory-sheet-document {
                 min-width: 0;
+                min-height: 194mm;
                 padding: 4mm;
                 border: 1.2pt solid #111827;
             }
 
             .inventory-sheet-table {
                 font-size: 7.2pt;
-            }
-
-            .inventory-sheet-table thead {
-                display: table-header-group;
             }
 
             .inventory-sheet-table tr {
@@ -291,181 +286,180 @@
     </div>
 
     <section class="inventory-sheet-page">
-        <article class="inventory-sheet-document">
-            <div class="inventory-sheet-topline">
-                <div class="inventory-sheet-stamp">
-                    <span class="inventory-sheet-line"></span>
-                    <div class="inventory-sheet-small-label">pieczęć</div>
+        {% for sheet_page in inventory_sheet_pages %}
+            <article class="inventory-sheet-document">
+                <div class="inventory-sheet-topline">
+                    <div class="inventory-sheet-stamp">pieczęć</div>
+                    <div class="inventory-sheet-page-no">Str. ...............</div>
                 </div>
-                <div class="inventory-sheet-page-no">Str. ...............</div>
-            </div>
 
-            <h1 class="inventory-sheet-title">Arkusz spisu z natury</h1>
-            <p class="inventory-sheet-subtitle">uniwersalny</p>
+                {% if forloop.first %}
+                    <h1 class="inventory-sheet-title">Arkusz spisu z natury</h1>
+                    <p class="inventory-sheet-subtitle">uniwersalny</p>
 
-            <div class="inventory-sheet-field-row">
-                <div>Rodzaj inwentaryzacji</div>
-                <div class="inventory-sheet-inline-field">
-                    <span>-</span>
-                    <span class="inventory-sheet-line"></span>
-                </div>
-            </div>
-            <div class="inventory-sheet-field-row">
-                <div>Sposób przeprowadzenia</div>
-                <div class="inventory-sheet-inline-field">
-                    <span>-</span>
-                    <span class="inventory-sheet-line"></span>
-                </div>
-            </div>
+                    <div class="inventory-sheet-field-row">
+                        <div>Rodzaj inwentaryzacji</div>
+                        <div class="inventory-sheet-inline-field">
+                            <span>-</span>
+                            <span class="inventory-sheet-line"></span>
+                        </div>
+                    </div>
+                    <div class="inventory-sheet-field-row">
+                        <div>Sposób przeprowadzenia</div>
+                        <div class="inventory-sheet-inline-field">
+                            <span>-</span>
+                            <span class="inventory-sheet-line"></span>
+                        </div>
+                    </div>
 
-            <div class="inventory-sheet-two-column-row">
-                <div>
-                    <span class="inventory-sheet-line"></span>
-                    <p class="inventory-sheet-caption">(Nazwa i adres jednostki inwentaryzowanej)</p>
-                </div>
-                <div>
-                    <span class="inventory-sheet-line"></span>
-                    <p class="inventory-sheet-caption">(Imię i nazwisko osoby materialnie odpowiedzialnej)</p>
-                </div>
-            </div>
+                    <div class="inventory-sheet-two-column-row">
+                        <div>
+                            <span class="inventory-sheet-line"></span>
+                            <p class="inventory-sheet-caption">(Nazwa i adres jednostki inwentaryzowanej)</p>
+                        </div>
+                        <div>
+                            <span class="inventory-sheet-line"></span>
+                            <p class="inventory-sheet-caption">(Imię i nazwisko osoby materialnie odpowiedzialnej)</p>
+                        </div>
+                    </div>
 
-            <div class="inventory-sheet-committee-grid">
-                <div>
-                    <div class="inventory-sheet-committee-title">Skład komisji inwentaryzacyjnej: <span class="inventory-sheet-small-label">(zespołu spisującego)</span></div>
-                    <div class="inventory-sheet-small-label">(Imię, nazwisko i stanowisko służbowe)</div>
-                    <div class="inventory-sheet-person-lines">
+                    <div class="inventory-sheet-committee-grid">
+                        <div>
+                            <div class="inventory-sheet-committee-title">Skład komisji inwentaryzacyjnej: <span class="inventory-sheet-small-label">(zespołu spisującego)</span></div>
+                            <div class="inventory-sheet-small-label">(Imię, nazwisko i stanowisko służbowe)</div>
+                            <div class="inventory-sheet-person-lines">
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="inventory-sheet-committee-title">Inne osoby obecne przy spisie:</div>
+                            <div class="inventory-sheet-small-label">(Imię, nazwisko i stanowisko służbowe)</div>
+                            <div class="inventory-sheet-person-lines">
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="inventory-sheet-time-row">
+                        <span>Spis rozpoczęto dn.</span>
                         <span class="inventory-sheet-line"></span>
+                        <span>o godz.</span>
                         <span class="inventory-sheet-line"></span>
+                        <span>zakończono dn.</span>
+                        <span class="inventory-sheet-line"></span>
+                        <span>o godz.</span>
                         <span class="inventory-sheet-line"></span>
                     </div>
-                </div>
-                <div>
-                    <div class="inventory-sheet-committee-title">Inne osoby obecne przy spisie:</div>
-                    <div class="inventory-sheet-small-label">(Imię, nazwisko i stanowisko służbowe)</div>
-                    <div class="inventory-sheet-person-lines">
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                </div>
-            </div>
+                {% endif %}
 
-            <div class="inventory-sheet-time-row">
-                <div class="inventory-sheet-time-field">
-                    <span>Spis rozpoczęto dn.</span>
-                    <span class="inventory-sheet-line"></span>
-                    <span>o godz.</span>
-                    <span class="inventory-sheet-line"></span>
-                </div>
-                <div class="inventory-sheet-time-field">
-                    <span>zakończono dn.</span>
-                    <span class="inventory-sheet-line"></span>
-                    <span>o godz.</span>
-                    <span class="inventory-sheet-line"></span>
-                </div>
-            </div>
-
-            {% if inventory_work_items %}
-                <table class="inventory-sheet-table">
-                    <colgroup>
-                        <col style="width: 5%;">
-                        <col style="width: 17%;">
-                        <col style="width: 42%;">
-                        <col style="width: 7%;">
-                        <col style="width: 9%;">
-                        <col style="width: 8%;">
-                        <col style="width: 8%;">
-                        <col style="width: 4%;">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>Lp.</th>
-                            <th>KTM - symbol indeksu</th>
-                            <th>Nazwa<br>(określenie) przedmiotu<br>spisywanego</th>
-                            <th>J.m.</th>
-                            <th>Ilość<br>stwierdzona</th>
-                            <th>Cena</th>
-                            <th>Wartość</th>
-                            <th>Uwagi</th>
-                        </tr>
-                        <tr class="inventory-sheet-column-numbers">
-                            <td>1</td>
-                            <td>2</td>
-                            <td>3</td>
-                            <td>4</td>
-                            <td>5</td>
-                            <td>6</td>
-                            <td>7</td>
-                            <td>8</td>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in inventory_work_items %}
+                {% if sheet_page %}
+                    <table class="inventory-sheet-table">
+                        <colgroup>
+                            <col style="width: 5%;">
+                            <col style="width: 17%;">
+                            <col style="width: 42%;">
+                            <col style="width: 7%;">
+                            <col style="width: 9%;">
+                            <col style="width: 8%;">
+                            <col style="width: 8%;">
+                            <col style="width: 4%;">
+                        </colgroup>
+                        <thead>
                             <tr>
-                                <td>{{ forloop.counter }}</td>
-                                <td>{{ item.snapshot.inventory_number }}</td>
-                                <td>{{ item.snapshot.name }}</td>
-                                <td>{{ item.sheet_unit_label }}</td>
-                                <td>{{ item.actual_quantity }}</td>
-                                <td>{{ item.sheet_unit_price_display }}</td>
-                                <td>{{ item.sheet_total_value_display }}</td>
-                                <td></td>
+                                <th>Lp.</th>
+                                <th>KTM - symbol indeksu</th>
+                                <th>Nazwa<br>(określenie) przedmiotu<br>spisywanego</th>
+                                <th>J.m.</th>
+                                <th>Ilość<br>stwierdzona</th>
+                                <th>Cena</th>
+                                <th>Wartość</th>
+                                <th>Uwagi</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <div class="inventory-sheet-empty-note">Brak pozycji objętych arkuszem.</div>
-            {% endif %}
+                            <tr class="inventory-sheet-column-numbers">
+                                <td>1</td>
+                                <td>2</td>
+                                <td>3</td>
+                                <td>4</td>
+                                <td>5</td>
+                                <td>6</td>
+                                <td>7</td>
+                                <td>8</td>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in sheet_page %}
+                                <tr>
+                                    <td>{{ item.sheet_row_number }}</td>
+                                    <td>{{ item.snapshot.inventory_number }}</td>
+                                    <td>{{ item.snapshot.name }}</td>
+                                    <td>{{ item.sheet_unit_label }}</td>
+                                    <td>{{ item.actual_quantity }}</td>
+                                    <td>{{ item.sheet_unit_price_display }}</td>
+                                    <td>{{ item.sheet_total_value_display }}</td>
+                                    <td></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="inventory-sheet-empty-note">Brak pozycji objętych arkuszem.</div>
+                {% endif %}
 
-            <section class="inventory-sheet-signature-block" aria-label="Podpisy">
-                <div class="inventory-sheet-material-signature">
-                    <div>Podpis osoby materialnie odpowiedzialnej</div>
-                    <span class="inventory-sheet-line"></span>
-                    <div class="inventory-sheet-small-label">(podpis)</div>
-                </div>
-                <div>
-                    <div class="inventory-sheet-valuation-row">
-                        <span>Wycenił</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                    <div class="inventory-sheet-signature-caption">
-                        <span>(Imię i nazwisko)</span>
-                        <span>(podpis)</span>
-                    </div>
-                    <div class="inventory-sheet-committee-signatures-title">Skład Komisji Inwentaryzacyjnej</div>
-                    <div class="inventory-sheet-signature-row">
-                        <span>Przewodniczący</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                    <div class="inventory-sheet-signature-caption">
-                        <span>(Imię i nazwisko)</span>
-                        <span>(podpis)</span>
-                    </div>
-                    <div class="inventory-sheet-signature-row">
-                        <span>Członkowie</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                    <div class="inventory-sheet-signature-row">
-                        <span></span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                    <div class="inventory-sheet-signature-row">
-                        <span></span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                    <div class="inventory-sheet-signature-row">
-                        <span>Sprawdził</span>
-                        <span class="inventory-sheet-line"></span>
-                        <span class="inventory-sheet-line"></span>
-                    </div>
-                </div>
-            </section>
-        </article>
+                {% if forloop.last %}
+                    <section class="inventory-sheet-signature-block" aria-label="Podpisy">
+                        <div class="inventory-sheet-material-signature">
+                            <div>Podpis osoby materialnie odpowiedzialnej</div>
+                            <span class="inventory-sheet-line"></span>
+                            <div class="inventory-sheet-small-label">(podpis)</div>
+                        </div>
+                        <div>
+                            <div class="inventory-sheet-valuation-row">
+                                <span>Wycenił</span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                            <div class="inventory-sheet-signature-caption">
+                                <span>(Imię i nazwisko)</span>
+                                <span>(podpis)</span>
+                            </div>
+                            <div class="inventory-sheet-committee-signatures-title">Skład Komisji Inwentaryzacyjnej</div>
+                            <div class="inventory-sheet-signature-row">
+                                <span>Przewodniczący</span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                            <div class="inventory-sheet-signature-caption">
+                                <span>(Imię i nazwisko)</span>
+                                <span>(podpis)</span>
+                            </div>
+                            <div class="inventory-sheet-signature-row">
+                                <span>Członkowie</span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                            <div class="inventory-sheet-signature-row">
+                                <span></span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                            <div class="inventory-sheet-signature-row">
+                                <span></span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                            <div class="inventory-sheet-signature-row">
+                                <span>Sprawdził</span>
+                                <span class="inventory-sheet-line"></span>
+                                <span class="inventory-sheet-line"></span>
+                            </div>
+                        </div>
+                    </section>
+                {% endif %}
+            </article>
+        {% endfor %}
     </section>
 {% endblock %}

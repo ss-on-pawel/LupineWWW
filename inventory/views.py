@@ -39,6 +39,7 @@ from .models import (
 from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
 
 INVENTORY_DETAIL_PAGE_SIZE = 200
+INVENTORY_SHEET_ROWS_PER_PAGE = 24
 
 
 class TerminalLoginView(LoginView):
@@ -273,6 +274,9 @@ class InventorySessionSheetView(FeatureRequiredMixin, LoginRequiredMixin, Detail
             "Arkusz końcowy — sesja zamknięta."
             if context["is_session_closed"]
             else "Arkusz roboczy — sesja nadal aktywna, dane mogą się zmieniać."
+        )
+        context["inventory_sheet_pages"] = _build_inventory_sheet_pages(
+            context["inventory_work_items"],
         )
         return context
 
@@ -589,6 +593,20 @@ def _format_inventory_purchase_value(value):
 
 def _format_inventory_sheet_money(value):
     return f"{value:.2f}" if value is not None else ""
+
+
+def _build_inventory_sheet_pages(inventory_work_items):
+    numbered_items = []
+    for index, item in enumerate(inventory_work_items, start=1):
+        sheet_item = item.copy()
+        sheet_item["sheet_row_number"] = index
+        numbered_items.append(sheet_item)
+    if not numbered_items:
+        return [[]]
+    return [
+        numbered_items[index:index + INVENTORY_SHEET_ROWS_PER_PAGE]
+        for index in range(0, len(numbered_items), INVENTORY_SHEET_ROWS_PER_PAGE)
+    ]
 
 
 def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_based, scanned_code_counts):
