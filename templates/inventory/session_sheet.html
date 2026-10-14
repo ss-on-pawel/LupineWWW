@@ -23,11 +23,11 @@
 
         .inventory-sheet-document {
             box-sizing: border-box;
-            width: 281mm;
-            height: 194mm;
+            width: 297mm;
+            height: 210mm;
             margin: 0 auto 8mm;
             overflow: hidden;
-            padding: 5mm 5mm 7mm;
+            padding: 8mm 10mm 10mm;
             border: 1.2pt solid #111827;
             background: #ffffff;
             font-size: 10pt;
@@ -245,7 +245,7 @@
 
         @page {
             size: A4 landscape;
-            margin: 8mm;
+            margin: 0;
         }
 
         @media print {
@@ -276,10 +276,10 @@
             }
 
             .inventory-sheet-document {
-                width: 281mm;
-                height: 194mm;
+                width: 297mm;
+                height: 210mm;
                 margin: 0;
-                padding: 4mm;
+                padding: 8mm 10mm 10mm;
                 border: 1.2pt solid #111827;
             }
 
@@ -365,7 +365,7 @@
                     </div>
                 {% endif %}
 
-                {% if sheet_page %}
+                {% if sheet_page.items %}
                     <table class="inventory-sheet-table">
                         <colgroup>
                             <col style="width: 5%;">
@@ -400,7 +400,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in sheet_page %}
+                            {% for item in sheet_page.items %}
                                 <tr>
                                     <td>{{ item.sheet_row_number }}</td>
                                     <td>{{ item.snapshot.inventory_number }}</td>
@@ -414,11 +414,11 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                {% else %}
+                {% elif not inventory_work_items %}
                     <div class="inventory-sheet-empty-note">Brak pozycji objętych arkuszem.</div>
                 {% endif %}
 
-                {% if forloop.last %}
+                {% if sheet_page.show_summary %}
                     <section class="inventory-sheet-signature-block" aria-label="Podpisy">
                         <div class="inventory-sheet-material-signature">
                             <div>Podpis osoby materialnie odpowiedzialnej</div>

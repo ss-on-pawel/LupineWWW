@@ -39,7 +39,9 @@ from .models import (
 from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
 
 INVENTORY_DETAIL_PAGE_SIZE = 200
-INVENTORY_SHEET_ROWS_PER_PAGE = 20
+INVENTORY_SHEET_FIRST_PAGE_ROWS = 16
+INVENTORY_SHEET_CONTINUATION_ROWS = 24
+INVENTORY_SHEET_SIGNATURE_ROWS_LIMIT = 12
 
 
 class TerminalLoginView(LoginView):
@@ -602,11 +604,21 @@ def _build_inventory_sheet_pages(inventory_work_items):
         sheet_item["sheet_row_number"] = index
         numbered_items.append(sheet_item)
     if not numbered_items:
-        return [[]]
-    return [
-        numbered_items[index:index + INVENTORY_SHEET_ROWS_PER_PAGE]
-        for index in range(0, len(numbered_items), INVENTORY_SHEET_ROWS_PER_PAGE)
-    ]
+        return [{"items": [], "show_summary": True}]
+
+    pages = [{"items": numbered_items[:INVENTORY_SHEET_FIRST_PAGE_ROWS], "show_summary": False}]
+    remaining_items = numbered_items[INVENTORY_SHEET_FIRST_PAGE_ROWS:]
+    for index in range(0, len(remaining_items), INVENTORY_SHEET_CONTINUATION_ROWS):
+        pages.append({
+            "items": remaining_items[index:index + INVENTORY_SHEET_CONTINUATION_ROWS],
+            "show_summary": False,
+        })
+
+    if len(pages[-1]["items"]) > INVENTORY_SHEET_SIGNATURE_ROWS_LIMIT:
+        pages.append({"items": [], "show_summary": True})
+    else:
+        pages[-1]["show_summary"] = True
+    return pages
 
 
 def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_based, scanned_code_counts):
