@@ -39,7 +39,6 @@ LITE_DISABLED_FEATURES = {
     "asset_type_settings",
     "approval_queue",
     "depreciation",
-    "inventory_reports",
     "service_alerts",
 }
 

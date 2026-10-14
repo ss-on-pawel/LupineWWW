@@ -633,7 +633,7 @@
                     {% if is_session_closed %}
                         <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-discrepancy-report' session.pk %}">Raport rozbieżności</a>
                     {% endif %}
-                    <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Arkusz spisu</a>
+                    <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-sheet' session.pk %}">Raport spisu z natury</a>
                 {% endif %}
             </div>
             <div class="inventory-session-action-group">

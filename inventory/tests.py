@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from accounts.models import UserProfile
 from assets.models import Asset, AssetChangeRequest, AssetHistoryEntry, AssetTypeDictionary
+from config.features import LITE
 from locations.models import Location
 from users.models import User
 
@@ -1498,8 +1499,29 @@ class InventorySessionSheetViewTests(TestCase):
 
         response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": self.session.pk}))
 
-        self.assertContains(response, "Arkusz spisu")
+        self.assertContains(response, "Raport spisu z natury")
         self.assertContains(response, self._sheet_url())
+
+    @override_settings(LUPINE_EDITION=LITE)
+    def test_lite_detail_view_contains_sheet_link(self):
+        self.session.status = InventorySession.Status.CLOSED
+        self.session.closed_at = timezone.now()
+        self.session.save(update_fields=["status", "closed_at", "updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("inventory:session-detail", kwargs={"pk": self.session.pk}))
+
+        self.assertContains(response, "Raport spisu z natury")
+        self.assertContains(response, self._sheet_url())
+
+    @override_settings(LUPINE_EDITION=LITE)
+    def test_lite_user_in_scope_sees_sheet(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self._sheet_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.session.number)
 
 
 class ImportInventoryScanTextTests(TestCase):
