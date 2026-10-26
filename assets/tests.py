@@ -726,6 +726,50 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
         self.assertEqual(updated_asset.barcode, "KEEP-ME-001")
         self.assertFalse(AssetBarcodeSequence.objects.exists())
 
+    def test_update_preserves_legacy_barcode_matching_inventory_number(self):
+        old_location = Location.objects.create(name="Legacy old location")
+        new_location = Location.objects.create(name="Legacy new location")
+        asset = Asset.objects.create(
+            name="Legacy chairs", inventory_number="102640", barcode="102640",
+            asset_type="low_value", current_quantity=4, record_quantity=4,
+            location_fk=old_location,
+        )
+        # A shared accounting number must not prevent editing this asset either.
+        Asset.objects.create(name="Shared inventory number", inventory_number="102640", barcode="OTHER-102640")
+        form = AssetForm(data=self._valid_form_data(
+            name=asset.name, inventory_number=asset.inventory_number,
+            barcode=asset.barcode, asset_type=asset.asset_type,
+            current_quantity="4", location_fk=str(new_location.pk),
+        ), instance=asset)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        asset.refresh_from_db()
+        self.assertEqual(asset.location_fk, new_location)
+        self.assertEqual(asset.location, new_location.path)
+        self.assertEqual(asset.barcode, "102640")
+        self.assertEqual(asset.inventory_number, "102640")
+        self.assertEqual(asset.current_quantity, 4)
+
+    def test_update_rejects_changed_barcode_matching_inventory_number(self):
+        asset = Asset.objects.create(name="Existing", inventory_number="102640", barcode="OLD-CODE")
+        form = AssetForm(data=self._valid_form_data(
+            inventory_number=asset.inventory_number, barcode="102640",
+        ), instance=asset)
+        self.assertFalse(form.is_valid())
+        self.assertIn("barcode", form.errors)
+
+    def test_update_still_checks_duplicate_legacy_barcode(self):
+        from unittest import mock
+
+        asset = Asset.objects.create(name="Existing", inventory_number="102640", barcode="102640")
+        form = AssetForm(data=self._valid_form_data(
+            inventory_number=asset.inventory_number, barcode="102640",
+        ), instance=asset)
+        with mock.patch("assets.forms.Asset.objects.filter") as query:
+            query.return_value.exclude.return_value.exists.return_value = True
+            self.assertFalse(form.is_valid())
+        self.assertIn("barcode", form.errors)
+
     def test_form_rejects_manual_barcode_matching_inventory_number(self):
         Asset.objects.create(name="Inventory collision asset", inventory_number="MANUAL-COLLISION-INV")
         form = AssetForm(data=self._valid_form_data(inventory_number="FORM-MANUAL-INV-001", barcode="MANUAL-COLLISION-INV"))

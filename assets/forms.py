@@ -106,7 +106,14 @@ class AssetForm(forms.ModelForm):
         if barcode_query.exists():
             raise forms.ValidationError("Składnik o tym kodzie kreskowym już istnieje.")
 
-        if Asset.objects.filter(inventory_number=barcode).exists():
+        # Imported assets may already share their barcode with an inventory
+        # number. Preserve that identifier when editing unrelated fields.
+        unchanged_barcode = (
+            self.instance
+            and self.instance.pk
+            and barcode == (self.instance.barcode or "").strip()
+        )
+        if not unchanged_barcode and Asset.objects.filter(inventory_number=barcode).exists():
             raise forms.ValidationError("Kod kreskowy nie może być taki sam jak istniejący numer inwentarzowy.")
 
         if Location.objects.filter(code=barcode).exists():
