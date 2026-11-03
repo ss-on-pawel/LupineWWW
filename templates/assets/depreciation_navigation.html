@@ -1,0 +1,4 @@
+<nav aria-label="Zestawienia amortyzacji" class="depreciation-navigation" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+    <a href="{% url 'assets:depreciation-report' %}" class="ui-btn {% if active_report == 'charges' %}ui-btn--primary{% else %}ui-btn--secondary{% endif %}"{% if active_report == 'charges' %} aria-current="page"{% endif %}>Zestawienie odpisów amortyzacyjnych</a>
+    <a href="{% url 'assets:depreciation-report-monthly' %}" class="ui-btn {% if active_report == 'monthly' %}ui-btn--primary{% else %}ui-btn--secondary{% endif %}"{% if active_report == 'monthly' %} aria-current="page"{% endif %}>Zestawienie miesięczne</a>
+</nav>

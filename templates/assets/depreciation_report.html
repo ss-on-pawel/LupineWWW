@@ -9,6 +9,8 @@
         <h1 class="rpt-title">Zestawienie odpisów amortyzacyjnych</h1>
     </div>
 
+    {% include "assets/depreciation_navigation.html" with active_report="charges" %}
+
     {% if error %}
     <div class="notice notice-error">{{ error }}</div>
     {% endif %}
