@@ -78,9 +78,9 @@ def _draw_asset_name(c, name: str) -> None:
 
 
 def _draw_inventory_number(c, inventory_number: str) -> None:
-    c.setFont(_BODY_FONT, 8)
+    c.setFont(_BODY_FONT, 10)
     c.setFillColorRGB(0, 0, 0)
-    c.drawCentredString(PAGE_W / 2, MARGIN_Y, _fit_text(f"Nr inw.: {inventory_number}", _BODY_FONT, 8))
+    c.drawCentredString(PAGE_W / 2, MARGIN_Y, _fit_text(f"Nr inw.: {inventory_number}", _BODY_FONT, 10))
     c.setFillColorRGB(0, 0, 0)
 
 
