@@ -29,11 +29,11 @@ def _lines(c, text, x, y, width, font, size, limit=2):
         c.drawString(x, y - index * size * 1.15, line)
 
 
-def _barcode(c, code, x, y, width, height):
+def _barcode(c, code, x, y, width, height, fill_width=False):
     barcode = Code128(code, barWidth=0.33 * mm, barHeight=height,
                       quiet=True, lquiet=3.3 * mm, rquiet=3.3 * mm,
                       humanReadable=False)
-    scale = min(1, width / barcode.width)
+    scale = width / barcode.width if fill_width else min(1, width / barcode.width)
     c.saveState()
     c.translate(x + (width - barcode.width * scale) / 2, y)
     c.scale(scale, 1)
@@ -49,14 +49,12 @@ def generate_location_labels_pdf(locations, organization):
     c.setTitle("Etykiety lokalizacji")
     for location in locations:
         c.setFont(_BODY_FONT, 7)
-        c.drawCentredString(width / 2, 27 * mm, _fit(organization, _BODY_FONT, 7, 47 * mm))
-        _lines(c, location.name, 1.5 * mm, 23 * mm, 47 * mm, _BODY_FONT_BOLD, 9)
-        parent = location.parent.path if location.parent_id else ""
-        c.setFont(_BODY_FONT, 6)
-        c.drawCentredString(width / 2, 15.5 * mm, _fit(parent, _BODY_FONT, 6, 47 * mm))
-        _barcode(c, location.code, 1.75 * mm, 5.5 * mm, 46.5 * mm, 8.5 * mm)
+        c.drawCentredString(width / 2, 27.5 * mm, _fit(organization, _BODY_FONT, 7, 47 * mm))
+        _lines(c, location.name, 1.5 * mm, 24 * mm, 47 * mm, _BODY_FONT_BOLD, 9)
+        _barcode(c, location.code, 0.75 * mm, 4.5 * mm,
+                 48.5 * mm, 14 * mm, fill_width=True)
         c.setFont("Courier", min(9, 9 * (47 * mm) / max(1, stringWidth(location.code, "Courier", 9))))
-        c.drawCentredString(width / 2, 1.5 * mm, location.code)
+        c.drawCentredString(width / 2, 1.2 * mm, location.code)
         c.showPage()
     c.save()
     buffer.seek(0)
