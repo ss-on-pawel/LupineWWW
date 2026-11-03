@@ -11,6 +11,7 @@ self.addEventListener("install", event => {
             if (!response.ok || response.redirected) throw new Error("Offline screen could not be prepared");
             await cache.put(path, response);
         }
+        await self.skipWaiting();
     })());
 });
 self.addEventListener("activate", event => {

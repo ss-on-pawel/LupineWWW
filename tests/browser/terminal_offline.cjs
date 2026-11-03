@@ -30,7 +30,7 @@ const server = http.createServer((req,res) => {
     const send = (data,status=200) => {res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
     if (parsed.pathname === '/seed') {res.end('<html>seed</html>'); return;}
     if (parsed.pathname === app+'sw.js') {res.writeHead(200,{'Content-Type':'application/javascript','Service-Worker-Allowed':app,'Cache-Control':'no-cache'});res.end(worker);return;}
-    if (parsed.pathname === app+'client.js') {res.writeHead(200,{'Content-Type':'application/javascript'});res.end(client);return;}
+    if (parsed.pathname === app+'client-v3.js') {res.writeHead(200,{'Content-Type':'application/javascript'});res.end(client);return;}
     if (parsed.pathname === app+'offline/' || parsed.pathname === app && auth) {res.writeHead(200,{'Content-Type':'text/html'});res.end(html);return;}
     if (parsed.pathname === app+'login/') {res.writeHead(200,{'Content-Type':'text/html'});res.end('<h1>LOGIN</h1>');return;}
     if (!auth) {res.writeHead(302,{Location:app+'login/'});res.end();return;}
@@ -60,6 +60,11 @@ const server = http.createServer((req,res) => {
 });
 const launch = () => chromium.launchPersistentContext(profile,{headless:true,acceptDownloads:true,viewport:{width:390,height:844},...(process.env.CHROMIUM_EXECUTABLE_PATH ? {executablePath:process.env.CHROMIUM_EXECUTABLE_PATH} : {})});
 async function rows(page) {return page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('lupine-terminal-v1',3);r.onsuccess=()=>{const db=r.result;const q=db.transaction('scans').objectStore('scans').getAll();q.onsuccess=()=>{db.close();resolve(q.result);};q.onerror=()=>reject(q.error);};}));}
+async function tool(page,name) {
+    const options=page.locator('[data-tools-panel]');
+    if(!await options.evaluate(e=>e.open))await options.locator(':scope > summary').click();
+    await page.locator('[data-'+name+']').click();
+}
 async function scan(page,code) {await page.locator('[data-scan-input]').fill(code);await page.locator('[data-scan-input]').press('Enter');}
 async function count(page,n) {await page.waitForFunction(n=>document.querySelector('[data-local-count]').textContent===String(n),n);}
 async function ready(page) {await page.waitForFunction(()=>document.querySelector('[data-memory-status]').textContent.includes('offline: gotowe'));}
@@ -82,6 +87,13 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     await page.locator('[data-start-button]').click();
     await page.waitForSelector('[data-scan-panel]:not(.terminal-hidden)');await ready(page);
     console.log('PASS startup, v1 database upgrade preserves legacy scan, offline shell prepared');
+    assert.equal(await page.locator('[data-tools-panel]').evaluate(e=>e.open),false);
+    assert.equal(await page.locator('[data-backup-button]').isVisible(),false);
+    assert.equal(await page.locator('[data-logout-button]').isVisible(),false);
+    assert.equal(await page.locator('[data-sync-button]').isVisible(),true);
+    assert.equal(await page.locator('[data-auth-panel]').isVisible(),false);
+    console.log('PASS work screen shows scanning and sync; backup, logout and diagnostics stay in closed options');
+
     await context.setOffline(true);
     await scan(page,'LOC-000001');await scan(page,'00001');await scan(page,'00002');await count(page,3);
     assert.equal((await rows(page)).length,4);
@@ -105,11 +117,11 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     assert.equal(received.size,0);assert.equal((await rows(page)).filter(r=>!r.synced).length,105);
     console.log('PASS expired login retains all scans');
     auth=2;await page.locator('[data-sync-button]').click();
-    await page.waitForFunction(()=>document.querySelector('[data-scan-message]').textContent.includes('należy do'));
+    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.includes('należy do'));
     assert.equal(received.size,0);assert.equal(await page.locator('[data-scan-input]').getAttribute('readonly'),'');
     console.log('PASS different account cannot send or relabel the original queue');
     auth=1;closed=true;
-    await page.locator('[data-change-session-button]').click();
+    await tool(page,'change-session-button');
     await page.waitForSelector('[data-session-select] option',{state:'attached'});
     await page.locator('[data-session-select]').selectOption('2');await page.locator('[data-terminal-name]').fill('T2');
     await page.locator('[data-start-button]').click();await count(page,0);
@@ -129,9 +141,9 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
         window.originalAnchorClick=HTMLAnchorElement.prototype.click;
         HTMLAnchorElement.prototype.click=function(){if(this.hasAttribute('data-backup-download'))return;return window.originalAnchorClick.call(this);};
     });
-    await page.locator('[data-backup-button]').click();
+    await tool(page,'backup-button');
     await page.waitForSelector('[data-backup-download]:not([hidden])');
-    const downloadPromise=page.waitForEvent('download');await page.locator('[data-backup-download]').click();
+    const downloadPromise=page.waitForEvent('download');await tool(page,'backup-download');
     const download=await downloadPromise;assert.ok(download.suggestedFilename().endsWith('.txt'));
     const backup=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
     assert.equal(backup.scans.length,106);assert.equal(backup.format,'lupine-terminal-backup-v2');
@@ -143,28 +155,28 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
             return {createWritable:async()=>({write:async blob=>{window.savedTxt=await blob.text();},close:async()=>{window.fileClosed=true;},abort:async()=>{}})};
         };
     });
-    await page.locator('[data-backup-button]').click();
+    await tool(page,'backup-button');
     await page.waitForFunction(()=>window.fileClosed);
     assert.equal(await page.evaluate(()=>window.pickerActivation),true);
     assert.ok((await page.evaluate(()=>window.pickerFilename)).endsWith('.txt'));
     assert.equal(await page.evaluate(()=>JSON.parse(window.savedTxt).scans.length),106);
     await page.evaluate(()=>{window.showSaveFilePicker=async()=>{throw new DOMException('cancel','AbortError');};});
-    await page.locator('[data-backup-button]').click();
+    await tool(page,'backup-button');
     await page.waitForFunction(()=>document.querySelector('[data-scan-message]').textContent.includes('Anulowano'));
     assert.equal(await page.locator('[data-scan-input]').getAttribute('readonly'),null);
     await page.evaluate(()=>{window.showSaveFilePicker=undefined;});
 
     await page.evaluate(()=>{window.showSaveFilePicker=async()=>{throw new DOMException('unavailable','SecurityError');};});
-    const deniedPickerDownload=page.waitForEvent('download');await page.locator('[data-backup-button]').click();
+    const deniedPickerDownload=page.waitForEvent('download');await tool(page,'backup-button');
     assert.ok((await deniedPickerDownload).suggestedFilename().endsWith('.txt'));
     await page.evaluate(()=>{window.showSaveFilePicker=undefined;});
     console.log('PASS save picker runs in user gesture, writes TXT, handles cancellation without losing scans');
 
-    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v2');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
-    assert.deepEqual(keys,[app+'client.js',app+'offline/']);
+    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v3');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
+    assert.deepEqual(keys,[app+'client-v3.js',app+'offline/']);
     console.log('PASS export includes full journal; cache excludes authentication and API data');
     const other=await context.newPage();await other.goto(base+app);
-    await other.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('innej karcie'));
+    await other.waitForFunction(()=>document.querySelector('[data-startup-message]').textContent.includes('innej karcie'));
     assert.equal(await other.locator('[data-start-button]').isDisabled(),true);await other.close();
     console.log('PASS parallel tab blocked');
     await context.close();context=await launch();await context.addInitScript(()=>{window.showSaveFilePicker=undefined;});await context.setOffline(true);page=await context.newPage();
@@ -216,7 +228,7 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     assert.equal(await page.evaluate(()=>window.fullJournalReads),0);
     assert.equal(largestBatch,100);
     console.log('PASS indexed sync of 10,200 pending in '+syncMs+' ms; maximum batch 100, confirmed history untouched');
-    const largeDownloadPromise=page.waitForEvent('download');await page.locator('[data-backup-button]').click();
+    const largeDownloadPromise=page.waitForEvent('download');await tool(page,'backup-button');
     const largeDownload=await largeDownloadPromise;
     const largeBackup=JSON.parse(fs.readFileSync(await largeDownload.path(),'utf8'));
     assert.equal(largeBackup.scans.length,110306);
@@ -254,7 +266,7 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     await v2.close();
     closed=false;
     await context.setOffline(true);await scan(page,'LOGOUT-PENDING');await count(page,202);
-    await page.locator('[data-logout-button]').click();
+    await tool(page,'logout-button');
     await page.waitForFunction(()=>document.querySelector('[data-setup-panel]').classList.contains('terminal-hidden') && document.querySelector('[data-scan-panel]').classList.contains('terminal-hidden'));
     assert.equal(await page.locator('[data-backup-button]').isDisabled(),true);
     await page.reload();
@@ -264,20 +276,26 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     await context.setOffline(false);
     await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Wylogowano'));
     assert.equal(auth,0);assert.equal(logoutCalls,1);assert.equal(received.size,receivedBeforeLogout);
-    auth=2;await page.locator('[data-resume-button]').click();
-    await page.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('należy do'));
+
+    const tabsBeforeLogin=(await context.pages()).length;
+    assert.notEqual(await page.locator('[data-login-link]').getAttribute('target'),'_blank');
+    await page.locator('[data-login-link]').click();await page.waitForURL('**/login/');
+    assert.equal((await context.pages()).length,tabsBeforeLogin);
+    auth=2;await page.goto(base+app);
+
+    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.includes('należy do'));
     assert.equal(await page.locator('[data-start-button]').isDisabled(),true);assert.equal(auth,2);
     auth=1;await page.locator('[data-resume-button]').click();
     await page.waitForSelector('[data-scan-panel]:not(.terminal-hidden)');await count(page,202);
     await page.waitForFunction(()=>document.querySelector('[data-pending-count]').textContent==='1');
     assert.equal(received.size,10306);
     await page.screenshot({path:path.join(output,'terminal-txt-logout.png'),fullPage:true});
-    await page.locator('[data-logout-button]').click();
+    await tool(page,'logout-button');
     await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Wylogowano'));
     assert.equal(auth,0);assert.equal(logoutCalls,2);
     console.log('PASS offline logout survives reload, server logout completes online, queue preserved, other user blocked, same user resumes and syncs; online logout OK');
     auth=1;await page.locator('[data-resume-button]').click();await page.waitForSelector('[data-scan-panel]:not(.terminal-hidden)');
-    await context.setOffline(true);await page.locator('[data-logout-button]').click();
+    await context.setOffline(true);await tool(page,'logout-button');
     await page.waitForSelector('[data-resume-button]:not([hidden])');
     auth=2;await context.setOffline(false);
     await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Inne konto'));
@@ -286,6 +304,27 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
 
 
 
+
+    auth=1;
+    const denied=await context.browser().newContext();
+    await denied.addInitScript(()=>{Object.defineProperty(navigator.locks,'request',{value:()=>Promise.reject(new DOMException('policy','SecurityError'))});});
+    const deniedPage=await denied.newPage();await deniedPage.goto(base+app);
+    await deniedPage.waitForSelector('[data-startup-panel]:not([hidden])');
+    const deniedMessage=await deniedPage.locator('[data-startup-message]').textContent();
+    assert.ok(deniedMessage.includes('SecurityError'));assert.ok(!deniedMessage.includes('innej karcie'));
+    assert.equal(await deniedPage.locator('[data-restart-button]').isVisible(),true);
+    await denied.close();
+    console.log('PASS a rejected lock API is diagnosed separately from another open window');
+    const delayed=await context.browser().newContext();
+    const locker=await delayed.newPage();await locker.goto(base+'/seed');
+    await locker.evaluate(()=>new Promise(resolve=>{navigator.locks.request('lupine-terminal-device',()=>new Promise(release=>{window.releaseTemporaryLock=release;resolve();}));}));
+    const delayedPage=await delayed.newPage();
+    const navigating=delayedPage.goto(base+app);
+    setTimeout(()=>locker.evaluate(()=>window.releaseTemporaryLock()).catch(()=>{}),500);
+    await navigating;await delayedPage.waitForSelector('[data-session-select] option',{state:'attached'});
+    assert.equal(await delayedPage.locator('[data-startup-panel]').isVisible(),false);
+    await delayed.close();
+    console.log('PASS startup waits for the previous window to release its lock instead of a false conflict');
     await context.close();await new Promise(resolve=>server.close(resolve));
     console.log('ALL OFFLINE BROWSER TESTS PASSED; sync requests='+postCalls); console.log('Test artifacts: '+output);
 })().catch(error=>{console.error(error);process.exitCode=1;server.close();setTimeout(()=>process.exit(1),500);});

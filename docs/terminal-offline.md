@@ -84,8 +84,9 @@ mock server, not a promise about a particular scanner or production network.
 The client is served by Django at `/inventory/terminal/client.js`; no new package,
 database migration or collectstatic is required. When changing the cached screen
 or client in a future release, increment `TERMINAL_SHELL_CACHE` in inventory/views.py.
-Service-worker updates take effect after old terminal tabs close; they do not
-force a reload or delete IndexedDB scans.
+Service-worker updates activate after the new generic screen and client are cached. They do not
+force a reload or delete IndexedDB scans. Cached client URLs are versioned so an old
+worker cannot supply old JavaScript to a new screen.
 
 
 ## TXT backup and logout
@@ -105,4 +106,22 @@ locks the screen and completes the server logout when connected. Pending scans
 are not sent while locked. Logging in on the original account and choosing Resume
 restores the session and synchronization. An unrelated account is not signed out
 by an old deferred logout. Logout shares the same browser session as main AMS.
-Cached client/shell version is v2; close old terminal tabs for the update to activate.
+Cached client/shell version is v3, with client-v3.js. Refresh an old open screen online to load the new interface.
+
+
+## Terminal screen and lock recovery
+
+The work screen contains scanning, counters, location and Synchronize. Session
+change, TXT backup, logout and memory diagnostics are under "Opcje terminala".
+Login/account recovery is a separate panel shown only when needed. The login link
+uses the same tab, preventing the application itself from spawning a competing
+terminal tab. After login the original account resumes automatically.
+
+Device-lock acquisition waits up to three seconds for a previous page to release
+its lock. A timeout indicates another window; a rejected/unsupported lock API is
+reported separately. The startup error panel offers Retry without clearing data.
+The lock is released on pagehide after writes have completed and after server
+logout completes. A page restored from back/forward cache reloads its saved state
+and reacquires the lock before accepting scans. Existing concurrent active work
+is never forcibly taken over. These checks do not prove a particular Android
+browser's behavior until the updated version is tested on that device.

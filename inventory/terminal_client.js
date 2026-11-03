@@ -15,6 +15,31 @@
     let db, state = {}, locationsByCode = {}, syncing = false, writing = false, backingUp = false;
     let readyOffline = false, persistent = false, writeFailed = false, accountMismatch = false, serverReachable = null;
     const writes = [];
+    let releaseDeviceLock = null;
+    function acquireDeviceLock() {
+        if (!navigator.locks) throw new Error("Przeglądarka nie obsługuje blokady terminala. Otwórz aplikację w aktualnym Chrome.");
+        return new Promise((resolve, reject) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3000);
+            Promise.resolve().then(() => navigator.locks.request("lupine-terminal-device", {signal: controller.signal}, lock => {
+                clearTimeout(timeout);
+                resolve();
+                return new Promise(release => { releaseDeviceLock = () => { releaseDeviceLock = null; release(); }; });
+            })).catch(error => {
+                clearTimeout(timeout);
+                reject(new Error(error.name === "AbortError"
+                    ? "Terminal jest używany w innej karcie lub oknie aplikacji. Zamknij je i naciśnij „Ponów uruchomienie”."
+                    : "Nie udało się uruchomić blokady terminala (" + error.name + "). Naciśnij „Ponów uruchomienie”."));
+            });
+        });
+    }
+    window.addEventListener("pagehide", () => {
+        if (!writing && !writes.length && releaseDeviceLock) releaseDeviceLock();
+    });
+    window.addEventListener("pageshow", event => {
+        if (event.persisted) location.reload();
+    });
+
     let localLock = {}, finishingLogout = false, activeAccount = null, backupUrl = null;
     class AuthError extends Error {}
     function message(text, error = false, target = null) {
@@ -166,6 +191,7 @@
             await saveLock({locked: false, logout_pending: false});
             if (state.session_id) showScan(); else els.setup.classList.remove("terminal-hidden");
         }
+        el("auth-panel").hidden = true;
         el("account-message").textContent = "";
         el("resume-button").hidden = true;
         els.login.hidden = true;
@@ -173,8 +199,8 @@
         return data;
     }
     function reportError(error) {
-        if (error instanceof AuthError) { els.login.hidden = false; el("resume-button").hidden = false; }
-        message(error.message || "Błąd. Skany pozostają w pamięci.", true);
+        if (error instanceof AuthError) { el("auth-panel").hidden = false; els.login.hidden = false; el("resume-button").hidden = false; }
+        message(error.message || "Błąd. Skany pozostają w pamięci.", true, error instanceof AuthError ? el("account-message") : null);
     }
     function connectivity() {
         const online = navigator.onLine && serverReachable !== false;
@@ -183,6 +209,7 @@
     }
     function showScan() {
         if (localLock.locked) return;
+        el("tools-panel").open = false;
         els.setup.classList.add("terminal-hidden"); els.scan.classList.remove("terminal-hidden");
         els.session.textContent = state.session_number || "Sesja";
         els.terminal.textContent = state.terminal_name || "Terminal";
@@ -427,6 +454,8 @@
         els.start.disabled = locked;
         el("backup-button").disabled = locked || backingUp;
         el("logout-button").disabled = locked;
+        el("tools-panel").hidden = locked;
+        el("auth-panel").hidden = !locked;
         if (locked) {
             els.setup.classList.add("terminal-hidden"); els.scan.classList.add("terminal-hidden");
             els.session.textContent = "Terminal"; els.terminal.textContent = "Wylogowano";
@@ -451,6 +480,7 @@
                 await json(config.logout_url, {method: "POST", headers: {"X-CSRFToken": identity.csrf_token}});
             }
             await saveLock({...localLock, logout_pending: false});
+            if (releaseDeviceLock) releaseDeviceLock();
             message(differentAccount ? "Inne konto jest zalogowane w przeglądarce. Terminal pozostaje zablokowany; wróć do konta użytego do skanowania." : "Wylogowano. Skany pozostają na urządzeniu. Zaloguj się, aby wznowić pracę.", Boolean(differentAccount), el("account-message"));
         } catch (error) {
             message("Terminal zablokowany lokalnie. Wylogowanie z serwera czeka na połączenie.", true, el("account-message"));
@@ -464,7 +494,8 @@
     }
 
     el("logout-button").addEventListener("click", () => logout().catch(reportError));
-    el("resume-button").addEventListener("click", () => loadSessions().then(sync).catch(reportError));
+    el("resume-button").addEventListener("click", () => location.reload());
+    el("restart-button").addEventListener("click", () => location.reload());
     el("start-button").addEventListener("click", () => start().catch(reportError));
     el("refresh-button").addEventListener("click", () => loadSessions().catch(reportError));
     el("sync-button").addEventListener("click", sync);
@@ -472,6 +503,7 @@
     el("retry-save").addEventListener("click", () => { if (!writing) void drain(); });
     el("change-session-button").addEventListener("click", () => {
         if (writing || writes.length || backingUp) return message("Najpierw dokończ zapis skanów.", true);
+        el("tools-panel").open = false;
         els.scan.classList.add("terminal-hidden"); els.setup.classList.remove("terminal-hidden");
         void loadSessions().catch(reportError);
     });
@@ -492,14 +524,7 @@
     setInterval(storageStatus, 60000);
     (async () => {
         els.input.readOnly = true;
-        if (!navigator.locks) throw new Error("Ta przeglądarka nie obsługuje bezpiecznej blokady terminala. Użyj aktualnej przeglądarki Chrome lub Edge.");
-        const locked = await new Promise(resolve => {
-            navigator.locks.request("lupine-terminal-device", {ifAvailable: true}, lock => {
-                resolve(Boolean(lock));
-                return lock ? new Promise(() => {}) : undefined;
-            }).catch(() => resolve(false));
-        });
-        if (!locked) throw new Error("Terminal jest już otwarty w innej karcie. Zamknij ją i otwórz tę stronę ponownie.");
+        await acquireDeviceLock();
         db = await openDB();
         const [savedState, savedLocations, savedLock] = await Promise.all([read("meta", "state"), read("meta", "locations"), read("meta", "lock")]);
         state = (savedState || {}).value || {};
@@ -515,11 +540,20 @@
         if (localLock.locked) {
             message("Terminal zablokowany. Skany zachowane; zaloguj się, aby wznowić pracę.", false, el("account-message"));
             if (localLock.logout_pending) await finishLogout();
+            else if (navigator.onLine) {
+                try { await loadSessions(); void sync(); } catch (error) { reportError(error); }
+            }
             return;
         }
         if (navigator.onLine) {
             try { await loadSessions(); } catch (error) { reportError(error); }
             void sync();
         } else message(state.owner_id ? "Praca offline. Skany będą wysłane po powrocie internetu." : "Pierwszy start wymaga internetu.");
-    })().catch(error => { els.input.readOnly = true; els.start.disabled = true; reportError(error); });
+    })().catch(error => {
+        els.input.readOnly = true; els.start.disabled = true;
+        el("tools-panel").hidden = true;
+        els.setup.classList.add("terminal-hidden"); els.scan.classList.add("terminal-hidden");
+        el("startup-panel").hidden = false;
+        el("startup-message").textContent = error.message || "Nie udało się uruchomić terminala.";
+    });
 }());

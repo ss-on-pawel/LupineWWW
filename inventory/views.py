@@ -1243,7 +1243,7 @@ def session_location_sheet_pdf(request, pk):
                         content_type="application/pdf", filename=f"lokalizacje-{session.number}.pdf")
 
 
-TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v2"
+TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v3"
 
 
 def _terminal_config():

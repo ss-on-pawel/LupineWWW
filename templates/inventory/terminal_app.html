@@ -192,6 +192,8 @@
         }
         .terminal-message.is-error { color: #b42318; }
         .terminal-message.is-ok { color: #166534; }
+        .terminal-tools summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+        .terminal-tools .terminal-row { margin-top: 10px; }
         .terminal-hidden, [hidden] { display: none !important; }
         @media (max-width: 480px) {
             .terminal-shell { padding: 6px; }
@@ -213,17 +215,15 @@
                 <span class="terminal-status" data-online-status>...</span>
             </header>
 
-            <section class="terminal-card">
-                <div class="terminal-actions">
-                    <button class="terminal-button secondary" type="button" data-logout-button disabled>Wyloguj</button>
-                    <button class="terminal-button secondary" type="button" data-resume-button hidden>Wznów po zalogowaniu</button>
-                </div>
+            <section class="terminal-card" data-startup-panel hidden>
+                <p class="terminal-message is-error" data-startup-message></p>
+                <button class="terminal-button" type="button" data-restart-button>Ponów uruchomienie</button>
+            </section>
+            <section class="terminal-card" data-auth-panel hidden>
                 <p class="terminal-message" data-account-message></p>
-                <p class="terminal-message" data-memory-status>Sprawdzanie pamięci urządzenia...</p>
                 <div class="terminal-actions">
-                    <button class="terminal-button secondary" type="button" data-backup-button disabled>Pobierz kopię TXT</button>
-                    <a class="terminal-button secondary" data-backup-download hidden>Zapisz plik TXT</a>
-                    <a class="terminal-button secondary" data-login-link hidden href="{% url 'inventory:terminal-login' %}" target="_blank" rel="noopener">Zaloguj</a>
+                    <a class="terminal-button" data-login-link hidden href="{% url 'inventory:terminal-login' %}">Zaloguj</a>
+                    <button class="terminal-button secondary" type="button" data-resume-button hidden>Sprawdź logowanie</button>
                 </div>
             </section>
             <section class="terminal-card terminal-setup" data-setup-panel>
@@ -269,14 +269,26 @@
                 </div>
                 <div class="terminal-actions">
                     <button class="terminal-button" type="button" data-sync-button>Synchronizuj</button>
-                    <button class="terminal-button secondary" type="button" data-change-session-button>Zmień sesję</button>
                 </div>
                 <button class="terminal-button secondary" type="button" data-retry-save hidden>Ponów zapis</button>
                 <p class="terminal-message" data-scan-message>Gotowy.</p>
             </section>
+            <details class="terminal-card terminal-tools" data-tools-panel>
+                <summary>Opcje terminala</summary>
+                <div class="terminal-row">
+                    <button class="terminal-button secondary" type="button" data-change-session-button>Zmień sesję</button>
+                    <button class="terminal-button secondary" type="button" data-backup-button disabled>Pobierz kopię TXT</button>
+                    <a class="terminal-button secondary" data-backup-download hidden>Zapisz plik TXT</a>
+                    <button class="terminal-button secondary" type="button" data-logout-button disabled>Wyloguj</button>
+                </div>
+                <details>
+                    <summary>Pamięć offline</summary>
+                    <p class="terminal-message" data-memory-status>Sprawdzanie pamięci urządzenia...</p>
+                </details>
+            </details>
         </section>
     </main>
 
-    <script src="{% url 'inventory:terminal-client' %}" defer></script>
+    <script src="{{ terminal_data.client_url }}" defer></script>
 </body>
 </html>
