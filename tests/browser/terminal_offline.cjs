@@ -172,7 +172,7 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     await page.evaluate(()=>{window.showSaveFilePicker=undefined;});
     console.log('PASS save picker runs in user gesture, writes TXT, handles cancellation without losing scans');
 
-    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v3');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
+    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v4');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
     assert.deepEqual(keys,[app+'client-v3.js',app+'offline/']);
     console.log('PASS export includes full journal; cache excludes authentication and API data');
     const other=await context.newPage();await other.goto(base+app);
