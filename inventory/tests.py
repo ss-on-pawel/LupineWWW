@@ -3495,3 +3495,50 @@ class SessionStatsApiTests(TestCase):
         s = data["summary"]
         expected_problem_count = s["wrong_location_count"] + s["found_out_of_scope_count"] + s["unknown_code_count"]
         self.assertEqual(s["problem_count"], expected_problem_count)
+
+
+class TerminalOfflineTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_superuser(username="offline-private-user", password="pass")
+        cls.root = Location.objects.create(name="Offline private room")
+        cls.session = start_inventory_session(created_by=cls.user, root_locations=[cls.root], asset_types=[Asset.AssetType.FIXED])
+
+    def test_offline_shell_is_generic_even_for_authenticated_user(self):
+        url = reverse("inventory:terminal-offline")
+        public = self.client.get(url)
+        self.assertEqual(public.status_code, 200)
+        self.client.force_login(self.user)
+        authenticated = self.client.get(url)
+        self.assertEqual(public.content, authenticated.content)
+        self.assertNotIn("cookie", authenticated.get("Vary", "").lower())
+        for secret in [self.user.username, self.root.name, self.session.number, "csrfmiddlewaretoken"]:
+            self.assertNotIn(secret, public.content.decode())
+
+    def test_offline_resources_are_public_but_context_and_sessions_are_protected(self):
+        for name in ["terminal-worker", "terminal-client"]:
+            response = self.client.get(reverse("inventory:" + name))
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("application/javascript", response["Content-Type"])
+        worker = self.client.get(reverse("inventory:terminal-worker"))
+        self.assertEqual(worker["Service-Worker-Allowed"], reverse("inventory:terminal-app"))
+        self.assertEqual(worker["Cache-Control"], "no-cache")
+        for name in ["terminal-context-api", "terminal-sessions-api"]:
+            self.assertEqual(self.client.get(reverse("inventory:" + name)).status_code, 302)
+
+    def test_context_returns_current_account_without_cache(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("inventory:terminal-context-api"))
+        self.assertEqual(response.json()["user"], {"id": self.user.pk, "username": self.user.username})
+        self.assertTrue(response.json()["csrf_token"])
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    def test_context_supplies_csrf_for_terminal_requests_without_disabling_protection(self):
+        from django.test import Client
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        context = client.get(reverse("inventory:terminal-context-api")).json()
+        url = reverse("inventory:terminal-create-api", args=[self.session.pk])
+        data = json.dumps({"name": "Offline test terminal"})
+        self.assertEqual(client.post(url, data=data, content_type="application/json").status_code, 403)
+        self.assertEqual(client.post(url, data=data, content_type="application/json", HTTP_X_CSRFTOKEN=context["csrf_token"]).status_code, 200)

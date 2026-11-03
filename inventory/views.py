@@ -880,12 +880,7 @@ def terminal_app_view(request):
         "inventory/terminal_app.html",
         {
             "page_title": "Terminal inwentaryzacyjny",
-            "terminal_data": {
-                "sessions_url": reverse("inventory:terminal-sessions-api"),
-                "bootstrap_url_template": reverse("inventory:terminal-session-bootstrap-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
-                "terminal_create_url_template": reverse("inventory:terminal-create-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
-                "sync_url_template": reverse("inventory:terminal-sync-api", kwargs={"session_id": 0, "terminal_id": 0}).replace("/0/terminals/0/", "/__SESSION_ID__/terminals/__TERMINAL_ID__/"),
-            },
+            "terminal_data": _terminal_config(),
         },
     )
 
@@ -1246,3 +1241,61 @@ def session_location_sheet_pdf(request, pk):
     name = (organization.short_name or organization.full_name) if organization else ""
     return FileResponse(generate_location_sheet_pdf(locations, name or "LUPINE", session.number),
                         content_type="application/pdf", filename=f"lokalizacje-{session.number}.pdf")
+
+
+TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v1"
+
+
+def _terminal_config():
+    return {
+        "sessions_url": reverse("inventory:terminal-sessions-api"),
+        "bootstrap_url_template": reverse("inventory:terminal-session-bootstrap-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
+        "terminal_create_url_template": reverse("inventory:terminal-create-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
+        "sync_url_template": reverse("inventory:terminal-sync-api", kwargs={"session_id": 0, "terminal_id": 0}).replace("/0/terminals/0/", "/__SESSION_ID__/terminals/__TERMINAL_ID__/"),
+        "context_url": reverse("inventory:terminal-context-api"),
+        "app_url": reverse("inventory:terminal-app"),
+        "offline_url": reverse("inventory:terminal-offline"),
+        "worker_url": reverse("inventory:terminal-worker"),
+        "client_url": reverse("inventory:terminal-client"),
+        "shell_cache": TERMINAL_SHELL_CACHE,
+    }
+
+
+@require_GET
+def terminal_offline_view(request):
+    # Generic application shell only: no account, session data, or CSRF token.
+    from django.http import HttpResponse
+    from django.template.loader import render_to_string
+    return HttpResponse(render_to_string("inventory/terminal_app.html", {"terminal_data": _terminal_config()}))
+
+
+@require_GET
+def terminal_worker_view(request):
+    from django.http import HttpResponse
+    from django.template.loader import render_to_string
+    response = HttpResponse(render_to_string("inventory/terminal_worker.js", _terminal_config()), content_type="application/javascript")
+    response["Cache-Control"] = "no-cache"
+    response["Service-Worker-Allowed"] = reverse("inventory:terminal-app")
+    return response
+
+
+@require_GET
+def terminal_client_view(request):
+    from pathlib import Path
+    from django.http import FileResponse
+    response = FileResponse((Path(__file__).parent / "terminal_client.js").open("rb"), content_type="application/javascript")
+    response["Cache-Control"] = "no-cache"
+    return response
+
+
+@login_required(login_url="inventory:terminal-login")
+@require_GET
+def terminal_context_api(request):
+    from django.middleware.csrf import get_token
+    response = JsonResponse({
+        "ok": True,
+        "user": {"id": request.user.pk, "username": request.user.get_username()},
+        "csrf_token": get_token(request),
+    })
+    response["Cache-Control"] = "no-store"
+    return response
