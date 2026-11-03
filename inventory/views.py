@@ -1243,7 +1243,7 @@ def session_location_sheet_pdf(request, pk):
                         content_type="application/pdf", filename=f"lokalizacje-{session.number}.pdf")
 
 
-TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v1"
+TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v2"
 
 
 def _terminal_config():
@@ -1253,6 +1253,7 @@ def _terminal_config():
         "terminal_create_url_template": reverse("inventory:terminal-create-api", kwargs={"session_id": 0}).replace("/0/", "/__SESSION_ID__/"),
         "sync_url_template": reverse("inventory:terminal-sync-api", kwargs={"session_id": 0, "terminal_id": 0}).replace("/0/terminals/0/", "/__SESSION_ID__/terminals/__TERMINAL_ID__/"),
         "context_url": reverse("inventory:terminal-context-api"),
+        "logout_url": reverse("inventory:terminal-logout-api"),
         "app_url": reverse("inventory:terminal-app"),
         "offline_url": reverse("inventory:terminal-offline"),
         "worker_url": reverse("inventory:terminal-worker"),
@@ -1297,5 +1298,15 @@ def terminal_context_api(request):
         "user": {"id": request.user.pk, "username": request.user.get_username()},
         "csrf_token": get_token(request),
     })
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@login_required(login_url="inventory:terminal-login")
+@require_POST
+def terminal_logout_api(request):
+    from django.contrib.auth import logout
+    logout(request)
+    response = JsonResponse({"ok": True})
     response["Cache-Control"] = "no-store"
     return response

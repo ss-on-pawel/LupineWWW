@@ -15,6 +15,7 @@
     let db, state = {}, locationsByCode = {}, syncing = false, writing = false, backingUp = false;
     let readyOffline = false, persistent = false, writeFailed = false, accountMismatch = false, serverReachable = null;
     const writes = [];
+    let localLock = {}, finishingLogout = false, activeAccount = null, backupUrl = null;
     class AuthError extends Error {}
     function message(text, error = false, target = null) {
         const node = target || (els.scan.classList.contains("terminal-hidden") ? els.setupMessage : els.scanMessage);
@@ -133,7 +134,11 @@
         try {
             const response = await fetch(url, {...options, cache: "no-store", signal: controller.signal});
             serverReachable = true; connectivity();
-            if (response.redirected || response.status === 401 || response.status === 403) throw new AuthError("Zaloguj się ponownie, aby synchronizować. Skany pozostają w pamięci.");
+            if (response.redirected || response.status === 401 || response.status === 403) {
+                const error = new AuthError("Zaloguj się ponownie, aby synchronizować. Skany pozostają w pamięci.");
+                error.loggedOut = response.redirected || response.status === 401;
+                throw error;
+            }
             if (!(response.headers.get("Content-Type") || "").includes("application/json")) throw new Error("Brak odpowiedzi serwera. Skany pozostają w pamięci.");
             const data = await response.json();
             if (!response.ok && !Array.isArray(data.accepted)) throw new Error(data.error || "Serwer odrzucił synchronizację. Skany pozostają w pamięci.");
@@ -149,18 +154,26 @@
     async function context() {
         const data = await json(config.context_url);
         if (!data.ok) throw new AuthError("Zaloguj się ponownie.");
+        activeAccount = data.user.id;
+        if (localLock.logout_pending) throw new AuthError("Poczekaj na dokończenie wylogowania z serwera.");
         if (state.owner_id && state.owner_id !== data.user.id) {
             accountMismatch = true;
             els.input.readOnly = true;
             throw new AuthError("Ta pamięć należy do " + state.owner_name + ". Zaloguj się na to konto; kolejka nie została wysłana.");
         }
         accountMismatch = false;
+        if (localLock.locked) {
+            await saveLock({locked: false, logout_pending: false});
+            if (state.session_id) showScan(); else els.setup.classList.remove("terminal-hidden");
+        }
+        el("account-message").textContent = "";
+        el("resume-button").hidden = true;
         els.login.hidden = true;
         if (!writeFailed && !backingUp) els.input.readOnly = false;
         return data;
     }
     function reportError(error) {
-        if (error instanceof AuthError) els.login.hidden = false;
+        if (error instanceof AuthError) { els.login.hidden = false; el("resume-button").hidden = false; }
         message(error.message || "Błąd. Skany pozostają w pamięci.", true);
     }
     function connectivity() {
@@ -169,6 +182,7 @@
         els.status.className = "terminal-status " + (online ? "is-online" : "is-offline");
     }
     function showScan() {
+        if (localLock.locked) return;
         els.setup.classList.add("terminal-hidden"); els.scan.classList.remove("terminal-hidden");
         els.session.textContent = state.session_number || "Sesja";
         els.terminal.textContent = state.terminal_name || "Terminal";
@@ -229,6 +243,7 @@
         if (els.scan.classList.contains("terminal-hidden")) message(data.sessions.length ? "Wybierz inwentaryzację i terminal." : "Brak aktywnych inwentaryzacji.");
     }
     async function start() {
+        if (localLock.locked) throw new AuthError("Zaloguj się, aby wznowić pracę.");
         if (writing || writes.length || backingUp) throw new Error("Najpierw dokończ zapis skanów.");
         if (!navigator.onLine) throw new Error("Wybór nowej sesji wymaga internetu. Poprzednia sesja działa offline.");
         const sessionId = Number.parseInt(els.sessions.value, 10), name = els.name.value.trim();
@@ -282,7 +297,7 @@
                 message("Zapisano w pamięci.");
             }
             writeFailed = false; els.retry.hidden = true;
-            els.input.readOnly = accountMismatch || backingUp;
+            els.input.readOnly = accountMismatch || backingUp || localLock.locked;
             await counters();
         } catch (error) {
             if (!writes.length) { reportError(error); return; }
@@ -303,6 +318,8 @@
         });
     }
     async function sync() {
+        if (db && localLock.logout_pending) return finishLogout();
+        if (localLock.locked) return;
         if (!db || syncing || !navigator.onLine || !state.owner_id || writeFailed) return;
         syncing = true;
         try {
@@ -311,7 +328,7 @@
             if (!batch.length) return;
             const identity = await context();
             let lastError = null;
-            while (batch.length) {
+            while (batch.length && !localLock.locked) {
                 const first = batch[0];
                 const group = scan => scan.session_id + ":" + scan.terminal_id;
                 try {
@@ -329,22 +346,36 @@
                 batch = await pendingBatch(state.owner_id, blocked);
             }
             if (lastError) throw lastError;
-            if (!writeFailed) message("Zsynchronizowano. Kopia skanów pozostaje na tym urządzeniu.");
+            if (!writeFailed && !localLock.locked) message("Zsynchronizowano. Kopia skanów pozostaje na tym urządzeniu.");
         } catch (error) { reportError(error); }
         finally { syncing = false; }
     }
     async function backup() {
+        if (localLock.locked) throw new AuthError("Zaloguj się przed pobraniem kopii.");
         if (backingUp) return;
         backingUp = true;
         const button = el("backup-button");
         button.disabled = true; els.input.readOnly = true;
         try {
+            const filename = "lupine-skany-" + new Date().toISOString().replace(/[:.]/g, "-") + ".txt";
+            // Pick the destination during the user's gesture, before asynchronous reads.
+            let fileHandle = null;
+            if (typeof window.showSaveFilePicker === "function") {
+                try {
+                    fileHandle = await window.showSaveFilePicker({suggestedName: filename,
+                        types: [{description: "Kopia skanów TXT", accept: {"text/plain": [".txt"]}}]});
+                } catch (error) {
+                    if (error.name === "AbortError") throw error;
+                    // Some Android/browser policies expose the picker but deny it.
+                    // A normal download with a persistent tap link remains available.
+                }
+            }
             // Finish any in-flight commit before freezing the export snapshot.
             while (writing) await new Promise(resolve => setTimeout(resolve, 10));
             message("Przygotowuję kopię skanów. Skanowanie wznowi się po jej pobraniu.");
             const metadata = {format: "lupine-terminal-backup-v2", exported_at: new Date().toISOString(), origin: location.origin,
                 state: {...state, locations: locationsByCode}, not_committed: writes.slice()};
-            const pieces = [JSON.stringify(metadata).slice(0, -1), ',"scans":['];
+            const pieces = [JSON.stringify(metadata, null, 2).slice(0, -1), ',\n"scans":[\n'];
             await new Promise((resolve, reject) => {
                 const transaction = tx(["scans"], "readonly");
                 const store = transaction.objectStore("scans");
@@ -358,7 +389,7 @@
                     request.onsuccess = () => {
                         const records = request.result;
                         if (!records.length) return;
-                        pieces.push((first ? "" : ",") + records.map(record => JSON.stringify(record)).join(","));
+                        pieces.push((first ? "" : ",\n") + records.map(record => JSON.stringify(record)).join(",\n"));
                         first = false;
                         chunk(records[records.length - 1].client_scan_id);
                     };
@@ -366,17 +397,74 @@
                 chunk();
             });
             pieces.push("]}");
-            const blob = new Blob(pieces, {type: "application/json"});
-            const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
-            link.download = "lupine-skany-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
-            link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 10000);
-            message("Kopia przygotowana. Możesz kontynuować skanowanie.");
+            const blob = new Blob(pieces, {type: "text/plain;charset=utf-8"});
+            if (backupUrl) URL.revokeObjectURL(backupUrl);
+            backupUrl = URL.createObjectURL(blob);
+            const link = el("backup-download");
+            link.href = backupUrl; link.download = filename; link.hidden = false;
+            if (fileHandle) {
+                const writable = await fileHandle.createWritable();
+                try { await writable.write(blob); await writable.close(); }
+                catch (error) { try { await writable.abort(); } catch (_) {} throw error; }
+                message("Zapisano kopię TXT. Możesz kontynuować skanowanie.");
+            } else {
+                // Keep a real, attached link available for Android's direct tap gesture.
+                link.click();
+                message("Plik TXT gotowy. Jeśli pobieranie nie ruszyło, dotknij „Zapisz plik TXT”.");
+            }
+        } catch (error) {
+            if (error.name === "AbortError") message("Anulowano zapis kopii. Skany pozostają w pamięci.");
+            else throw error;
         } finally {
             backingUp = false; button.disabled = false;
-            els.input.readOnly = writeFailed || accountMismatch;
+            els.input.readOnly = writeFailed || accountMismatch || localLock.locked;
         }
     }
 
+    function lockScreen() {
+        const locked = Boolean(localLock.locked);
+        els.input.readOnly = locked || writeFailed || accountMismatch || backingUp;
+        els.start.disabled = locked;
+        el("backup-button").disabled = locked || backingUp;
+        el("logout-button").disabled = locked;
+        if (locked) {
+            els.setup.classList.add("terminal-hidden"); els.scan.classList.add("terminal-hidden");
+            els.session.textContent = "Terminal"; els.terminal.textContent = "Wylogowano";
+            els.login.hidden = false; el("resume-button").hidden = false;
+            el("backup-download").hidden = true;
+        }
+    }
+    async function saveLock(next) {
+        await committed(["meta"], transaction => transaction.objectStore("meta").put({key: "lock", value: next}));
+        localLock = next; lockScreen();
+    }
+    async function finishLogout() {
+        if (!localLock.logout_pending || finishingLogout || !navigator.onLine) return;
+        finishingLogout = true;
+        try {
+            let identity;
+            try { identity = await json(config.context_url); }
+            catch (error) { if (!(error instanceof AuthError && error.loggedOut)) throw error; }
+            const differentAccount = identity && localLock.owner_id && identity.user.id !== localLock.owner_id;
+            // Do not log out a different account that signed in meanwhile.
+            if (identity && (!localLock.owner_id || identity.user.id === localLock.owner_id)) {
+                await json(config.logout_url, {method: "POST", headers: {"X-CSRFToken": identity.csrf_token}});
+            }
+            await saveLock({...localLock, logout_pending: false});
+            message(differentAccount ? "Inne konto jest zalogowane w przeglądarce. Terminal pozostaje zablokowany; wróć do konta użytego do skanowania." : "Wylogowano. Skany pozostają na urządzeniu. Zaloguj się, aby wznowić pracę.", Boolean(differentAccount), el("account-message"));
+        } catch (error) {
+            message("Terminal zablokowany lokalnie. Wylogowanie z serwera czeka na połączenie.", true, el("account-message"));
+        } finally { finishingLogout = false; }
+    }
+    async function logout() {
+        if (!db || writes.length || writing || backingUp) throw new Error("Dokończ zapis lub pobieranie kopii przed wylogowaniem.");
+        await saveLock({locked: true, logout_pending: true, owner_id: activeAccount || state.owner_id || 0});
+        message("Terminal zablokowany. Niewysłane skany zostały zachowane.", false, el("account-message"));
+        await finishLogout();
+    }
+
+    el("logout-button").addEventListener("click", () => logout().catch(reportError));
+    el("resume-button").addEventListener("click", () => loadSessions().then(sync).catch(reportError));
     el("start-button").addEventListener("click", () => start().catch(reportError));
     el("refresh-button").addEventListener("click", () => loadSessions().catch(reportError));
     el("sync-button").addEventListener("click", sync);
@@ -391,7 +479,7 @@
         if (event.key !== "Enter") return;
         event.preventDefault();
         const code = els.input.value.trim();
-        if (!code || !state.owner_id || writeFailed || backingUp || accountMismatch || els.input.readOnly) return;
+        if (!code || !state.owner_id || writeFailed || backingUp || localLock.locked || accountMismatch || els.input.readOnly) return;
         writes.push({client_scan_id: id(), code, scanned_at: new Date().toISOString()});
         els.input.value = ""; void drain();
     });
@@ -413,15 +501,22 @@
         });
         if (!locked) throw new Error("Terminal jest już otwarty w innej karcie. Zamknij ją i otwórz tę stronę ponownie.");
         db = await openDB();
-        const [savedState, savedLocations] = await Promise.all([read("meta", "state"), read("meta", "locations")]);
+        const [savedState, savedLocations, savedLock] = await Promise.all([read("meta", "state"), read("meta", "locations"), read("meta", "lock")]);
         state = (savedState || {}).value || {};
+        localLock = (savedLock || {}).value || {};
+        lockScreen();
         locationsByCode = (savedLocations || {}).value || {};
-        if (state.owner_id && state.session_id && state.terminal_id) {
+        if (!localLock.locked && state.owner_id && state.session_id && state.terminal_id) {
             showScan(); els.input.readOnly = false;
             message("Przywrócono sesję z pamięci urządzenia.");
         }
         await counters(); connectivity();
         void prepareOffline();
+        if (localLock.locked) {
+            message("Terminal zablokowany. Skany zachowane; zaloguj się, aby wznowić pracę.", false, el("account-message"));
+            if (localLock.logout_pending) await finishLogout();
+            return;
+        }
         if (navigator.onLine) {
             try { await loadSessions(); } catch (error) { reportError(error); }
             void sync();

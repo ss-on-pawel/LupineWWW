@@ -214,10 +214,16 @@
             </header>
 
             <section class="terminal-card">
+                <div class="terminal-actions">
+                    <button class="terminal-button secondary" type="button" data-logout-button disabled>Wyloguj</button>
+                    <button class="terminal-button secondary" type="button" data-resume-button hidden>Wznów po zalogowaniu</button>
+                </div>
+                <p class="terminal-message" data-account-message></p>
                 <p class="terminal-message" data-memory-status>Sprawdzanie pamięci urządzenia...</p>
                 <div class="terminal-actions">
-                    <button class="terminal-button secondary" type="button" data-backup-button>Pobierz kopię skanów</button>
-                    <a class="terminal-button secondary" data-login-link hidden href="{% url 'inventory:terminal-login' %}" target="_blank" rel="noopener">Zaloguj do synchronizacji</a>
+                    <button class="terminal-button secondary" type="button" data-backup-button disabled>Pobierz kopię TXT</button>
+                    <a class="terminal-button secondary" data-backup-download hidden>Zapisz plik TXT</a>
+                    <a class="terminal-button secondary" data-login-link hidden href="{% url 'inventory:terminal-login' %}" target="_blank" rel="noopener">Zaloguj</a>
                 </div>
             </section>
             <section class="terminal-card terminal-setup" data-setup-panel>

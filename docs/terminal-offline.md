@@ -38,7 +38,7 @@ Expired authentication does not erase local records. Log back in using the
 dedicated link and the same account; automatic sync then resumes. A different
 account cannot reassign or send the saved queue. Account switching/reassignment
 is outside this stage. Old v1 records without an owner are preserved and included
-in JSON export but never silently assigned or sent as another user.
+in TXT export but never silently assigned or sent as another user.
 
 The service worker caches only a generic screen and its client JavaScript.
 It never caches authenticated pages, login forms or API responses. The generic
@@ -49,7 +49,7 @@ issues a CSRF token for the normal protected POST endpoints.
 The browser is asked for persistent storage, and lack of permission or high
 storage usage is shown. This is not a substitute for export/synchronization:
 clearing site data, private browsing, device loss or storage hardware failure can
-still remove local data. The JSON export contains the journal, server receipts,
+still remove local data. The TXT export contains the journal, server receipts,
 working state and events not yet committed. No passwords or authentication
 tokens are exported. Automated import of backup files is outside this stage.
 
@@ -86,3 +86,23 @@ database migration or collectstatic is required. When changing the cached screen
 or client in a future release, increment `TERMINAL_SHELL_CACHE` in inventory/views.py.
 Service-worker updates take effect after old terminal tabs close; they do not
 force a reload or delete IndexedDB scans.
+
+
+## TXT backup and logout
+
+The export is a UTF-8 `.txt` file containing the complete structured JSON backup,
+with one scan per line. Format identifiers and IDs are preserved for recovery.
+A supported native save picker is opened during the tap gesture. Unsupported or
+denied pickers fall back to a normal download. The generated file remains available
+through the attached "Zapisz plik TXT" link; its Blob URL is not revoked after a
+short timeout. Cancelling the native picker does not delete or alter the journal.
+The browser chooses an accessible folder (normally Downloads on Android). A web
+page cannot silently create a file icon on the Android launcher/home screen.
+
+Logout uses the normal Django session logout with CSRF-protected POST. It also
+persists a local lock, preserving scans and receipts. Offline logout immediately
+locks the screen and completes the server logout when connected. Pending scans
+are not sent while locked. Logging in on the original account and choosing Resume
+restores the session and synchronization. An unrelated account is not signed out
+by an old deferred logout. Logout shares the same browser session as main AMS.
+Cached client/shell version is v2; close old terminal tabs for the update to activate.

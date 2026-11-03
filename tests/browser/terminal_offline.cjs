@@ -24,7 +24,7 @@ const client = fs.readFileSync(path.join(root,'inventory/terminal_client.js'));
 const profile = path.join(output,'browser-profile');
 let auth = 1, closed = false, dropReply = false, dropped = false;
 const received = new Map();
-let nextId = 0, postCalls = 0, largestBatch = 0;
+let nextId = 0, postCalls = 0, largestBatch = 0, logoutCalls = 0;
 const server = http.createServer((req,res) => {
     const parsed = new URL(req.url, 'http://localhost');
     const send = (data,status=200) => {res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
@@ -34,6 +34,7 @@ const server = http.createServer((req,res) => {
     if (parsed.pathname === app+'offline/' || parsed.pathname === app && auth) {res.writeHead(200,{'Content-Type':'text/html'});res.end(html);return;}
     if (parsed.pathname === app+'login/') {res.writeHead(200,{'Content-Type':'text/html'});res.end('<h1>LOGIN</h1>');return;}
     if (!auth) {res.writeHead(302,{Location:app+'login/'});res.end();return;}
+    if (parsed.pathname.endsWith('/logout/') && req.method==='POST') {if(req.headers['x-csrftoken']!=='csrf-test')return send({error:'csrf'},403);auth=0;logoutCalls++;send({ok:true});return;}
     if (parsed.pathname.endsWith('/context/')) {send({ok:true,user:{id:auth,username:'operator-'+auth},csrf_token:'csrf-test'});return;}
     if (parsed.pathname.endsWith('/sessions/')) {send({ok:true,sessions:[1,2].map(id=>({id,number:'INV-'+id,root_locations:'Warszawa'}))});return;}
     const match = parsed.pathname.match(/sessions\/(\d+)\/(bootstrap|terminals)/);
@@ -66,6 +67,7 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const base='http://127.0.0.1:'+server.address().port;
     let context=await launch();
+    await context.addInitScript(()=>{window.showSaveFilePicker=undefined;});
     context.on('page',p=>p.on('pageerror',e=>console.error('PAGEERROR',e.message)));
     let page=await context.newPage();
     await page.goto(base+'/seed');
@@ -121,17 +123,51 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     assert.equal(received.size,105);assert.equal((await rows(page)).length,106);
     assert.equal((await rows(page)).filter(r=>!r.synced).length,1);
     console.log('PASS lost server reply retried idempotently; synced receipts and legacy scan retained');
-    const downloadPromise=page.waitForEvent('download');await page.locator('[data-backup-button]').click();
-    const download=await downloadPromise;const backup=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
+    // On an Android-style browser there may be no native save picker and a
+    // delayed programmatic click may be ignored. The attached link must work.
+    await page.evaluate(()=>{
+        window.originalAnchorClick=HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click=function(){if(this.hasAttribute('data-backup-download'))return;return window.originalAnchorClick.call(this);};
+    });
+    await page.locator('[data-backup-button]').click();
+    await page.waitForSelector('[data-backup-download]:not([hidden])');
+    const downloadPromise=page.waitForEvent('download');await page.locator('[data-backup-download]').click();
+    const download=await downloadPromise;assert.ok(download.suggestedFilename().endsWith('.txt'));
+    const backup=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
     assert.equal(backup.scans.length,106);assert.equal(backup.format,'lupine-terminal-backup-v2');
-    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v1');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
+    await page.evaluate(()=>{HTMLAnchorElement.prototype.click=window.originalAnchorClick;});
+    console.log('PASS TXT fallback link downloads full offline journal after automatic download was suppressed');
+    await page.evaluate(()=>{
+        window.showSaveFilePicker=async options=>{
+            window.pickerActivation=navigator.userActivation.isActive;window.pickerFilename=options.suggestedName;
+            return {createWritable:async()=>({write:async blob=>{window.savedTxt=await blob.text();},close:async()=>{window.fileClosed=true;},abort:async()=>{}})};
+        };
+    });
+    await page.locator('[data-backup-button]').click();
+    await page.waitForFunction(()=>window.fileClosed);
+    assert.equal(await page.evaluate(()=>window.pickerActivation),true);
+    assert.ok((await page.evaluate(()=>window.pickerFilename)).endsWith('.txt'));
+    assert.equal(await page.evaluate(()=>JSON.parse(window.savedTxt).scans.length),106);
+    await page.evaluate(()=>{window.showSaveFilePicker=async()=>{throw new DOMException('cancel','AbortError');};});
+    await page.locator('[data-backup-button]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-scan-message]').textContent.includes('Anulowano'));
+    assert.equal(await page.locator('[data-scan-input]').getAttribute('readonly'),null);
+    await page.evaluate(()=>{window.showSaveFilePicker=undefined;});
+
+    await page.evaluate(()=>{window.showSaveFilePicker=async()=>{throw new DOMException('unavailable','SecurityError');};});
+    const deniedPickerDownload=page.waitForEvent('download');await page.locator('[data-backup-button]').click();
+    assert.ok((await deniedPickerDownload).suggestedFilename().endsWith('.txt'));
+    await page.evaluate(()=>{window.showSaveFilePicker=undefined;});
+    console.log('PASS save picker runs in user gesture, writes TXT, handles cancellation without losing scans');
+
+    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v2');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
     assert.deepEqual(keys,[app+'client.js',app+'offline/']);
     console.log('PASS export includes full journal; cache excludes authentication and API data');
     const other=await context.newPage();await other.goto(base+app);
     await other.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('innej karcie'));
     assert.equal(await other.locator('[data-start-button]').isDisabled(),true);await other.close();
     console.log('PASS parallel tab blocked');
-    await context.close();context=await launch();await context.setOffline(true);page=await context.newPage();
+    await context.close();context=await launch();await context.addInitScript(()=>{window.showSaveFilePicker=undefined;});await context.setOffline(true);page=await context.newPage();
     await page.goto(base+app);await count(page,1);assert.equal((await rows(page)).length,106);
     console.log('PASS complete browser restart offline restores state and journal');
     // A large confirmed journal must not be read by counters, scanning or sync.
@@ -216,6 +252,39 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     assert.equal(metadata.find(m=>m.key==='locations').value['LOC-1'].name,'Pokój 1');
     console.log('PASS v2-to-v3 migration preserves pending scans, receipts, working state and location dictionary');
     await v2.close();
+    closed=false;
+    await context.setOffline(true);await scan(page,'LOGOUT-PENDING');await count(page,202);
+    await page.locator('[data-logout-button]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-setup-panel]').classList.contains('terminal-hidden') && document.querySelector('[data-scan-panel]').classList.contains('terminal-hidden'));
+    assert.equal(await page.locator('[data-backup-button]').isDisabled(),true);
+    await page.reload();
+    await page.waitForSelector('[data-resume-button]:not([hidden])');
+    assert.equal(await page.locator('[data-start-button]').isDisabled(),true);
+    const receivedBeforeLogout=received.size;
+    await context.setOffline(false);
+    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Wylogowano'));
+    assert.equal(auth,0);assert.equal(logoutCalls,1);assert.equal(received.size,receivedBeforeLogout);
+    auth=2;await page.locator('[data-resume-button]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('należy do'));
+    assert.equal(await page.locator('[data-start-button]').isDisabled(),true);assert.equal(auth,2);
+    auth=1;await page.locator('[data-resume-button]').click();
+    await page.waitForSelector('[data-scan-panel]:not(.terminal-hidden)');await count(page,202);
+    await page.waitForFunction(()=>document.querySelector('[data-pending-count]').textContent==='1');
+    assert.equal(received.size,10306);
+    await page.screenshot({path:path.join(output,'terminal-txt-logout.png'),fullPage:true});
+    await page.locator('[data-logout-button]').click();
+    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Wylogowano'));
+    assert.equal(auth,0);assert.equal(logoutCalls,2);
+    console.log('PASS offline logout survives reload, server logout completes online, queue preserved, other user blocked, same user resumes and syncs; online logout OK');
+    auth=1;await page.locator('[data-resume-button]').click();await page.waitForSelector('[data-scan-panel]:not(.terminal-hidden)');
+    await context.setOffline(true);await page.locator('[data-logout-button]').click();
+    await page.waitForSelector('[data-resume-button]:not([hidden])');
+    auth=2;await context.setOffline(false);
+    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Inne konto'));
+    assert.equal(auth,2);assert.equal(logoutCalls,2);
+    console.log('PASS deferred logout never signs out a different account');
+
+
 
     await context.close();await new Promise(resolve=>server.close(resolve));
     console.log('ALL OFFLINE BROWSER TESTS PASSED; sync requests='+postCalls); console.log('Test artifacts: '+output);

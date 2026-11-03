@@ -3542,3 +3542,18 @@ class TerminalOfflineTests(TestCase):
         data = json.dumps({"name": "Offline test terminal"})
         self.assertEqual(client.post(url, data=data, content_type="application/json").status_code, 403)
         self.assertEqual(client.post(url, data=data, content_type="application/json", HTTP_X_CSRFTOKEN=context["csrf_token"]).status_code, 200)
+
+    def test_terminal_logout_requires_post_and_csrf_and_ends_login(self):
+        from django.test import Client
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        token = client.get(reverse("inventory:terminal-context-api")).json()["csrf_token"]
+        url = reverse("inventory:terminal-logout-api")
+        self.assertEqual(client.get(url).status_code, 405)
+        self.assertEqual(client.post(url).status_code, 403)
+        response = client.post(url, HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertEqual(client.get(reverse("inventory:terminal-context-api")).status_code, 302)
+        self.assertTrue(InventorySession.objects.filter(pk=self.session.pk).exists())
