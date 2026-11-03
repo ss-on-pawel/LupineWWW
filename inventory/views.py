@@ -1224,3 +1224,25 @@ def mobile_scan_api(request, token):
     result = record_mobile_scan(session, code, current_location_code)
     result["scan_count"] = InventoryObservedItem.objects.filter(session=session).count()
     return JsonResponse(result)
+
+
+@login_required
+@require_GET
+def session_location_sheet_pdf(request, pk):
+    from django.http import FileResponse, HttpResponse
+    from locations.models import OrganizationSettings
+    from locations.printing import generate_location_sheet_pdf
+
+    session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=pk)
+    ids = _get_location_subtree_ids(session.scope_root_locations.all())
+    allowed = get_accessible_location_ids(request.user)
+    if allowed is not None:
+        ids.intersection_update(allowed)
+    locations = sorted(Location.objects.filter(pk__in=ids, is_active=True).select_related("parent"),
+                       key=lambda location: (location.path.casefold(), location.pk))
+    if not locations:
+        return HttpResponse("Brak dostępnych aktywnych lokalizacji w zakresie tej inwentaryzacji.", status=400)
+    organization = OrganizationSettings.objects.first()
+    name = (organization.short_name or organization.full_name) if organization else ""
+    return FileResponse(generate_location_sheet_pdf(locations, name or "LUPINE", session.number),
+                        content_type="application/pdf", filename=f"lokalizacje-{session.number}.pdf")

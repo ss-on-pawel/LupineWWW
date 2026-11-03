@@ -6,6 +6,7 @@ from .views import (
     location_delete,
     location_detail,
     location_list,
+    location_labels_pdf,
     location_options_api,
     location_update,
     organization_settings,
@@ -17,6 +18,7 @@ app_name = "locations"
 urlpatterns = [
     path("api/locations/options/", location_options_api, name="api-options"),
     path("lokalizacje/", location_list, name="list"),
+    path("lokalizacje/etykiety/", location_labels_pdf, name="labels-pdf"),
     path("lokalizacje/nowa/", location_create, name="create"),
     path("lokalizacje/<int:id>/nowa-podrzedna/", location_create_child, name="create-child"),
     path("lokalizacje/<int:id>/edytuj/", location_update, name="update"),

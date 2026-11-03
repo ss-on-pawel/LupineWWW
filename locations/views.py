@@ -2,7 +2,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import JsonResponse
-from django.http import Http404
+from django.http import Http404, FileResponse, HttpResponse
+from django.views.decorators.http import require_GET
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -26,6 +27,9 @@ def location_list(request):
         )
 
     locations = list(queryset)
+    allowed = get_accessible_location_ids(request.user)
+    for location in locations:
+        location.can_print = location.is_active and (allowed is None or location.pk in allowed)
 
     if query:
         lowered_query = query.lower()
@@ -70,6 +74,9 @@ def location_detail(request, id):
             "breadcrumbs": location.get_ancestors(include_self=True),
             "assigned_assets": assigned_assets,
             "assigned_assets_count": len(assigned_assets),
+            "can_print": location.is_active and (
+                (allowed := get_accessible_location_ids(request.user)) is None or location.pk in allowed
+            ),
         },
     )
 
@@ -247,3 +254,28 @@ def _get_assigned_assets_queryset(location):
     return Asset.objects.filter(
         Q(location__iexact=location.name) | Q(location__iexact=location.path)
     ).order_by("inventory_number", "id")
+
+
+@login_required
+@require_GET
+def location_labels_pdf(request):
+    from .printing import generate_location_labels_pdf
+
+    raw_ids = request.GET.getlist("ids")
+    try:
+        ids = {int(value) for raw in raw_ids for value in raw.split(",")}
+    except (TypeError, ValueError):
+        return HttpResponse("Nieprawidłowe identyfikatory lokalizacji.", status=400)
+    if not ids or len(ids) > 5000 or min(ids) < 1:
+        return HttpResponse("Zaznacz od 1 do 5000 lokalizacji.", status=400)
+    queryset = Location.objects.filter(pk__in=ids, is_active=True).select_related("parent")
+    allowed = get_accessible_location_ids(request.user)
+    if allowed is not None:
+        queryset = queryset.filter(pk__in=allowed)
+    locations = sorted(queryset, key=lambda location: (location.path.casefold(), location.pk))
+    if len(locations) != len(ids):
+        raise Http404("Nie znaleziono lokalizacji lub brak dostępu.")
+    organization = OrganizationSettings.objects.first()
+    name = (organization.short_name or organization.full_name) if organization else ""
+    return FileResponse(generate_location_labels_pdf(locations, name or "LUPINE"),
+                        content_type="application/pdf", filename="etykiety-lokalizacji.pdf")

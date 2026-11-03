@@ -180,11 +180,15 @@
             </form>
         </div>
 
+        <form id="location-labels-form" method="get" action="{% url 'locations:labels-pdf' %}" target="_blank">
+            <p><button id="location-labels-print" type="submit" class="ui-btn ui-btn--secondary" disabled>Drukuj zaznaczone etykiety</button></p>
+        </form>
         <section class="locations-table-shell" aria-labelledby="locations-table-title">
             <div class="locations-table-wrap">
                 <table class="locations-table">
                     <thead>
                         <tr>
+                            <th scope="col"><input id="locations-select-all" type="checkbox" aria-label="Zaznacz wszystkie dostępne lokalizacje"></th>
                             <th id="locations-table-title" scope="col">Nazwa</th>
                             <th scope="col">Kod</th>
                             <th scope="col">Lokalizacja nadrzędna</th>
@@ -195,6 +199,7 @@
                     <tbody>
                         {% for location in locations %}
                             <tr>
+                                <td data-label="Wybór">{% if location.can_print %}<input type="checkbox" name="ids" value="{{ location.id }}" form="location-labels-form" class="location-label-select" aria-label="Wybierz {{ location.name }}">{% endif %}</td>
                                 <td class="locations-name-cell" data-label="Nazwa" style="--level-indent: {% widthratio location.depth 1 18 %}px;">
                                     <span class="locations-name">
                                         <span class="locations-level-marker" {% if location.depth == 0 %}hidden{% endif %}>&rsaquo;</span>
@@ -219,7 +224,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="5">
+                                <td colspan="6">
                                     {% if search_query %}
                                         Nie znaleziono lokalizacji.
                                     {% else %}
@@ -233,4 +238,27 @@
             </div>
         </section>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const all = document.getElementById("locations-select-all");
+    const items = Array.from(document.querySelectorAll(".location-label-select"));
+    const button = document.getElementById("location-labels-print");
+    function update() {
+        const selected = items.filter(item => item.checked).length;
+        button.disabled = selected === 0;
+        all.checked = items.length > 0 && selected === items.length;
+        all.indeterminate = selected > 0 && selected < items.length;
+        all.disabled = items.length === 0;
+    }
+    all.addEventListener("change", function () {
+        items.forEach(item => { item.checked = all.checked; });
+        update();
+    });
+    items.forEach(item => item.addEventListener("change", update));
+    update();
+}());
+</script>
 {% endblock %}
