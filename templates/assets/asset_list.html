@@ -4317,13 +4317,28 @@ let searchDebounceId = null;
         })();
     </script>
 
-<dialog id="withdrawal-dialog" style="max-width:460px;border:1px solid #ccc;border-radius:12px;padding:24px">
-    <form><h2>Wycofaj z ewidencji</h2><p>Wspólne dane dla zaznaczonych środków.</p>
-    <p><label>Sposób <select name="method" required><option value="">Wybierz</option><option value="sale">Sprzedaż</option><option value="transfer">Przekazanie</option><option value="liquidation">Likwidacja</option><option value="other">Inny</option></select></label></p>
-    <p><label>Data wycofania <input type="date" name="action_date" required></label></p>
-    <p><label>Adnotacja <textarea name="notes" maxlength="2000"></textarea></label></p>
-    <p><label>Nr dokumentu <input name="document_number" maxlength="120"></label></p>
-    <button type="button" onclick="this.closest('dialog').close()">Anuluj</button> <button type="submit">Wycofaj zaznaczone</button></form>
+<style>
+    #withdrawal-dialog { width:560px; max-width:calc(100vw - 32px); box-sizing:border-box; border:1px solid #d8dee8; border-radius:12px; padding:24px; color:#172033; box-shadow:0 20px 60px #14213d26; }
+    #withdrawal-dialog::backdrop { background:#14213d55; }
+    #withdrawal-dialog h2 { margin:0 0 8px; font-size:1.25rem; }
+    #withdrawal-dialog .withdrawal-dialog-hint { margin:0 0 20px; color:#667085; font-size:.9rem; }
+    .withdrawal-dialog-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .withdrawal-dialog-grid label { display:block; min-width:0; color:#475467; font-size:.86rem; font-weight:600; }
+    .withdrawal-dialog-grid input, .withdrawal-dialog-grid select, .withdrawal-dialog-grid textarea { display:block; width:100%; min-width:0; height:42px; min-height:42px; box-sizing:border-box; margin-top:6px; padding:9px 10px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#172033; font:inherit; font-weight:400; }
+    .withdrawal-dialog-grid textarea { resize:vertical; max-height:160px; }
+    .withdrawal-dialog-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; margin-top:22px; }
+    @media(max-width:560px) { #withdrawal-dialog { padding:18px; } .withdrawal-dialog-grid { grid-template-columns:minmax(0,1fr); gap:12px; } }
+</style>
+<dialog id="withdrawal-dialog">
+    <form><h2>Wycofaj z ewidencji</h2><p class="withdrawal-dialog-hint">Wspólne dane dla zaznaczonych środków.</p>
+    <div class="withdrawal-dialog-grid">
+        <label>Sposób <select name="method" required><option value="">Wybierz</option><option value="sale">Sprzedaż</option><option value="transfer">Przekazanie</option><option value="liquidation">Likwidacja</option><option value="other">Inny</option></select></label>
+        <label>Data wycofania <input type="date" name="action_date" required></label>
+        <label>Nr dokumentu <input name="document_number" maxlength="120"></label>
+        <label>Adnotacja <textarea name="notes" maxlength="2000"></textarea></label>
+    </div>
+    <div class="withdrawal-dialog-actions"><button class="ui-btn ui-btn--secondary" type="button" onclick="this.closest('dialog').close()">Anuluj</button><button class="ui-btn ui-btn--danger" type="submit">Wycofaj zaznaczone</button></div>
+    </form>
 </dialog>
 {% endblock %}
 
