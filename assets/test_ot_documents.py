@@ -123,9 +123,31 @@ class OtDocumentTests(TestCase):
         self.assertFalse(self.asset.attachments.exists())
 
     def test_stale_form_cannot_replace_number(self):
-        response = self.generate(expected_document_number="old-value")
+        response = self.generate(expected_document_number="old-value", document_number="DIFFERENT")
         self.assertContains(response, "Numer OT zmienił się")
         self.assertFalse(self.asset.attachments.exists())
+
+    def test_same_form_can_download_again_after_saving_new_number(self):
+        payload = self.payload(document_number="OT/NEW")
+        for _ in range(2):
+            response = self.client.post(self.url, payload)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "application/pdf")
+            self.assertTrue(b"".join(response.streaming_content).startswith(b"%PDF-"))
+            response.close()
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.ot_document_number, "OT/NEW")
+        self.assertEqual(self.asset.attachments.count(), 2)
+        self.assertEqual(self.asset.history_entries.filter(field_name="ot_document_number").count(), 1)
+
+    def test_same_form_still_cannot_overwrite_number_changed_in_another_tab(self):
+        self.generate(document_number="OT/FIRST")
+        Asset.objects.filter(pk=self.asset.pk).update(ot_document_number="OT/OTHER-TAB")
+        response = self.generate(document_number="OT/FIRST")
+        self.assertContains(response, "Numer OT zmienił się")
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.ot_document_number, "OT/OTHER-TAB")
+        self.assertEqual(self.asset.attachments.count(), 1)
 
     def test_login_scope_lite_and_csrf_are_enforced(self):
         self.client.logout()

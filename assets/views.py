@@ -1492,7 +1492,8 @@ def asset_generate_ot_pdf(request, asset_id):
                 if location_ids is not None and asset.location_fk_id not in location_ids:
                     raise Http404
                 number = form.cleaned_data["document_number"]
-                if form.cleaned_data["expected_document_number"] != asset.ot_document_number:
+                if (form.cleaned_data["expected_document_number"] != asset.ot_document_number
+                        and number != asset.ot_document_number):
                     form.add_error(None, "Numer OT zmienił się w innej karcie. Otwórz formularz ponownie.")
                 elif number != asset.ot_document_number and user_requires_asset_change_approval(request.user):
                     form.add_error("document_number", "Zmiana numeru wymaga zatwierdzenia. Zgłoś ją przez edycję kartoteki, a po zatwierdzeniu wygeneruj OT.")
