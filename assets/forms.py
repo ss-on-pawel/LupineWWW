@@ -21,8 +21,9 @@ SYSTEM_MANAGED_ASSET_FIELDS = frozenset(
 class OtDocumentForm(forms.Form):
     document_number = forms.CharField(label="Dokument OT", max_length=120, strip=False)
     expected_document_number = forms.CharField(required=False, strip=False, widget=forms.HiddenInput)
+    expected_commissioning_date = forms.CharField(required=False, widget=forms.HiddenInput)
     date_of_action = forms.DateField(
-        label="Data przyjęcia do użytkowania", widget=forms.DateInput(attrs={"type": "date"}),
+        label="Przyjęcie do użycia", widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
     )
     issuing_unit_text = forms.CharField(label="Jednostka realizująca", max_length=200, required=False)
     notes = forms.CharField(label="Podstawa przyjęcia / uwagi", max_length=1000, required=False,

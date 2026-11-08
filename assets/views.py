@@ -1482,6 +1482,7 @@ def asset_generate_ot_pdf(request, asset_id):
     form = OtDocumentForm(request.POST if request.method == "POST" else None, initial={
         "document_number": asset.ot_document_number,
         "expected_document_number": asset.ot_document_number,
+        "expected_commissioning_date": asset.commissioning_date.isoformat() if asset.commissioning_date else "",
         "date_of_action": asset.commissioning_date,
     })
     if request.method == "POST" and form.is_valid():
@@ -1492,11 +1493,18 @@ def asset_generate_ot_pdf(request, asset_id):
                 if location_ids is not None and asset.location_fk_id not in location_ids:
                     raise Http404
                 number = form.cleaned_data["document_number"]
+                action_date = form.cleaned_data["date_of_action"]
+                current_date = asset.commissioning_date.isoformat() if asset.commissioning_date else ""
                 if (form.cleaned_data["expected_document_number"] != asset.ot_document_number
                         and number != asset.ot_document_number):
                     form.add_error(None, "Numer OT zmienił się w innej karcie. Otwórz formularz ponownie.")
+                elif (form.cleaned_data["expected_commissioning_date"] != current_date
+                        and action_date != asset.commissioning_date):
+                    form.add_error(None, "Data przyjęcia zmieniła się w innej karcie. Otwórz formularz ponownie.")
                 elif number != asset.ot_document_number and user_requires_asset_change_approval(request.user):
                     form.add_error("document_number", "Zmiana numeru wymaga zatwierdzenia. Zgłoś ją przez edycję kartoteki, a po zatwierdzeniu wygeneruj OT.")
+                elif action_date != asset.commissioning_date and user_requires_asset_change_approval(request.user):
+                    form.add_error("date_of_action", "Zmiana daty wymaga zatwierdzenia. Zgłoś ją przez edycję kartoteki, a po zatwierdzeniu wygeneruj OT.")
                 else:
                     now = timezone.now()
                     pdf = generate_ot_pdf(
@@ -1517,10 +1525,13 @@ def asset_generate_ot_pdf(request, asset_id):
                     )
                     attachment.file.save(filename, ContentFile(pdf), save=True)
                     before = capture_asset_history_values(asset)
-                    if number != asset.ot_document_number:
+                    if number != asset.ot_document_number or action_date != asset.commissioning_date:
                         asset.ot_document_number = number
+                        asset.commissioning_date = action_date
                         asset.updated_at = now
-                        Asset.objects.filter(pk=asset.pk).update(ot_document_number=number, updated_at=now)
+                        Asset.objects.filter(pk=asset.pk).update(
+                            ot_document_number=number, commissioning_date=action_date, updated_at=now,
+                        )
                         record_asset_field_changes(asset=asset, operator=request.user, before_values=before,
                                                    source_object=attachment)
                     record_asset_history(

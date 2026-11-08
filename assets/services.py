@@ -106,6 +106,11 @@ def _asset_barcode_candidate_exists(*, Asset, Location, barcode):
 
 
 ASSET_HISTORY_FIELD_SPECS = {
+    "commissioning_date": {
+        "label": "Przyjęcie do użycia",
+        "description": "Zmieniono datę przyjęcia do użycia",
+        "value": lambda asset: _format_date(asset.commissioning_date),
+    },
     "ot_document_number": {
         "label": "Dokument OT",
         "description": "Zmieniono numer dokumentu OT",

@@ -5,17 +5,18 @@
     <h1>OT — Przyjęcie środka trwałego / wyposażenia</h1>
     <p>{{ asset.name }} · {{ asset.inventory_number|default:"Brak numeru inwentarzowego" }}</p>
     <p>PDF zostanie zapisany jako chroniony załącznik przy kartotece. Ponowne wygenerowanie zachowa wcześniejsze dokumenty.</p>
-    <p>Numer OT jest niezależny od numeru faktury. Data na wydruku nie zmienia daty przyjęcia zapisanej w kartotece.</p>
+    <p>Numer OT jest niezależny od numeru faktury. Numer i data zostaną zapamiętane w kartotece. Data dokumentu jest wspólna z polem „Przyjęcie do użycia” w ewidencji.</p>
     <form method="post">
         {% csrf_token %}
         {{ form.expected_document_number }}
+        {{ form.expected_commissioning_date }}
         {{ form.non_field_errors }}
         <div class="form-grid">
             {% for field in form.visible_fields %}
                 <div class="form-field{% if field.name == 'notes' %} field-wide{% endif %}">
                     {{ field.label_tag }}{{ field }}{{ field.errors }}
                     {% if field.name == 'document_number' %}
-                        <div class="helptext">Wpisz numer istniejącego dokumentu lub numer zgodny z numeracją swojej jednostki. Numer zostanie zapisany w polu Dokument OT.</div>
+                        <div class="helptext">Przykład: OT/001/2026 — typ dokumentu / kolejny numer / rok. Stosuj numerację swojej jednostki; dotychczasowe numery można zachować.</div>
                     {% endif %}
                 </div>
             {% endfor %}

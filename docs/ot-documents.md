@@ -9,24 +9,28 @@ Zwykła edycja podlega dotychczasowej kolejce zatwierdzeń i historii zmian.
 
 W pełnej wersji przycisk **Dokument OT** w kartotece otwiera formularz numeru,
 daty przyjęcia, jednostki i uwag. Data domyślnie pochodzi z kartoteki; brak daty
-wymaga jej podania. Nie podstawiamy dzisiejszej daty za nieznaną historyczną.
+wymaga jej podania. Numer oraz data zatwierdzone przy generowaniu są zapamiętywane
+w kartotece. Data dokumentu jest polem `commissioning_date`, widocznym w ewidencji
+jako „Przyjęcie do użycia”. Nie podstawiamy dzisiejszej daty za nieznaną historyczną.
 
 Numer wpisuje użytkownik według numeracji jednostki; nie generujemy go z liczby
 załączników. Ten sam numer może dotyczyć kilku kartotek. Jeden PDF dotyczy jednej
 kartoteki. Zmianę numeru przy generowaniu mogą zapisać tylko użytkownicy, których
 zmiany kartoteki nie wymagają akceptacji. Pozostali mogą drukować zatwierdzony
-numer, a jego zmianę zgłaszają normalną edycją kartoteki.
+numer i datę, a ich zmianę zgłaszają normalną edycją kartoteki.
+Formularz podpowiada przykład `OT/001/2026`, bez narzucania go historycznym numerom.
 
 Generator OT współdzieli z LT czcionki, nagłówek, obramowania, podpisy, stopkę
 i mechanizm stronicowania. Treść jest dostosowana do przyjęcia. Drukuje ilość
 ewidencyjną oraz zapisaną wartość zakupu, bez przeliczania jej przez ilość.
-Nie zmienia dat, statusu ani ilości kartoteki. Można wydrukować historyczne OT
+Zapisuje datę przyjęcia, bez zmiany daty zakupu, statusu ani ilości kartoteki. Można wydrukować historyczne OT
 również dla kartoteki archiwalnej.
 
 PDF jest chronionym systemowym załącznikiem typu OT. Numer dokumentu i data
 czynności są zapisane także w metadanych załącznika. Każde wygenerowanie tworzy
 nowy plik i wpis historii; wcześniejsze PDF pozostają bez zmian.
-Formularz sprawdza zmianę numeru w innej karcie. Zapis numeru, metadanych i historii
+Formularz sprawdza zmianę numeru lub daty w innej karcie, dopuszczając ponowienie
+z tymi samymi danymi. Zapis numeru, daty, metadanych i historii
 jest transakcyjny; błąd usuwa wyłącznie nowo utworzony plik.
 
 Pole OT pozostaje częścią danych kartoteki w Full i Lite. Generowanie i załączniki

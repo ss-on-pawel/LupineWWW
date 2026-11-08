@@ -46,6 +46,7 @@ class OtDocumentTests(TestCase):
 
     def payload(self, **kwargs):
         return {"document_number": "OT/12/2020", "expected_document_number": "OT/12/2020",
+                "expected_commissioning_date": "2020-02-03",
                 "date_of_action": "2020-02-03", "notes": "Podstawa <umowa> & odbiór", **kwargs}
 
     def generate(self, **kwargs):
@@ -60,6 +61,7 @@ class OtDocumentTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["form"].initial["document_number"], "OT/12/2020")
         self.assertEqual(response.context["form"].initial["date_of_action"], date(2020, 2, 3))
+        self.assertContains(response, 'name="date_of_action" value="2020-02-03"')
         self.assertFalse(self.asset.attachments.exists())
 
     def test_number_field_is_optional_and_separate_from_invoice(self):
@@ -68,17 +70,57 @@ class OtDocumentTests(TestCase):
         self.assertEqual(field.label, "Dokument OT")
         self.assertTrue(AssetForm().fields["inventory_number"].required)
 
-    def test_generation_preserves_dates_status_quantities_and_invoice(self):
+    def test_generation_saves_commissioning_date_preserving_other_asset_fields(self):
         before = Asset.objects.values().get(pk=self.asset.pk)
         self.assertEqual(self.generate(date_of_action="2019-01-02").status_code, 200)
         after = Asset.objects.values().get(pk=self.asset.pk)
+        self.assertEqual(after["commissioning_date"], date(2019, 1, 2))
+        for key in ("commissioning_date", "updated_at"):
+            before.pop(key)
+            after.pop(key)
         self.assertEqual(before, after)
+        self.assertTrue(self.asset.history_entries.filter(field_name="commissioning_date",
+                         old_value="2020-02-03", new_value="2019-01-02").exists())
         attachment = self.asset.attachments.get()
         self.assertEqual(attachment.document_type, "ot")
         self.assertEqual(attachment.document_number, "OT/12/2020")
         self.assertEqual(attachment.date_of_action, date(2019, 1, 2))
         self.assertTrue(attachment.is_protected and attachment.is_system_generated)
         self.assertTrue(self.asset.history_entries.filter(description="Wygenerowano dokument OT").exists())
+
+    def test_missing_date_is_saved_and_restored_with_number_when_reopening_form(self):
+        Asset.objects.filter(pk=self.asset.pk).update(commissioning_date=None)
+        for _ in range(2):
+            response = self.generate(document_number="OT/NEW/2026", date_of_action="2026-11-08",
+                                     expected_commissioning_date="")
+            self.assertEqual(response["Content-Type"], "application/pdf")
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["form"].initial["document_number"], "OT/NEW/2026")
+        self.assertEqual(response.context["form"].initial["date_of_action"], date(2026, 11, 8))
+        response = self.client.get(reverse("assets:api-list"))
+        self.assertEqual(response.json()["results"][0]["commissioning_date"], "2026-11-08")
+        self.assertEqual(self.asset.history_entries.filter(field_name="commissioning_date").count(), 1)
+
+    def test_other_tab_date_change_is_protected(self):
+        Asset.objects.filter(pk=self.asset.pk).update(commissioning_date=date(2021, 1, 1))
+        response = self.generate()
+        self.assertContains(response, "Data przyjęcia zmieniła się")
+        self.assertFalse(self.asset.attachments.exists())
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.commissioning_date, date(2021, 1, 1))
+
+    def test_date_cannot_bypass_approval_and_is_not_saved_on_pdf_failure(self):
+        self.client.force_login(self.user)
+        response = self.generate(date_of_action="2026-11-08")
+        self.assertContains(response, "Zmiana daty wymaga zatwierdzenia")
+        self.assertFalse(self.asset.attachments.exists())
+        self.client.force_login(self.admin)
+        with patch("assets.documents.generate_ot_pdf", side_effect=RuntimeError("PDF failure")):
+            with self.assertRaises(RuntimeError):
+                self.generate(date_of_action="2026-11-08", document_number="NEW")
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.commissioning_date, date(2020, 2, 3))
+        self.assertEqual(self.asset.ot_document_number, "OT/12/2020")
 
     def test_admin_can_set_number_without_filling_blank_inventory_number(self):
         self.assertEqual(self.generate(document_number="OT/15/2020").status_code, 200)
