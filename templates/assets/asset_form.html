@@ -161,6 +161,7 @@
                 <div class="form-field">
                     {{ form.invoice_number.label_tag }}
                     {{ form.invoice_number }}
+                    {% if form.invoice_number.help_text %}<div class="helptext">{{ form.invoice_number.help_text }}</div>{% endif %}
                     {{ form.invoice_number.errors }}
                 </div>
                 <div class="form-field">

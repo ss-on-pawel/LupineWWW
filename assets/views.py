@@ -156,7 +156,7 @@ EXPORTABLE_ASSET_COLUMNS = {
         "value": lambda asset, context: asset.ot_document_number,
     },
     "invoice_number": {
-        "label": "Nr faktury",
+        "label": "Nr dokumentu",
         "value": lambda asset, context: asset.invoice_number,
     },
     "external_id": {

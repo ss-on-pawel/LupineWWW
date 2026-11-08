@@ -84,3 +84,8 @@ powinno dawać identyczne bajty PDF. Próbki OT wymagają wizualnej kontroli.
 Znany niezależny problem: główny AssetForm nadal wymaga numeru inwentarzowego.
 Nie zmieniono tej zasady. Uprawniony użytkownik może zapisać numer OT z formularza
 generowania także dla kartoteki z pustym numerem inwentarzowym.
+
+Pole „Nr dokumentu” (technicznie nadal `invoice_number` dla zgodności danych/API)
+przechowuje numer dowolnego dokumentu stanowiącego podstawę przyjęcia, np. faktury,
+protokołu lub dokumentu przekazania. Jest odrębne od numeru OT. Dotychczasowe wartości
+pozostają bez zmian. Migracja 0031 aktualizuje wyłącznie metadane nazwy pola.

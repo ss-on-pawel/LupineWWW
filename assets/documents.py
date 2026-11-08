@@ -1128,7 +1128,7 @@ def _ot_asset_table(assets):
             ("Lokalizacja", asset.location),
             ("Ilość ewidencyjna", str(asset.record_quantity)),
             ("Wartość zakupu (zł)", str(asset.purchase_value) if asset.purchase_value is not None else ""),
-            ("Numer faktury", asset.invoice_number),
+            ("Nr dokumentu", asset.invoice_number),
             ("Data zakupu", asset.purchase_date.strftime("%d.%m.%Y") if asset.purchase_date else ""),
         ]
         for label, value in values:

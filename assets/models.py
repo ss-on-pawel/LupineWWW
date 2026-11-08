@@ -108,7 +108,7 @@ class Asset(models.Model):
         max_length=120,
         blank=True,
         db_index=True,
-        verbose_name="Numer faktury",
+        verbose_name="Nr dokumentu",
     )
     external_id = models.CharField(
         max_length=120,

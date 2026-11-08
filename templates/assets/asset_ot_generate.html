@@ -5,7 +5,7 @@
     <h1>OT — Przyjęcie środka trwałego / wyposażenia</h1>
     <p>{{ asset.name }} · {{ asset.inventory_number|default:"Brak numeru inwentarzowego" }}</p>
     <p>PDF zostanie zapisany jako chroniony załącznik przy kartotece. Ponowne wygenerowanie zachowa wcześniejsze dokumenty.</p>
-    <p>Numer OT jest niezależny od numeru faktury. Numer i data zostaną zapamiętane w kartotece. Data dokumentu jest wspólna z polem „Przyjęcie do użycia” w ewidencji.</p>
+    <p>Numer OT jest niezależny od pola „Nr dokumentu”, które określa podstawę przyjęcia. Numer i data zostaną zapamiętane w kartotece. Data dokumentu jest wspólna z polem „Przyjęcie do użycia” w ewidencji.</p>
     <form method="post">
         {% csrf_token %}
         {{ form.expected_document_number }}

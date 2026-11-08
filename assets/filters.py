@@ -77,7 +77,7 @@ ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
     "organizational_unit": FilterFieldSpec("organizational_unit", "Jednostka organizacyjna", "text", "organizational_unit", TYPE_OPERATORS["text"]),
     "room": FilterFieldSpec("room", "Pomieszczenie", "text", "room", TYPE_OPERATORS["text"]),
     "ot_document_number": FilterFieldSpec("ot_document_number", "Dokument OT", "text", "ot_document_number", TYPE_OPERATORS["text"]),
-    "invoice_number": FilterFieldSpec("invoice_number", "Nr faktury", "text", "invoice_number", TYPE_OPERATORS["text"]),
+    "invoice_number": FilterFieldSpec("invoice_number", "Nr dokumentu", "text", "invoice_number", TYPE_OPERATORS["text"]),
     "external_id": FilterFieldSpec("external_id", "ID zewnętrzne", "text", "external_id", TYPE_OPERATORS["text"]),
     "cost_center": FilterFieldSpec("cost_center", "MPK / koszt", "text", "cost_center", TYPE_OPERATORS["text"]),
     "status": FilterFieldSpec(
