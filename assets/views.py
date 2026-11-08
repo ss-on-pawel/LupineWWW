@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from functools import wraps
 from datetime import date
 
 from accounts.utils import get_accessible_location_ids
@@ -717,6 +718,19 @@ def asset_change_reject(request, pk):
     return redirect("assets:change-detail", pk=change_request.pk)
 
 
+def _ot_number_conflicts_as_form_errors(method):
+    @wraps(method)
+    def wrapped(self, form):
+        try:
+            return method(self, form)
+        except ValidationError as error:
+            if hasattr(error, "message_dict") and "ot_document_number" in error.message_dict:
+                form.add_error("ot_document_number", error.message_dict["ot_document_number"])
+                return self.form_invalid(form)
+            raise
+    return wrapped
+
+
 class AssetCreateView(LoginRequiredMixin, CreateView):
     model = Asset
     form_class = AssetForm
@@ -728,6 +742,7 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
         context["page_title"] = "Dodaj składnik majątku"
         return context
 
+    @_ot_number_conflicts_as_form_errors
     def form_valid(self, form):
         if user_requires_asset_change_approval(self.request.user):
             AssetChangeRequest.objects.create(
@@ -775,6 +790,7 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
         context["page_title"] = "Edytuj składnik majątku"
         return context
 
+    @_ot_number_conflicts_as_form_errors
     def form_valid(self, form):
         if user_requires_asset_change_approval(self.request.user):
             current_asset = self.get_queryset().get(pk=self.object.pk)
@@ -1479,12 +1495,14 @@ def asset_generate_ot_pdf(request, asset_id):
     location_ids = get_accessible_location_ids(request.user)
     if location_ids is not None and asset.location_fk_id not in location_ids:
         raise Http404
+    from .ot_numbering import allocate_ot_number, reserve_ot_number, suggest_ot_number
     form = OtDocumentForm(request.POST if request.method == "POST" else None, initial={
         "document_number": asset.ot_document_number,
         "expected_document_number": asset.ot_document_number,
         "expected_commissioning_date": asset.commissioning_date.isoformat() if asset.commissioning_date else "",
         "date_of_action": asset.commissioning_date,
     })
+    form.fields["document_number"].widget.attrs["placeholder"] = suggest_ot_number()
     if request.method == "POST" and form.is_valid():
         attachment = None
         try:
@@ -1492,7 +1510,7 @@ def asset_generate_ot_pdf(request, asset_id):
                 asset = Asset.objects.select_for_update().get(pk=asset_id)
                 if location_ids is not None and asset.location_fk_id not in location_ids:
                     raise Http404
-                number = form.cleaned_data["document_number"]
+                number = form.cleaned_data["document_number"] or asset.ot_document_number
                 action_date = form.cleaned_data["date_of_action"]
                 current_date = asset.commissioning_date.isoformat() if asset.commissioning_date else ""
                 if (form.cleaned_data["expected_document_number"] != asset.ot_document_number
@@ -1501,11 +1519,15 @@ def asset_generate_ot_pdf(request, asset_id):
                 elif (form.cleaned_data["expected_commissioning_date"] != current_date
                         and action_date != asset.commissioning_date):
                     form.add_error(None, "Data przyjęcia zmieniła się w innej karcie. Otwórz formularz ponownie.")
-                elif number != asset.ot_document_number and user_requires_asset_change_approval(request.user):
+                elif (not number or number != asset.ot_document_number) and user_requires_asset_change_approval(request.user):
                     form.add_error("document_number", "Zmiana numeru wymaga zatwierdzenia. Zgłoś ją przez edycję kartoteki, a po zatwierdzeniu wygeneruj OT.")
                 elif action_date != asset.commissioning_date and user_requires_asset_change_approval(request.user):
                     form.add_error("date_of_action", "Zmiana daty wymaga zatwierdzenia. Zgłoś ją przez edycję kartoteki, a po zatwierdzeniu wygeneruj OT.")
                 else:
+                    if not number:
+                        number = allocate_ot_number(asset.pk)
+                    else:
+                        reserve_ot_number(number, asset.pk, allow_existing=(number == asset.ot_document_number))
                     now = timezone.now()
                     pdf = generate_ot_pdf(
                         assets=[asset], org=OrganizationSettings.get(),
@@ -1540,11 +1562,14 @@ def asset_generate_ot_pdf(request, asset_id):
                     )
             if not form.errors:
                 return FileResponse(io.BytesIO(pdf), content_type="application/pdf", as_attachment=True, filename=filename)
-        except Exception:
+        except Exception as error:
             # A database rollback cannot remove a newly written storage object.
             if attachment is not None and attachment.file and attachment.file._committed:
                 attachment.file.delete(save=False)
-            raise
+            if isinstance(error, ValidationError) and hasattr(error, "message_dict") and "ot_document_number" in error.message_dict:
+                form.add_error("document_number", error.message_dict["ot_document_number"])
+            else:
+                raise
     return render(request, "assets/asset_ot_generate.html", {"asset": asset, "form": form})
 
 

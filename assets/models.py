@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -260,7 +260,15 @@ class Asset(models.Model):
         all_synced_fields = synced_fields | synced_location_fields | synced_active_fields
         if update_fields is not None and all_synced_fields:
             kwargs["update_fields"] = set(update_fields) | all_synced_fields
-        super().save(*args, **kwargs)
+        if self.ot_document_number and (update_fields is None or "ot_document_number" in update_fields):
+            with transaction.atomic():
+                previous = type(self).objects.filter(pk=self.pk).values_list("ot_document_number", flat=True).first() if self.pk else None
+                super().save(*args, **kwargs)
+                if previous != self.ot_document_number:
+                    from .ot_numbering import reserve_ot_number
+                    reserve_ot_number(self.ot_document_number, self.pk)
+        else:
+            super().save(*args, **kwargs)
 
     def _sync_active_from_status(self) -> set[str]:
         is_active = self.status != self.Status.LIQUIDATED
@@ -305,6 +313,16 @@ class Asset(models.Model):
             return AssetTypeDictionary.objects.get(code=code)
         except AssetTypeDictionary.DoesNotExist:
             return None
+
+
+class OtDocumentSequence(models.Model):
+    year = models.PositiveSmallIntegerField(unique=True)
+    next_number = models.PositiveBigIntegerField(default=1)
+
+
+class OtDocumentNumber(models.Model):
+    key = models.CharField(max_length=360, unique=True)
+    asset = models.ForeignKey(Asset, on_delete=models.PROTECT)
 
 
 class AssetTypeDictionary(models.Model):

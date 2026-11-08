@@ -158,7 +158,7 @@ class OtDocumentTests(TestCase):
 
     def test_invalid_form_does_not_write(self):
         for kwargs in ({"date_of_action": ""}, {"date_of_action": "not-date"},
-                       {"document_number": ""}, {"document_number": "X" * 121},
+                       {"document_number": "X" * 121},
                        {"notes": "X" * 1001}):
             response = self.generate(**kwargs)
             self.assertTrue(response.context["form"].errors)

@@ -15,9 +15,6 @@
             {% for field in form.visible_fields %}
                 <div class="form-field{% if field.name == 'notes' %} field-wide{% endif %}">
                     {{ field.label_tag }}{{ field }}{{ field.errors }}
-                    {% if field.name == 'document_number' %}
-                        <div class="helptext">Przykład: OT/001/2026 — typ dokumentu / kolejny numer / rok. Stosuj numerację swojej jednostki; dotychczasowe numery można zachować.</div>
-                    {% endif %}
                 </div>
             {% endfor %}
         </div>

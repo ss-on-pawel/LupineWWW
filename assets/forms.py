@@ -19,7 +19,7 @@ SYSTEM_MANAGED_ASSET_FIELDS = frozenset(
 
 
 class OtDocumentForm(forms.Form):
-    document_number = forms.CharField(label="Dokument OT", max_length=120, strip=False)
+    document_number = forms.CharField(label="Dokument OT", max_length=120, strip=False, required=False)
     expected_document_number = forms.CharField(required=False, strip=False, widget=forms.HiddenInput)
     expected_commissioning_date = forms.CharField(required=False, widget=forms.HiddenInput)
     date_of_action = forms.DateField(
@@ -31,9 +31,7 @@ class OtDocumentForm(forms.Form):
 
     def clean_document_number(self):
         number = self.cleaned_data["document_number"]
-        if not number.strip():
-            raise forms.ValidationError("Podaj numer dokumentu OT.")
-        return number
+        return number if number.strip() else ""
 
 
 class AssetForm(forms.ModelForm):
@@ -113,6 +111,16 @@ class AssetForm(forms.ModelForm):
             "barcode": "Pole opcjonalne. Jeśli zostanie podane, musi być unikalne.",
             "purchase_value": "Kwota brutto lub netto zgodnie z przyjętą polityką ewidencji.",
         }
+
+    def clean_ot_document_number(self):
+        from .ot_numbering import check_ot_number_available
+        number = self.cleaned_data.get("ot_document_number", "")
+        if number:
+            try:
+                check_ot_number_available(number, self.instance.pk, allow_existing=True)
+            except forms.ValidationError as error:
+                raise forms.ValidationError(error.message_dict["ot_document_number"])
+        return number
 
     def clean_barcode(self):
         barcode = (self.cleaned_data.get("barcode") or "").strip()

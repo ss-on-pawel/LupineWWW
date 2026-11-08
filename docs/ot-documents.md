@@ -13,12 +13,19 @@ wymaga jej podania. Numer oraz data zatwierdzone przy generowaniu są zapamięty
 w kartotece. Data dokumentu jest polem `commissioning_date`, widocznym w ewidencji
 jako „Przyjęcie do użycia”. Nie podstawiamy dzisiejszej daty za nieznaną historyczną.
 
-Numer wpisuje użytkownik według numeracji jednostki; nie generujemy go z liczby
-załączników. Ten sam numer może dotyczyć kilku kartotek. Jeden PDF dotyczy jednej
-kartoteki. Zmianę numeru przy generowaniu mogą zapisać tylko użytkownicy, których
+Puste pole numeru pokazuje kolejny wolny numer jako placeholder, np. `OT/001/2026`.
+Pozostawienie go pustego nadaje numer automatycznie przy zapisie, według rocznego
+licznika we własnej bazie klienta. Podpowiedź GET nie rezerwuje numeru. Blokada
+wiersza licznika i unikalny rejestr numerów chronią równoległe zapisy. Numeracja
+uwzględnia stare kartoteki oraz załączniki OT, zlikwidowane środki i wcześniejsze
+rezerwacje. Luki po wykorzystanych numerach nie są ponownie przydzielane.
+Nowe przypisanie numeru wykorzystanego przez inny środek jest blokowane, także
+w zwykłym formularzu kartoteki i modelowym save(). Historyczne wspólne numery
+pozostają nietknięte i mogą być ponownie drukowane przy ich dotychczasowych kartotekach.
+Jeden PDF dotyczy jednej kartoteki. Zmianę numeru przy generowaniu mogą zapisać tylko użytkownicy, których
 zmiany kartoteki nie wymagają akceptacji. Pozostali mogą drukować zatwierdzony
 numer i datę, a ich zmianę zgłaszają normalną edycją kartoteki.
-Formularz podpowiada przykład `OT/001/2026`, bez narzucania go historycznym numerom.
+Nie narzucamy nowego formatu zachowanym numerom historycznym.
 
 Generator OT współdzieli z LT czcionki, nagłówek, obramowania, podpisy, stopkę
 i mechanizm stronicowania. Treść jest dostosowana do przyjęcia. Drukuje ilość
@@ -37,6 +44,10 @@ Pole OT pozostaje częścią danych kartoteki w Full i Lite. Generowanie i zał�
 są dostępne w Full, analogicznie do istniejących dokumentów LT.
 
 ## Aktualizacja danych
+
+Migracja `assets.0030_ot_numbering` dodaje roczny licznik i unikalny rejestr
+rezerwacji. Wpisuje do niego dotychczasowe numery z kartotek i załączników OT,
+bez zmieniania źródłowych danych i bez rozdzielania historycznych wspólnych numerów.
 
 Migracja `assets.0029_asset_ot_document` dodaje puste pola i typ OT. Nie zmienia
 starych numerów, faktur, opisów ani załączników. Starsze oczekujące wnioski edycji
