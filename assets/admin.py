@@ -54,6 +54,7 @@ class AssetAdmin(admin.ModelAdmin):
         "barcode",
         "external_id",
         "invoice_number",
+        "ot_document_number",
         "manufacturer",
         "model",
         "cost_center",
@@ -111,6 +112,7 @@ class AssetAdmin(admin.ModelAdmin):
                     "commissioning_date",
                     "purchase_value",
                     "invoice_number",
+                    "ot_document_number",
                 )
             },
         ),

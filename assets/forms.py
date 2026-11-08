@@ -18,6 +18,23 @@ SYSTEM_MANAGED_ASSET_FIELDS = frozenset(
 )
 
 
+class OtDocumentForm(forms.Form):
+    document_number = forms.CharField(label="Dokument OT", max_length=120, strip=False)
+    expected_document_number = forms.CharField(required=False, strip=False, widget=forms.HiddenInput)
+    date_of_action = forms.DateField(
+        label="Data przyjęcia do użytkowania", widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    issuing_unit_text = forms.CharField(label="Jednostka realizująca", max_length=200, required=False)
+    notes = forms.CharField(label="Podstawa przyjęcia / uwagi", max_length=1000, required=False,
+                            widget=forms.Textarea(attrs={"rows": 4}))
+
+    def clean_document_number(self):
+        number = self.cleaned_data["document_number"]
+        if not number.strip():
+            raise forms.ValidationError("Podaj numer dokumentu OT.")
+        return number
+
+
 class AssetForm(forms.ModelForm):
     asset_type = forms.ChoiceField(label="Rodzaj", required=False)
     location_fk = forms.ModelChoiceField(
@@ -62,6 +79,7 @@ class AssetForm(forms.ModelForm):
             "commissioning_date",
             "purchase_value",
             "invoice_number",
+            "ot_document_number",
             "external_id",
             "cost_center",
             "organizational_unit",

@@ -431,6 +431,9 @@
             </div>
         </div>
         <div class="asset-actions">
+            {% if features.asset_ot_documents %}
+                <a class="ui-btn ui-btn--secondary" href="{% url 'assets:ot-generate' asset.id %}">Dokument OT</a>
+            {% endif %}
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
             {% if features.asset_withdraw and asset.is_active %}
@@ -585,6 +588,10 @@
                         <div class="detail-item">
                             <span class="detail-label">Wartość</span>
                             <div class="detail-value is-mono">{% if asset.purchase_value %}{{ asset.purchase_value }} zł{% else %}-{% endif %}</div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Dokument OT</span>
+                            <div class="detail-value is-mono">{{ asset.ot_document_number|default:"-" }}</div>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Numer faktury</span>

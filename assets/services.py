@@ -106,6 +106,11 @@ def _asset_barcode_candidate_exists(*, Asset, Location, barcode):
 
 
 ASSET_HISTORY_FIELD_SPECS = {
+    "ot_document_number": {
+        "label": "Dokument OT",
+        "description": "Zmieniono numer dokumentu OT",
+        "value": lambda asset: _format_empty(asset.ot_document_number),
+    },
     "inventory_number": {
         "label": "Numer inwentarzowy",
         "description": "Zmieniono numer inwentarzowy",
@@ -379,14 +384,19 @@ def approve_asset_change_request(change_request, reviewer):
                 field_name: getattr(asset, field_name)
                 for field_name in AssetForm.Meta.fields
             }
-            if serialize_asset_form_payload(
+            serialized_current = serialize_asset_form_payload(
                 actual_current,
                 exclude_system_managed=True,
-            ) != _without_system_managed_asset_fields(payload["current"]):
+            )
+            # Requests created before OT was introduced did not snapshot this field.
+            if "ot_document_number" not in payload["current"]:
+                serialized_current.pop("ot_document_number", None)
+            if serialized_current != _without_system_managed_asset_fields(payload["current"]):
                 raise ValidationError("Asset has changed since the request was created.")
 
             before_values = capture_asset_history_values(asset)
             form_data = deserialize_asset_payload_for_form(payload["proposed"])
+            form_data.setdefault("ot_document_number", asset.ot_document_number)
             form = AssetForm(data=form_data, instance=asset)
             if not form.is_valid():
                 raise ValidationError(form.errors)

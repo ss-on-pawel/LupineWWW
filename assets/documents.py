@@ -20,6 +20,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
+    KeepTogether,
     PageTemplate,
     Paragraph,
     Spacer,
@@ -186,6 +187,8 @@ def _draw_page_frame(canvas, doc):
     canvas.saveState()
     ts = getattr(doc, "_lt_generated_at_str", "")
     doc_num = getattr(doc, "_lt_doc_number", "")
+    if getattr(doc, "_formal_document_type", "LT") == "OT" and len(doc_num) > 40:
+        doc_num = doc_num[:39] + "…"
     page_num = canvas.getPageNumber()
     total_pages = getattr(doc, "_lt_total_pages", "?")
 
@@ -212,7 +215,7 @@ def _draw_page_frame(canvas, doc):
 # Public API
 # ---------------------------------------------------------------------------
 
-def generate_lt_pdf(
+def _generate_asset_pdf(
     assets,
     org,
     date_of_action: date,
@@ -221,6 +224,7 @@ def generate_lt_pdf(
     issuing_unit_text: str = "",
     notes: str = "",
     doc_number: str = "",
+    document_type: str = "LT",
 ) -> io.BytesIO:
     """
     Generate an LT formal liquidation document as an immutable PDF.
@@ -239,6 +243,12 @@ def generate_lt_pdf(
         BytesIO buffer at position 0 containing the PDF.
     """
     assets = list(assets)
+    if document_type == "OT":
+        from types import SimpleNamespace
+        from xml.sax.saxutils import escape
+        org = SimpleNamespace(**{key: escape(getattr(org, key, "") or "")
+                                 for key in ("full_name", "short_name", "report_footer")})
+        issuing_unit_text, notes = (escape(value) for value in (issuing_unit_text, notes))
 
     buffer = io.BytesIO()
 
@@ -249,13 +259,14 @@ def generate_lt_pdf(
         rightMargin=_MARGIN_R,
         topMargin=_MARGIN_T,
         bottomMargin=_MARGIN_B,
-        title="LT — Likwidacja środka trwałego",
+        title=("OT — Przyjęcie środka trwałego" if document_type == "OT" else "LT — Likwidacja środka trwałego"),
         author=_operator_display(generated_by),
     )
 
     # Attach metadata for footer callback
     doc._lt_generated_at_str = generated_at.strftime("%Y-%m-%d %H:%M") if generated_at else ""
-    doc._lt_doc_number = doc_number or "LT/—"
+    doc._lt_doc_number = doc_number or f"{document_type}/—"
+    doc._formal_document_type = document_type
     doc._lt_total_pages = "?"   # patched after build via two-pass
 
     frame = Frame(
@@ -268,7 +279,7 @@ def generate_lt_pdf(
 
     story = _build_story(
         assets, org, date_of_action, generated_by,
-        generated_at, issuing_unit_text, notes, doc_number,
+        generated_at, issuing_unit_text, notes, doc_number, document_type,
     )
 
     # Two-pass build for accurate page count in footer
@@ -286,11 +297,12 @@ def generate_lt_pdf(
         rightMargin=_MARGIN_R,
         topMargin=_MARGIN_T,
         bottomMargin=_MARGIN_B,
-        title="LT — Likwidacja środka trwałego",
+        title=("OT — Przyjęcie środka trwałego" if document_type == "OT" else "LT — Likwidacja środka trwałego"),
         author=_operator_display(generated_by),
     )
     doc2._lt_generated_at_str = doc._lt_generated_at_str
     doc2._lt_doc_number = doc._lt_doc_number
+    doc2._formal_document_type = document_type
     doc2._lt_total_pages = total
     frame2 = Frame(
         _MARGIN_L, _MARGIN_B,
@@ -301,7 +313,7 @@ def generate_lt_pdf(
     doc2.addPageTemplates([template2])
     story2 = _build_story(
         assets, org, date_of_action, generated_by,
-        generated_at, issuing_unit_text, notes, doc_number,
+        generated_at, issuing_unit_text, notes, doc_number, document_type,
     )
     doc2.build(story2)
     buffer2.seek(0)
@@ -312,43 +324,43 @@ def generate_lt_pdf(
 # Story builder
 # ---------------------------------------------------------------------------
 
-def _build_story(assets, org, date_of_action, generated_by, generated_at, issuing_unit_text, notes, doc_number):
+def _build_story(assets, org, date_of_action, generated_by, generated_at, issuing_unit_text, notes, doc_number, document_type="LT"):
     story = []
 
     # ==========================================================================
     # 1. DOCUMENT HEADER — two-column: org identity (left) | doc ref (right)
     # ==========================================================================
-    story.append(_header_table(org, date_of_action, generated_at, issuing_unit_text, doc_number))
+    story.append(_header_table(org, date_of_action, generated_at, issuing_unit_text, doc_number, document_type))
     story.append(Spacer(1, 3 * mm))
 
     # ==========================================================================
     # 2. DOCUMENT TITLE
     # ==========================================================================
-    story.append(_title_block())
+    story.append(_title_block(document_type))
     story.append(Spacer(1, 4 * mm))
 
     # ==========================================================================
     # 3. FORMAL CONTEXT — operator, doc counts
     # ==========================================================================
-    story.append(_context_table(assets, generated_by))
+    story.append(_context_table(assets, generated_by, document_type))
     story.append(Spacer(1, 5 * mm))
 
     # ==========================================================================
     # 4. SECTION LABEL — "WYKAZ ŚRODKÓW"
     # ==========================================================================
-    story.append(_section_label("WYKAZ ŚRODKÓW OBJĘTYCH LIKWIDACJĄ"))
+    story.append(_section_label("PRZYJĘCIE DO UŻYTKOWANIA" if document_type == "OT" else "WYKAZ ŚRODKÓW OBJĘTYCH LIKWIDACJĄ"))
     story.append(Spacer(1, 1 * mm))
 
     # ==========================================================================
     # 5. MAIN ASSET TABLE
     # ==========================================================================
-    story.append(_asset_table(assets))
+    story.append(_ot_asset_table(assets) if document_type == "OT" else _asset_table(assets))
     story.append(Spacer(1, 5 * mm))
 
     # ==========================================================================
     # 6. NOTES / LEGAL BASIS
     # ==========================================================================
-    story.append(_section_label("PODSTAWA LIKWIDACJI / UWAGI"))
+    story.append(_section_label("PODSTAWA PRZYJĘCIA / UWAGI" if document_type == "OT" else "PODSTAWA LIKWIDACJI / UWAGI"))
     story.append(Spacer(1, 1 * mm))
     story.append(_notes_block(notes))
     story.append(Spacer(1, 6 * mm))
@@ -356,9 +368,11 @@ def _build_story(assets, org, date_of_action, generated_by, generated_at, issuin
     # ==========================================================================
     # 7. PLACE, DATE, SIGNATURES
     # ==========================================================================
-    story.append(_place_date_line())
-    story.append(Spacer(1, 6 * mm))
-    story.append(_signature_table())
+    signatures = [_place_date_line(), Spacer(1, 6 * mm), _signature_table()]
+    if document_type == "OT":
+        story.append(KeepTogether(signatures))
+    else:
+        story.extend(signatures)
 
     return story
 
@@ -367,7 +381,7 @@ def _build_story(assets, org, date_of_action, generated_by, generated_at, issuin
 # Section: header
 # ---------------------------------------------------------------------------
 
-def _header_table(org, date_of_action, generated_at, issuing_unit_text, doc_number):
+def _header_table(org, date_of_action, generated_at, issuing_unit_text, doc_number, document_type="LT"):
     """
     Two-column header:
       LEFT  — organization name + unit
@@ -393,12 +407,15 @@ def _header_table(org, date_of_action, generated_at, issuing_unit_text, doc_numb
     # Right cell — doc number + dates in a compact layout
     action_str = date_of_action.strftime("%d.%m.%Y") if date_of_action else "—"
     gen_str = generated_at.strftime("%d.%m.%Y") if generated_at else "—"
-    num_str = doc_number or "LT/—"
+    num_str = doc_number or f"{document_type}/—"
+    if document_type == "OT":
+        from xml.sax.saxutils import escape
+        num_str = escape(num_str)
 
     right_rows = [
         [Paragraph("Nr dokumentu:", _ps("rh_lbl", 7, color=_C_MID)),
          Paragraph(num_str, _ps("rh_num", 9, bold=True, mono=True))],
-        [Paragraph("Data czynności:", _ps("rh_lbl2", 7, color=_C_MID)),
+        [Paragraph("Data przyjęcia:" if document_type == "OT" else "Data czynności:", _ps("rh_lbl2", 7, color=_C_MID)),
          Paragraph(action_str, _ps("rh_act", 9, mono=True))],
         [Paragraph("Data wystawienia:", _ps("rh_lbl3", 7, color=_C_MID)),
          Paragraph(gen_str, _ps("rh_gen", 9, mono=True))],
@@ -438,10 +455,10 @@ def _header_table(org, date_of_action, generated_at, issuing_unit_text, doc_numb
 # Section: title
 # ---------------------------------------------------------------------------
 
-def _title_block():
+def _title_block(document_type="LT"):
     rows = [
-        [Paragraph("LT", _ps("t_abbr", 8, bold=True, color=_C_MID, alignment=1))],
-        [Paragraph("LIKWIDACJA ŚRODKA TRWAŁEGO / WYPOSAŻENIA", _ps("t_main", 12, bold=True, alignment=1))],
+        [Paragraph(document_type, _ps("t_abbr", 8, bold=True, color=_C_MID, alignment=1))],
+        [Paragraph("PRZYJĘCIE ŚRODKA TRWAŁEGO / WYPOSAŻENIA" if document_type == "OT" else "LIKWIDACJA ŚRODKA TRWAŁEGO / WYPOSAŻENIA", _ps("t_main", 12, bold=True, alignment=1))],
     ]
     tbl = Table(rows, colWidths=[_CONTENT_W])
     tbl.setStyle(TableStyle([
@@ -459,9 +476,12 @@ def _title_block():
 # Section: formal context
 # ---------------------------------------------------------------------------
 
-def _context_table(assets, generated_by):
+def _context_table(assets, generated_by, document_type="LT"):
     """Compact formal-data block: operator, asset count."""
     operator = _operator_display(generated_by)
+    if document_type == "OT":
+        from xml.sax.saxutils import escape
+        operator = escape(operator)
     count = str(len(assets))
 
     lbl = _ps("ctx_lbl", 7.5, bold=True, color=_C_DARK)
@@ -474,9 +494,9 @@ def _context_table(assets, generated_by):
          Paragraph(operator, val),
          Paragraph("Liczba pozycji:", lbl),
          Paragraph(count, val)],
-        [Paragraph("Komisja likwidacyjna:", lbl),
+        [Paragraph("Przyjął do użytkowania:" if document_type == "OT" else "Komisja likwidacyjna:", lbl),
          Paragraph(" ", val),
-         Paragraph("Przewodniczący komisji:", lbl),
+         Paragraph("Osoba odpowiedzialna:" if document_type == "OT" else "Przewodniczący komisji:", lbl),
          Paragraph(" ", val)],
         [Paragraph("Podstawa prawna:", lbl),
          Paragraph(" ", val),
@@ -1081,3 +1101,48 @@ def _asset_type_display(asset) -> str:
     if hasattr(asset, "get_asset_type_display"):
         return asset.get_asset_type_display() or "—"
     return "—"
+
+
+def generate_lt_pdf(assets, org, date_of_action, generated_by, generated_at,
+                    issuing_unit_text="", notes="", doc_number=""):
+    return _generate_asset_pdf(assets, org, date_of_action, generated_by, generated_at,
+                               issuing_unit_text, notes, doc_number)
+
+
+def generate_ot_pdf(assets, org, date_of_action, generated_by, generated_at,
+                    issuing_unit_text="", notes="", doc_number=""):
+    return _generate_asset_pdf(assets, org, date_of_action, generated_by, generated_at,
+                               issuing_unit_text, notes, doc_number, document_type="OT")
+
+
+def _ot_asset_table(assets):
+    from xml.sax.saxutils import escape
+    rows = []
+    for asset in assets:
+        values = [
+            ("Nazwa środka", asset.name),
+            ("Numer inwentarzowy", asset.inventory_number),
+            ("Kod kreskowy", asset.barcode),
+            ("Numer seryjny", asset.serial_number),
+            ("Rodzaj", _asset_type_display(asset)),
+            ("Lokalizacja", asset.location),
+            ("Ilość ewidencyjna", str(asset.record_quantity)),
+            ("Wartość zakupu (zł)", str(asset.purchase_value) if asset.purchase_value is not None else ""),
+            ("Numer faktury", asset.invoice_number),
+            ("Data zakupu", asset.purchase_date.strftime("%d.%m.%Y") if asset.purchase_date else ""),
+        ]
+        for label, value in values:
+            rows.append([Paragraph(label, _ps("ot_label", 8, bold=True)),
+                         Paragraph(escape(str(value or "—")), _ps("ot_value", 8.5))])
+    table = Table(rows, colWidths=[55 * mm, 120 * mm])
+    table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), _C_BORDER_OUTER, _C_BLACK),
+        ("INNERGRID", (0, 0), (-1, -1), _C_BORDER_INNER, _C_RULE),
+        ("BACKGROUND", (0, 0), (0, -1), _C_HDR_BG),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    return table

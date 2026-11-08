@@ -18,13 +18,13 @@ from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 import urllib.parse
 
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
-from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm, DepreciationPlanForm
+from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm, DepreciationPlanForm, OtDocumentForm
 from .models import Asset, AssetAttachment, AssetChangeRequest, AssetDepreciationPlan, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
@@ -149,6 +149,10 @@ EXPORTABLE_ASSET_COLUMNS = {
     "commissioning_date": {
         "label": "Przyjęcie do użycia",
         "value": lambda asset, context: _format_csv_date(asset.commissioning_date),
+    },
+    "ot_document_number": {
+        "label": "Dokument OT",
+        "value": lambda asset, context: asset.ot_document_number,
     },
     "invoice_number": {
         "label": "Nr faktury",
@@ -1157,6 +1161,7 @@ def build_asset_list_queryset(request):
             "commissioning_date",
             "purchase_value",
             "invoice_number",
+            "ot_document_number",
             "external_id",
             "cost_center",
             "organizational_unit",
@@ -1309,6 +1314,7 @@ def asset_list_api(request):
             "purchase_value": str(asset.purchase_value) if asset.purchase_value is not None else "",
             "purchase_value_display": f"{asset.purchase_value} zł" if asset.purchase_value is not None else "-",
             "invoice_number": asset.invoice_number,
+            "ot_document_number": asset.ot_document_number,
             "external_id": asset.external_id,
             "cost_center": asset.cost_center,
             "organizational_unit": asset.organizational_unit,
@@ -1458,6 +1464,76 @@ def asset_labels_pdf(request):
 
     buffer = generate_labels_pdf(assets, org_short_name)
     return FileResponse(buffer, content_type="application/pdf", filename="etykiety.pdf")
+
+
+@login_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def asset_generate_ot_pdf(request, asset_id):
+    require_feature(request, "asset_ot_documents")
+    from django.core.files.base import ContentFile
+    from django.utils.text import slugify
+    from .documents import generate_ot_pdf
+
+    asset = get_object_or_404(Asset, pk=asset_id)
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None and asset.location_fk_id not in location_ids:
+        raise Http404
+    form = OtDocumentForm(request.POST if request.method == "POST" else None, initial={
+        "document_number": asset.ot_document_number,
+        "expected_document_number": asset.ot_document_number,
+        "date_of_action": asset.commissioning_date,
+    })
+    if request.method == "POST" and form.is_valid():
+        attachment = None
+        try:
+            with transaction.atomic():
+                asset = Asset.objects.select_for_update().get(pk=asset_id)
+                if location_ids is not None and asset.location_fk_id not in location_ids:
+                    raise Http404
+                number = form.cleaned_data["document_number"]
+                if form.cleaned_data["expected_document_number"] != asset.ot_document_number:
+                    form.add_error(None, "Numer OT zmienił się w innej karcie. Otwórz formularz ponownie.")
+                elif number != asset.ot_document_number and user_requires_asset_change_approval(request.user):
+                    form.add_error("document_number", "Zmiana numeru wymaga zatwierdzenia. Zgłoś ją przez edycję kartoteki, a po zatwierdzeniu wygeneruj OT.")
+                else:
+                    now = timezone.now()
+                    pdf = generate_ot_pdf(
+                        assets=[asset], org=OrganizationSettings.get(),
+                        date_of_action=form.cleaned_data["date_of_action"],
+                        generated_by=request.user, generated_at=now,
+                        issuing_unit_text=form.cleaned_data["issuing_unit_text"],
+                        notes=form.cleaned_data["notes"], doc_number=number,
+                    ).getvalue()
+                    filename = f"OT_{slugify(number)[:80] or asset.pk}_{now.strftime('%Y%m%d%H%M%S')}.pdf"
+                    attachment = AssetAttachment(
+                        asset=asset, title=f"OT — Przyjęcie ({number})",
+                        original_filename=filename, content_type="application/pdf",
+                        size_bytes=len(pdf), uploaded_by=request.user,
+                        document_type=AssetAttachment.DocumentType.OT, document_number=number,
+                        date_of_action=form.cleaned_data["date_of_action"],
+                        is_system_generated=True, is_protected=True,
+                    )
+                    attachment.file.save(filename, ContentFile(pdf), save=True)
+                    before = capture_asset_history_values(asset)
+                    if number != asset.ot_document_number:
+                        asset.ot_document_number = number
+                        asset.updated_at = now
+                        Asset.objects.filter(pk=asset.pk).update(ot_document_number=number, updated_at=now)
+                        record_asset_field_changes(asset=asset, operator=request.user, before_values=before,
+                                                   source_object=attachment)
+                    record_asset_history(
+                        asset=asset, operator=request.user, event_type=AssetHistoryEntry.EventType.UPDATED,
+                        description="Wygenerowano dokument OT", new_value=number, source_object=attachment,
+                    )
+            if not form.errors:
+                return FileResponse(io.BytesIO(pdf), content_type="application/pdf", as_attachment=True, filename=filename)
+        except Exception:
+            # A database rollback cannot remove a newly written storage object.
+            if attachment is not None and attachment.file and attachment.file._committed:
+                attachment.file.delete(save=False)
+            raise
+    return render(request, "assets/asset_ot_generate.html", {"asset": asset, "form": form})
 
 
 @login_required
@@ -1806,6 +1882,7 @@ def _resolve_asset_ordering(raw_ordering):
         "last_inventory_at": "last_inventory_at",
         "last_inventory_session_number": "last_inventory_session__number",
         "invoice_number": "invoice_number",
+        "ot_document_number": "ot_document_number",
         "external_id": "external_id",
         "cost_center": "cost_center",
         "last_inventory_date": "last_inventory_date",

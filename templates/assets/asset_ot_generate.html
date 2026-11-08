@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Dokument OT{% endblock %}
+{% block content %}
+<section class="card" style="max-width: 820px;">
+    <h1>OT — Przyjęcie środka trwałego / wyposażenia</h1>
+    <p>{{ asset.name }} · {{ asset.inventory_number|default:"Brak numeru inwentarzowego" }}</p>
+    <p>PDF zostanie zapisany jako chroniony załącznik przy kartotece. Ponowne wygenerowanie zachowa wcześniejsze dokumenty.</p>
+    <p>Numer OT jest niezależny od numeru faktury. Data na wydruku nie zmienia daty przyjęcia zapisanej w kartotece.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.expected_document_number }}
+        {{ form.non_field_errors }}
+        <div class="form-grid">
+            {% for field in form.visible_fields %}
+                <div class="form-field{% if field.name == 'notes' %} field-wide{% endif %}">
+                    {{ field.label_tag }}{{ field }}{{ field.errors }}
+                    {% if field.name == 'document_number' %}
+                        <div class="helptext">Wpisz numer istniejącego dokumentu lub numer zgodny z numeracją swojej jednostki. Numer zostanie zapisany w polu Dokument OT.</div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="actions">
+            <button class="ui-btn ui-btn--primary" type="submit">Generuj i zapisz OT</button>
+            <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' asset.id %}">Wróć do kartoteki</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

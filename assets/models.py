@@ -101,6 +101,9 @@ class Asset(models.Model):
         blank=True,
         verbose_name="Wartość zakupu",
     )
+    ot_document_number = models.CharField(
+        max_length=120, blank=True, db_index=True, verbose_name="Dokument OT",
+    )
     invoice_number = models.CharField(
         max_length=120,
         blank=True,
@@ -448,6 +451,7 @@ class AssetHistoryEntry(models.Model):
 class AssetAttachment(models.Model):
     class DocumentType(models.TextChoices):
         LT = "lt", "LT — Likwidacja"
+        OT = "ot", "OT — Przyjęcie"
 
     asset = models.ForeignKey(
         Asset,
@@ -475,6 +479,9 @@ class AssetAttachment(models.Model):
         blank=True,
         db_index=True,
         verbose_name="Typ dokumentu",
+    )
+    document_number = models.CharField(
+        max_length=120, blank=True, db_index=True, verbose_name="Numer dokumentu",
     )
     date_of_action = models.DateField(
         null=True,
