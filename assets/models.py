@@ -38,6 +38,7 @@ class Asset(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nazwa")
     inventory_number = models.CharField(
         max_length=100,
+        blank=True,
         verbose_name="Numer inwentarzowy",
     )
     asset_type = models.CharField(
@@ -78,7 +79,6 @@ class Asset(models.Model):
     )
     barcode = models.CharField(
         max_length=120,
-        blank=True,
         verbose_name="Kod kreskowy",
     )
     description = models.TextField(blank=True, verbose_name="Opis")

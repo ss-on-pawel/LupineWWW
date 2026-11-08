@@ -52,6 +52,10 @@ class AssetForm(forms.ModelForm):
         ]
         self.fields["asset_type"].choices = [("", "---------")] + asset_type_choices
         self.fields["asset_type"].label = "Rodzaj"
+        # New assets may receive a generated code when saved; existing codes cannot be cleared.
+        self.fields["barcode"].required = bool(self.instance.pk)
+        if self.instance.pk:
+            self.fields["barcode"].help_text = "Kod identyfikujący środek. Musi być unikalny i nie może być pusty."
         if self.instance.pk and not self.instance.is_active:
             self.fields["status"].disabled = True
         else:
@@ -112,8 +116,8 @@ class AssetForm(forms.ModelForm):
         }
         help_texts = {
             "invoice_number": "Numer dokumentu będącego podstawą przyjęcia, np. faktury lub protokołu przekazania.",
-            "inventory_number": "Numer ewidencyjny/księgowy. Może być wspólny dla wielu składników majątku.",
-            "barcode": "Pole opcjonalne. Jeśli zostanie podane, musi być unikalne.",
+            "inventory_number": "Pole opcjonalne. Numer ewidencyjny/księgowy może być wspólny dla wielu składników majątku.",
+            "barcode": "Unikalny kod środka. Podaj własny lub pozostaw puste, aby wygenerować kod z wybranego rodzaju.",
             "purchase_value": "Kwota brutto lub netto zgodnie z przyjętą polityką ewidencji.",
         }
 

@@ -636,6 +636,55 @@ class AssetFormAssetTypeDictionaryTests(TestCase):
         data.update(overrides)
         return data
 
+    def test_optional_inventory_number_with_manual_code(self):
+        form = AssetForm(data=self._valid_form_data(inventory_number="", barcode="OPTIONAL-INVENTORY-1", asset_type=""))
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+        self.assertEqual(asset.inventory_number, "")
+        self.assertEqual(asset.barcode, "OPTIONAL-INVENTORY-1")
+        asset.full_clean()
+
+    def test_optional_inventory_number_with_generated_code(self):
+        form = AssetForm(data=self._valid_form_data(inventory_number="", barcode=""))
+        self.assertTrue(form.is_valid(), form.errors)
+        asset = form.save()
+        self.assertEqual(asset.inventory_number, "")
+        self.assertTrue(asset.barcode)
+        asset.full_clean()
+
+    def test_edit_imported_asset_without_inventory_number(self):
+        location = Location.objects.create(name="Optional inventory location")
+        asset = Asset.objects.create(name="Imported asset", inventory_number="", barcode="IMPORTED-OPTIONAL-1", location_fk=location)
+        form = AssetForm(instance=asset, data=self._valid_form_data(name="Updated imported asset", inventory_number="", barcode=asset.barcode, location_fk=str(location.pk), asset_type=""))
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        asset.refresh_from_db()
+        self.assertEqual(asset.name, "Updated imported asset")
+        self.assertEqual(asset.inventory_number, "")
+        self.assertEqual(asset.barcode, "IMPORTED-OPTIONAL-1")
+
+    def test_edit_cannot_clear_asset_code(self):
+        location = Location.objects.create(name="Required code location")
+        asset = Asset.objects.create(name="Asset with code", barcode="REQUIRED-CODE-1", location_fk=location)
+        form = AssetForm(instance=asset, data=self._valid_form_data(inventory_number="", barcode="   ", location_fk=str(location.pk)))
+        self.assertFalse(form.is_valid())
+        self.assertIn("barcode", form.errors)
+        asset.refresh_from_db()
+        self.assertEqual(asset.barcode, "REQUIRED-CODE-1")
+
+    def test_name_required_without_inventory_number(self):
+        form = AssetForm(data=self._valid_form_data(name="   ", inventory_number="", barcode="NAME-REQUIRED-1"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("name", form.errors)
+        self.assertNotIn("inventory_number", form.errors)
+
+    def test_model_requires_code_but_allows_empty_inventory_number(self):
+        asset = Asset(name="No code", inventory_number="", barcode="")
+        with self.assertRaises(ValidationError) as error:
+            asset.full_clean()
+        self.assertIn("barcode", error.exception.message_dict)
+        self.assertNotIn("inventory_number", error.exception.message_dict)
+
     def test_form_shows_active_asset_types_from_dictionary(self):
         form = AssetForm()
 
@@ -1631,6 +1680,7 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         defaults = {
             "name": "Original Asset",
             "inventory_number": inventory_number,
+            "barcode": f"CODE-{inventory_number}",
             "asset_type": Asset.AssetType.FIXED,
             "category": "IT",
             "location": location_obj.path if location_obj else "Legacy location",
@@ -3399,6 +3449,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
     def _create_asset(self, inventory_number, location):
         return Asset.objects.create(
             name=f"Post Asset {inventory_number}",
+            barcode=f"CODE-{inventory_number}",
             inventory_number=inventory_number,
             asset_type=Asset.AssetType.FIXED,
             category="IT",
@@ -6758,6 +6809,7 @@ class AssetUpdateViewTests(TestCase):
         defaults = {
             "name": "Update Asset",
             "inventory_number": inventory_number,
+            "barcode": f"CODE-{inventory_number}",
             "asset_type": Asset.AssetType.FIXED,
             "status": Asset.Status.ACTIVE,
             "technical_condition": Asset.TechnicalCondition.GOOD,
@@ -6779,7 +6831,7 @@ class AssetUpdateViewTests(TestCase):
             "manufacturer": "Dell",
             "model": "Latitude",
             "serial_number": "SN-UPDATED",
-            "barcode": "",
+            "barcode": asset.barcode,
             "description": "Updated description",
             "purchase_date": "",
             "commissioning_date": "",
@@ -7352,7 +7404,7 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(asset.inventory_number, "UPDATE-001")
         self.assertFalse(AssetChangeRequest.objects.exists())
         self.assertIn("name", response.context["form"].errors)
-        self.assertIn("inventory_number", response.context["form"].errors)
+        self.assertNotIn("inventory_number", response.context["form"].errors)
 
     def test_update_ignores_extra_post_fields(self):
         allowed_location, _ = self._create_location_tree()
@@ -7575,7 +7627,7 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(Asset.objects.count(), asset_count)
         self.assertFalse(AssetChangeRequest.objects.exists())
         self.assertIn("name", response.context["form"].errors)
-        self.assertIn("inventory_number", response.context["form"].errors)
+        self.assertNotIn("inventory_number", response.context["form"].errors)
 
     def test_user_requiring_approval_creates_change_request_without_asset(self):
         user = User.objects.create_user(username="asset-approval-required", password="test-pass-123")

@@ -68,7 +68,7 @@ class OtDocumentTests(TestCase):
         field = AssetForm().fields["ot_document_number"]
         self.assertFalse(field.required)
         self.assertEqual(field.label, "Dokument OT")
-        self.assertTrue(AssetForm().fields["inventory_number"].required)
+        self.assertFalse(AssetForm().fields["inventory_number"].required)
 
     def test_generation_saves_commissioning_date_preserving_other_asset_fields(self):
         before = Asset.objects.values().get(pk=self.asset.pk)
