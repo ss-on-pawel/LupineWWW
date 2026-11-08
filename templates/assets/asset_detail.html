@@ -467,54 +467,11 @@
             {% endif %}
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
-            {% if features.asset_withdraw and asset.is_active %}
-                <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
-                    {% csrf_token %}
-                    {{ withdrawal_form.request_id }}{{ withdrawal_form.expected_quantity }}
-                    <div class="asset-withdraw-field">
-                        {{ withdrawal_form.method.label_tag }}{{ withdrawal_form.method }}
-                    </div>
-                    <div class="asset-withdraw-field">
-                        {{ withdrawal_form.action_date.label_tag }}{{ withdrawal_form.action_date }}
-                    </div>
-                    <div class="asset-withdraw-field">
-                        {{ withdrawal_form.document_number.label_tag }}{{ withdrawal_form.document_number }}
-                    </div>
-                    {% if withdraw_capabilities.can_partial_withdraw %}
-                        <div class="asset-withdraw-field">
-                            <label for="withdraw-quantity">Ilość do wycofania</label>
-                            <input id="withdraw-quantity" type="number" name="withdraw_quantity" min="1" max="{{ withdraw_capabilities.current_quantity }}" value="1">
-                        </div>
-                    {% endif %}
-                    <div class="asset-withdraw-field asset-withdraw-field--notes">
-                        {{ withdrawal_form.notes.label_tag }}{{ withdrawal_form.notes }}
-                    </div>
-                    <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
-                </form>
-            {% endif %}
-            {% if features.asset_archive and can_restore_asset %}
-                <form method="post" action="{% url 'assets:asset-restore' asset.id %}" onsubmit="return window.confirm('Przywrócić środek do aktywnej Ewidencji?');">
-                    {% csrf_token %}
-                    <button class="ui-btn ui-btn--success" type="submit">Przywróć do Ewidencji</button>
-                </form>
-            {% endif %}
         </div>
         {% if features.asset_archive and not asset.is_active %}
             <div class="asset-archive-notice">Środek znajduje się w Archiwum</div>
         {% endif %}
 
-        <section class="detail-section" style="margin:16px 0">
-            <h2>Wycofania z ewidencji</h2>
-            {% if not asset.is_active %}<p>Stan ewidencji: <strong>Wycofany</strong>. Ilość w kartotece jest ilością historyczną.</p>{% else %}<p>Stan ewidencji: <strong>W ewidencji</strong></p>{% endif %}
-            {% for event in withdrawals %}
-                <div style="padding:12px 0;border-bottom:1px solid #ddd">
-                    <strong>{{ event.get_method_display }}</strong> · {{ event.action_date|date:"Y-m-d"|default:"Data nieustalona" }}
-                    {% if event.is_historical %} · Dane historyczne{% else %} · Ilość: {{ event.quantity }} · {% if event.is_full %}Pełne{% else %}Częściowe{% endif %} wycofanie · Pozostało w ewidencji: {{ event.quantity_after }}{% endif %}
-                    <p>Nr dokumentu: {{ event.document_number|default:"—" }} · Użytkownik: {{ event.operator|default:"Nieustalony" }}</p>
-                    {{ event.notes|linebreaksbr }}
-                </div>
-            {% empty %}<p>{% if not asset.is_active %}Sposób wycofania: Nieustalony / dane historyczne{% else %}Brak wycofań.{% endif %}</p>{% endfor %}
-        </section>
         <div class="asset-sections">
             <section class="detail-section">
                 <div class="section-head-static">
@@ -898,6 +855,58 @@
                     {% else %}
                         <p class="asset-history-empty">Brak załączników.</p>
                     {% endif %}
+                </div>
+            </section>
+            <section class="detail-section">
+                <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-wycofanie">
+                    <span class="section-icon">▶</span>
+                    <div class="section-title-wrap">
+                        <span class="section-label">Ewidencja</span>
+                        <span class="section-title-text">Wycofanie z ewidencji</span>
+                    </div>
+                </button>
+                <div class="section-body is-hidden" id="sekcja-wycofanie">
+            {% if features.asset_withdraw and asset.is_active %}
+                <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
+                    {% csrf_token %}
+                    {{ withdrawal_form.request_id }}{{ withdrawal_form.expected_quantity }}
+                    <div class="asset-withdraw-field">
+                        {{ withdrawal_form.method.label_tag }}{{ withdrawal_form.method }}
+                    </div>
+                    <div class="asset-withdraw-field">
+                        {{ withdrawal_form.action_date.label_tag }}{{ withdrawal_form.action_date }}
+                    </div>
+                    <div class="asset-withdraw-field">
+                        {{ withdrawal_form.document_number.label_tag }}{{ withdrawal_form.document_number }}
+                    </div>
+                    {% if withdraw_capabilities.can_partial_withdraw %}
+                        <div class="asset-withdraw-field">
+                            <label for="withdraw-quantity">Ilość do wycofania</label>
+                            <input id="withdraw-quantity" type="number" name="withdraw_quantity" min="1" max="{{ withdraw_capabilities.current_quantity }}" value="1">
+                        </div>
+                    {% endif %}
+                    <div class="asset-withdraw-field asset-withdraw-field--notes">
+                        {{ withdrawal_form.notes.label_tag }}{{ withdrawal_form.notes }}
+                    </div>
+                    <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
+                </form>
+            {% endif %}
+            {% if features.asset_archive and can_restore_asset %}
+                <form method="post" action="{% url 'assets:asset-restore' asset.id %}" onsubmit="return window.confirm('Przywrócić środek do aktywnej Ewidencji?');">
+                    {% csrf_token %}
+                    <button class="ui-btn ui-btn--success" type="submit">Przywróć do Ewidencji</button>
+                </form>
+            {% endif %}
+                    <h3 style="margin:20px 0 12px">Historia wycofań</h3>
+            {% if not asset.is_active %}<p>Stan ewidencji: <strong>Wycofany</strong>. Ilość w kartotece jest ilością historyczną.</p>{% else %}<p>Stan ewidencji: <strong>W ewidencji</strong></p>{% endif %}
+            {% for event in withdrawals %}
+                <div style="padding:12px 0;border-bottom:1px solid #ddd">
+                    <strong>{{ event.get_method_display }}</strong> · {{ event.action_date|date:"Y-m-d"|default:"Data nieustalona" }}
+                    {% if event.is_historical %} · Dane historyczne{% else %} · Ilość: {{ event.quantity }} · {% if event.is_full %}Pełne{% else %}Częściowe{% endif %} wycofanie · Pozostało w ewidencji: {{ event.quantity_after }}{% endif %}
+                    <p>Nr dokumentu: {{ event.document_number|default:"—" }} · Użytkownik: {{ event.operator|default:"Nieustalony" }}</p>
+                    {{ event.notes|linebreaksbr }}
+                </div>
+            {% empty %}<p>{% if not asset.is_active %}Sposób wycofania: Nieustalony / dane historyczne{% else %}Brak wycofań.{% endif %}</p>{% endfor %}
                 </div>
             </section>
         </div>
