@@ -75,7 +75,7 @@ class InventorySnapshotItem(models.Model):
     record_quantity_snapshot = models.PositiveIntegerField(null=True, blank=True)
     purchase_value_snapshot = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     location_fk_id_snapshot = models.PositiveBigIntegerField()
-    location_code = models.CharField(max_length=32, blank=True)
+    location_code = models.CharField(max_length=120, blank=True)
     location_name = models.CharField(max_length=255, blank=True)
     location_path = models.CharField(max_length=1024, blank=True)
     status_snapshot = models.CharField(max_length=30, blank=True)

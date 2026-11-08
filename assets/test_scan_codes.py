@@ -80,6 +80,15 @@ class SharedScanCodeTests(TestCase):
         self.assertTrue(form.is_valid(),form.errors)
         self.assertEqual(form.save().code,'IMP-001')
 
+    def test_long_location_code_is_preserved_in_inventory_snapshot(self):
+        from inventory.models import InventorySnapshotItem
+        code='12345678-1234-1234-1234-123456789012'
+        location=Location.objects.create(name='UUID',code=code,parent=self.root)
+        asset=Asset.objects.create(name='UUID asset',barcode='UUID-THING',location_fk=location,asset_type=Asset.AssetType.FIXED)
+        session=start_inventory_session(created_by=self.user,root_locations=[self.root],asset_types=[Asset.AssetType.FIXED])
+        self.assertEqual(session.snapshot_items.get(asset=asset).location_code,code)
+        self.assertEqual(InventorySnapshotItem._meta.get_field('location_code').max_length,120)
+
     def test_previous_code_cannot_change_meaning_for_saved_offline_scans(self):
         self.asset.barcode='NEW-THING'
         self.asset.save()
