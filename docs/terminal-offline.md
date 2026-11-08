@@ -106,7 +106,7 @@ locks the screen and completes the server logout when connected. Pending scans
 are not sent while locked. Logging in on the original account and choosing Resume
 restores the session and synchronization. An unrelated account is not signed out
 by an old deferred logout. Logout shares the same browser session as main AMS.
-Cached shell version is v4; the unchanged client is served as client-v3.js. Refresh an old open screen online to load the new interface.
+Cached shell version is v5; the client is served as client-v4.js (v3 alias retained). Refresh an old open screen online to load the new interface.
 
 
 ## Terminal screen and lock recovery

@@ -5,7 +5,7 @@ from collections import defaultdict
 from django.db import transaction
 from django.utils import timezone
 
-from assets.models import Asset
+from assets.models import Asset, ScanCode
 from locations.models import Location
 
 from .models import (
@@ -50,7 +50,7 @@ def start_inventory_session(*, created_by, root_locations, asset_types):
 
 
 @transaction.atomic
-def import_inventory_scan_text(raw_text: str, uploaded_by=None) -> InventoryScanBatch:
+def import_inventory_scan_text(raw_text: str, uploaded_by=None, allowed_location_ids=None) -> InventoryScanBatch:
     lines = [line.strip() for line in str(raw_text).splitlines() if line.strip()]
     if not lines:
         raise ValueError("Import text is empty.")
@@ -77,7 +77,11 @@ def import_inventory_scan_text(raw_text: str, uploaded_by=None) -> InventoryScan
     recognized_assets_count = 0
     unknown_codes_count = 0
 
+    allowed = allowed_location_ids
     for code in lines[1:]:
+        error = _scan_location_error(code, allowed)
+        if error:
+            raise ValueError(error)
         location = _get_location_by_code(code)
         if location is not None:
             current_location = location
@@ -129,9 +133,20 @@ def import_inventory_scan_text(raw_text: str, uploaded_by=None) -> InventoryScan
 
 
 @transaction.atomic
-def record_mobile_scan(session: "InventorySession", code: str, current_location_code: str | None) -> dict:
+def record_mobile_scan(session: "InventorySession", code: str, current_location_code: str | None, allowed_location_ids=None) -> dict:
     """Record a single barcode scan from the mobile scanner endpoint."""
     now = timezone.now()
+    error = _scan_location_error(code, allowed_location_ids)
+    if not error and current_location_code:
+        error = _scan_location_error(current_location_code, allowed_location_ids)
+        if not error and _get_location_by_code(current_location_code) is None:
+            error = 'Nieznany kod bieżącej lokalizacji. Zeskanuj lokalizację ponownie.'
+    if error:
+        _record_unknown_code(session=session, code=code, current_location=None, seen_at=now)
+        return {'ok': False, 'type': 'scan_error', 'error': error}
+    location = _get_location_by_code(code)
+    if location is not None:
+        return {'ok': True, 'type': 'location', 'location_code': location.code, 'location_name': location.name}
     current_location = None
     if current_location_code:
         current_location = _get_location_by_code(current_location_code)
@@ -172,6 +187,7 @@ def record_terminal_raw_scan(
     code: str,
     scanned_at,
     current_location_code: str | None = None,
+    allowed_location_ids=None,
 ) -> tuple[InventoryRawScan, bool]:
     """Store one terminal scan idempotently and update the inventory result."""
     normalized_code = str(code or "").strip()
@@ -188,31 +204,19 @@ def record_terminal_raw_scan(
         },
     )
     if created:
-        process_terminal_raw_scan(raw_scan)
+        process_terminal_raw_scan(raw_scan, allowed_location_ids=allowed_location_ids)
     terminal.last_seen_at = timezone.now()
     terminal.save(update_fields=["last_seen_at", "updated_at"])
     return raw_scan, created
 
 
 @transaction.atomic
-def process_terminal_raw_scan(raw_scan: InventoryRawScan) -> dict:
+def process_terminal_raw_scan(raw_scan: InventoryRawScan, allowed_location_ids=None) -> dict:
     code = (raw_scan.code or "").strip()
     now = timezone.now()
-    location = _get_location_by_code(code)
-    if location is not None:
-        raw_scan.processing_status = InventoryRawScan.ProcessingStatus.LOCATION
-        raw_scan.processing_result = {
-            "ok": True,
-            "type": "location",
-            "location_code": location.code,
-            "location_name": location.name,
-        }
-        raw_scan.processed_at = now
-        raw_scan.save(update_fields=["processing_status", "processing_result", "processed_at"])
-        return raw_scan.processing_result
-
-    result = record_mobile_scan(raw_scan.session, code, raw_scan.current_location_code or None)
-    raw_scan.processing_status = InventoryRawScan.ProcessingStatus.PROCESSED
+    result = record_mobile_scan(raw_scan.session, code, raw_scan.current_location_code or None, allowed_location_ids)
+    raw_scan.processing_status = (InventoryRawScan.ProcessingStatus.LOCATION if result['type'] == 'location' else
+                                 InventoryRawScan.ProcessingStatus.PROCESSED if result['ok'] else InventoryRawScan.ProcessingStatus.ERROR)
     raw_scan.processing_result = result
     raw_scan.processed_at = now
     raw_scan.save(update_fields=["processing_status", "processing_result", "processed_at"])
@@ -255,9 +259,19 @@ def _record_unknown_code(
 
 
 def _get_location_by_code(code: str):
-    if not code.startswith("LOC-"):
+    return Location.objects.filter(code=code, is_active=True).first()
+
+
+def _scan_location_error(code, allowed_location_ids=None):
+    entry = ScanCode.objects.filter(pk=code).first()
+    if entry and entry.asset_id is not None and entry.location_id is not None:
+        return 'Kod niejednoznaczny: środek i lokalizacja mają ten sam kod. Wyjaśnij kolizję w bazie.'
+    if entry is None or entry.location_id is None:
         return None
-    return Location.objects.filter(code=code).first()
+    location = Location.objects.filter(pk=entry.location_id, code=code).only('id', 'is_active').first()
+    if location and (not location.is_active or (allowed_location_ids is not None and location.pk not in allowed_location_ids)):
+        return 'Lokalizacja jest nieaktywna lub poza zakresem dostępu.'
+    return None
 
 
 def _get_asset_by_scan_code(code: str):

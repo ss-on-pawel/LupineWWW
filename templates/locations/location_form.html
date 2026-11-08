@@ -119,7 +119,10 @@
                             {{ form.name.errors }}
                         {% endif %}
                     </div>
-                    <p class="location-form-help">Kod zostanie nadany automatycznie.</p>
+                    <div class="location-form-field">
+                        {{ form.code.label_tag }}{{ form.code }}{{ form.code.errors }}
+                    </div>
+                    <p class="location-form-help">Możesz wpisać własny kod. Puste pole przy dodawaniu nada kod automatycznie. Kod musi być wolny w całej bazie środków i lokalizacji.</p>
                 </div>
 
                 <div class="location-form-actions">

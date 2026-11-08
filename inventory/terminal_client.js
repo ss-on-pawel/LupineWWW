@@ -284,7 +284,7 @@
             });
             const same = state.owner_id === identity.user.id && state.session_id === sessionId && state.terminal_id === created.terminal.id;
             const savedCount = same ? state.local_count : await indexCount("owner_group", [identity.user.id, sessionId, created.terminal.id]);
-            const locations = {};
+            const locations = Object.create(null);
             bootstrap.locations.forEach(location => { locations[location.code] = location; });
             const next = {owner_id: identity.user.id, owner_name: identity.user.username,
                 session_id: sessionId, session_number: bootstrap.session.number,
@@ -309,9 +309,9 @@
         try {
             while (writes.length) {
                 const event = writes[0];
-                const location = locationsByCode[event.code];
+                const location = Object.prototype.hasOwnProperty.call(locationsByCode, event.code) ? locationsByCode[event.code] : null;
                 const next = {...state, local_count: Number(state.local_count || 0) + 1, last_scan: event.code};
-                if (location) { next.current_location_code = event.code; next.current_location_label = location.path || location.name; }
+                if (location && !location.ambiguous) { next.current_location_code = event.code; next.current_location_label = location.path || location.name; }
                 const record = {...event, owner_id: state.owner_id, session_id: state.session_id,
                     terminal_id: state.terminal_id, current_location_code: next.current_location_code || "", synced: false, pending: 1};
                 await committed(["scans", "meta"], transaction => {
@@ -319,6 +319,7 @@
                     transaction.objectStore("meta").put({key: "state", value: next});
                 });
                 state = next; writes.shift();
+                if (location && location.ambiguous) message("Kod niejednoznaczny — zapisany do wyjaśnienia. Lokalizacja bez zmian.", true);
                 els.last.textContent = state.last_scan; els.location.textContent = state.current_location_label || "-";
                 els.count.textContent = String(state.local_count);
                 message("Zapisano w pamięci.");
@@ -354,7 +355,7 @@
             let batch = await pendingBatch(state.owner_id, blocked);
             if (!batch.length) return;
             const identity = await context();
-            let lastError = null;
+            let lastError = null, scanWarnings = false;
             while (batch.length && !localLock.locked) {
                 const first = batch[0];
                 const group = scan => scan.session_id + ":" + scan.terminal_id;
@@ -363,6 +364,7 @@
                         method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": identity.csrf_token}, body: JSON.stringify({scans: batch})
                     });
                     const accepted = Array.isArray(data.accepted) ? data.accepted : [];
+                    if (accepted.some(item => item.result && item.result.ok === false)) scanWarnings = true;
                     await acknowledge(accepted, batch); await counters();
                     if (data.errors && data.errors.length) throw new Error("Część skanów odrzucono. Pozostały w pamięci; pobierz kopię.");
                     if (!accepted.some(item => batch.some(scan => scan.client_scan_id === item.client_scan_id) && Number.isInteger(item.raw_scan_id))) throw new Error("Brak potwierdzeń serwera. Kolejka pozostała w pamięci.");
@@ -373,7 +375,7 @@
                 batch = await pendingBatch(state.owner_id, blocked);
             }
             if (lastError) throw lastError;
-            if (!writeFailed && !localLock.locked) message("Zsynchronizowano. Kopia skanów pozostaje na tym urządzeniu.");
+            if (!writeFailed && !localLock.locked) message(scanWarnings ? "Zsynchronizowano. Część kodów wymaga wyjaśnienia w dzienniku skanów." : "Zsynchronizowano. Kopia skanów pozostaje na tym urządzeniu.", scanWarnings);
         } catch (error) { reportError(error); }
         finally { syncing = false; }
     }

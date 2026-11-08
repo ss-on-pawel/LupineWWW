@@ -240,7 +240,7 @@
   const { session_number, session_status, scan_count: initialCount, api_url, locations } = SESSION_DATA;
 
   const locationCodes = new Set(locations.map(l => l.code));
-  const locationByCode = {};
+  const locationByCode = Object.create(null);
   locations.forEach(l => { locationByCode[l.code] = l; });
 
   let currentLocationCode = null;
@@ -387,7 +387,7 @@
 
     flash();
 
-    if (locationCodes.has(code)) {
+    if (locationCodes.has(code) && !locationByCode[code].ambiguous) {
       currentLocationCode = code;
       const loc = locationByCode[code];
       elLocation.textContent = loc.path || loc.name || code;
@@ -428,6 +428,7 @@
   }
 
   function formatResultType(data) {
+    if (data.type === 'scan_error') return data.error || 'Kod wymaga wyjaśnienia';
     if (data.type === 'location') return 'Lokalizacja';
     if (data.type === 'unknown') return 'Nieznany kod';
     const labels = {

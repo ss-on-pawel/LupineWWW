@@ -98,7 +98,10 @@ def generate_unique_asset_barcode(*, asset_type_ref=None, asset_type="", generat
 
 
 def _asset_barcode_candidate_exists(*, Asset, Location, barcode):
+    from .models import ScanCode
     return (
+        ScanCode.objects.filter(pk=barcode).exists()
+        or
         Asset.objects.filter(barcode=barcode).exists()
         or Asset.objects.filter(inventory_number=barcode).exists()
         or Location.objects.filter(code=barcode).exists()

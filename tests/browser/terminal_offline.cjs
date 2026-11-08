@@ -30,7 +30,7 @@ const server = http.createServer((req,res) => {
     const send = (data,status=200) => {res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
     if (parsed.pathname === '/seed') {res.end('<html>seed</html>'); return;}
     if (parsed.pathname === app+'sw.js') {res.writeHead(200,{'Content-Type':'application/javascript','Service-Worker-Allowed':app,'Cache-Control':'no-cache'});res.end(worker);return;}
-    if (parsed.pathname === app+'client-v3.js') {res.writeHead(200,{'Content-Type':'application/javascript'});res.end(client);return;}
+    if (parsed.pathname === app+'client-v4.js') {res.writeHead(200,{'Content-Type':'application/javascript'});res.end(client);return;}
     if (parsed.pathname === app+'offline/' || parsed.pathname === app && auth) {res.writeHead(200,{'Content-Type':'text/html'});res.end(html);return;}
     if (parsed.pathname === app+'login/') {res.writeHead(200,{'Content-Type':'text/html'});res.end('<h1>LOGIN</h1>');return;}
     if (!auth) {res.writeHead(302,{Location:app+'login/'});res.end();return;}
@@ -38,7 +38,7 @@ const server = http.createServer((req,res) => {
     if (parsed.pathname.endsWith('/context/')) {send({ok:true,user:{id:auth,username:'operator-'+auth},csrf_token:'csrf-test'});return;}
     if (parsed.pathname.endsWith('/sessions/')) {send({ok:true,sessions:[1,2].map(id=>({id,number:'INV-'+id,root_locations:'Warszawa'}))});return;}
     const match = parsed.pathname.match(/sessions\/(\d+)\/(bootstrap|terminals)/);
-    if (match && match[2] === 'bootstrap') {send({ok:true,session:{id:+match[1],number:'INV-'+match[1]},locations:[{code:'LOC-000001',name:'Pokój 101',path:'Warszawa / Pokój 101'}],terminals:[]});return;}
+    if (match && match[2] === 'bootstrap') {send({ok:true,session:{id:+match[1],number:'INV-'+match[1]},locations:[{code:'LOK GŁ.',name:'Pokój 101',path:'Warszawa / Pokój 101'},...['0001','__proto__','constructor'].map(code=>({code,name:code,path:code}))],terminals:[]});return;}
     if (match && req.method === 'POST') {
         let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{
             if (req.headers['x-csrftoken']!=='csrf-test') return send({error:'csrf'},403);
@@ -95,9 +95,9 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     console.log('PASS work screen shows scanning and sync; backup, logout and diagnostics stay in closed options');
 
     await context.setOffline(true);
-    await scan(page,'LOC-000001');await scan(page,'00001');await scan(page,'00002');await count(page,3);
+    await scan(page,'LOK GŁ.');await scan(page,'00001');await scan(page,'00002');await count(page,3);
     assert.equal((await rows(page)).length,4);
-    assert.equal((await rows(page)).filter(r=>r.code==='00002')[0].current_location_code,'LOC-000001');
+    assert.equal((await rows(page)).filter(r=>r.code==='00002')[0].current_location_code,'LOK GŁ.');
     await page.reload();await count(page,3);await ready(page);
     await page.close();page=await context.newPage();await page.goto(base+app);await count(page,3);
     console.log('PASS offline scans, correct location, offline reload and tab reopening');
@@ -172,8 +172,8 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     await page.evaluate(()=>{window.showSaveFilePicker=undefined;});
     console.log('PASS save picker runs in user gesture, writes TXT, handles cancellation without losing scans');
 
-    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v4');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
-    assert.deepEqual(keys,[app+'client-v3.js',app+'offline/']);
+    const keys=await page.evaluate(async()=>{const c=await caches.open('lupine-terminal-shell-v5');return(await c.keys()).map(r=>new URL(r.url).pathname).sort();});
+    assert.deepEqual(keys,[app+'client-v4.js',app+'offline/']);
     console.log('PASS export includes full journal; cache excludes authentication and API data');
     const other=await context.newPage();await other.goto(base+app);
     await other.waitForFunction(()=>document.querySelector('[data-startup-message]').textContent.includes('innej karcie'));
@@ -274,7 +274,10 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     assert.equal(await page.locator('[data-start-button]').isDisabled(),true);
     const receivedBeforeLogout=received.size;
     await context.setOffline(false);
-    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Wylogowano'));
+    await page.waitForFunction(()=>document.querySelector('[data-account-message]').textContent.startsWith('Wylogowano')).catch(async error=>{
+        console.log('LOGOUT_DIAGNOSTIC',{auth,logoutCalls,received:received.size},await page.evaluate(()=>({online:navigator.onLine,message:document.querySelector('[data-account-message]').textContent,startup:document.querySelector('[data-startup-message]').textContent})));
+        throw error;
+    });
     assert.equal(auth,0);assert.equal(logoutCalls,1);assert.equal(received.size,receivedBeforeLogout);
 
     const tabsBeforeLogin=(await context.pages()).length;
@@ -325,6 +328,26 @@ async function ready(page) {await page.waitForFunction(()=>document.querySelecto
     assert.equal(await delayedPage.locator('[data-startup-panel]').isVisible(),false);
     await delayed.close();
     console.log('PASS startup waits for the previous window to release its lock instead of a false conflict');
+    const arbitrary=await context.browser().newContext();
+    const arbitraryPage=await arbitrary.newPage();await arbitraryPage.goto(base+app);
+    await arbitraryPage.waitForSelector('[data-session-select] option',{state:'attached'});
+    await arbitraryPage.locator('[data-terminal-name]').fill('CODES');await arbitraryPage.locator('[data-start-button]').click();
+    await arbitraryPage.waitForSelector('[data-scan-panel]:not(.terminal-hidden)');await ready(arbitraryPage);
+    await arbitrary.setOffline(true);
+    let arbitraryCount=0;
+    for(const code of ['0001','__proto__','constructor']) {
+        await scan(arbitraryPage,code);await count(arbitraryPage,++arbitraryCount);
+        const assetCode='ASSET-AFTER-'+code;
+        await scan(arbitraryPage,assetCode);await count(arbitraryPage,++arbitraryCount);
+        assert.equal((await rows(arbitraryPage)).find(r=>r.code===assetCode).current_location_code,code);
+    }
+    await scan(arbitraryPage,'toString');await count(arbitraryPage,++arbitraryCount);
+    assert.equal((await rows(arbitraryPage)).find(r=>r.code==='toString').current_location_code,'constructor');
+    await arbitraryPage.reload();await count(arbitraryPage,arbitraryCount);
+    await scan(arbitraryPage,'ASSET-AFTER-RELOAD');await count(arbitraryPage,++arbitraryCount);
+    assert.equal((await rows(arbitraryPage)).find(r=>r.code==='ASSET-AFTER-RELOAD').current_location_code,'constructor');
+    await arbitrary.close();
+    console.log('PASS arbitrary location codes, leading zeroes, prototype-named locations, inherited object keys treated as assets, offline reload');
     await context.close();await new Promise(resolve=>server.close(resolve));
     console.log('ALL OFFLINE BROWSER TESTS PASSED; sync requests='+postCalls); console.log('Test artifacts: '+output);
 })().catch(error=>{console.error(error);process.exitCode=1;server.close();setTimeout(()=>process.exit(1),500);});

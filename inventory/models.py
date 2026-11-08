@@ -188,7 +188,7 @@ class InventoryRawScan(models.Model):
         on_delete=models.SET_NULL,
         related_name="inventory_raw_scans",
     )
-    current_location_code = models.CharField(max_length=32, blank=True)
+    current_location_code = models.CharField(max_length=120, blank=True)
     client_scan_id = models.CharField(max_length=64)
     scanned_at = models.DateTimeField()
     received_at = models.DateTimeField(auto_now_add=True)

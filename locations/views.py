@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError
 from django.db.models import Q
 from django.http import JsonResponse
 from django.http import Http404, FileResponse, HttpResponse
@@ -81,14 +82,26 @@ def location_detail(request, id):
     )
 
 
+def _save_location_form(form):
+    try:
+        return form.save()
+    except IntegrityError as error:
+        from assets.scan_codes import is_scan_code_conflict, MESSAGE
+        if not is_scan_code_conflict(error):
+            raise
+        form.add_error('code', MESSAGE)
+        return None
+
+
 @login_required
 def location_create(request):
     form = LocationForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
-        location = form.save()
-        messages.success(request, "Lokalizacja została dodana.")
-        return redirect("locations:detail", id=location.id)
+        location = _save_location_form(form)
+        if location is not None:
+            messages.success(request, "Lokalizacja została dodana.")
+            return redirect("locations:detail", id=location.id)
 
     return render(
         request,
@@ -110,9 +123,10 @@ def location_create_child(request, id):
     form = LocationForm(request.POST or None, parent=parent_location)
 
     if request.method == "POST" and form.is_valid():
-        location = form.save()
-        messages.success(request, "Podlokalizacja została dodana.")
-        return redirect("locations:detail", id=location.id)
+        location = _save_location_form(form)
+        if location is not None:
+            messages.success(request, "Podlokalizacja została dodana.")
+            return redirect("locations:detail", id=location.id)
 
     return render(
         request,
@@ -134,9 +148,10 @@ def location_update(request, id):
     form = LocationForm(request.POST or None, instance=location, parent=location.parent)
 
     if request.method == "POST" and form.is_valid():
-        location = form.save()
-        messages.success(request, "Lokalizacja została zaktualizowana.")
-        return redirect("locations:detail", id=location.id)
+        location = _save_location_form(form)
+        if location is not None:
+            messages.success(request, "Lokalizacja została zaktualizowana.")
+            return redirect("locations:detail", id=location.id)
 
     return render(
         request,
@@ -144,7 +159,7 @@ def location_update(request, id):
         {
             "page_title": f"Edycja: {location.name}",
             "form_title": "Edytuj lokalizację",
-            "form_intro": "Zmień nazwę lokalizacji bez naruszania jej miejsca w strukturze.",
+            "form_intro": "Zmień nazwę lub kod lokalizacji bez naruszania jej miejsca w strukturze.",
             "parent_location": location.parent,
             "form": form,
             "cancel_url": reverse("locations:detail", kwargs={"id": location.id}),

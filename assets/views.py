@@ -11,7 +11,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.paginator import EmptyPage, Paginator
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import DateField, Exists, OuterRef, Q, Subquery
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -723,7 +723,11 @@ def _ot_number_conflicts_as_form_errors(method):
     def wrapped(self, form):
         try:
             return method(self, form)
-        except ValidationError as error:
+        except (ValidationError, IntegrityError) as error:
+            from .scan_codes import is_scan_code_conflict, MESSAGE
+            if isinstance(error, IntegrityError) and is_scan_code_conflict(error):
+                form.add_error('barcode', MESSAGE)
+                return self.form_invalid(form)
             if hasattr(error, "message_dict") and "ot_document_number" in error.message_dict:
                 form.add_error("ot_document_number", error.message_dict["ot_document_number"])
                 return self.form_invalid(form)
@@ -755,7 +759,6 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
             messages.success(self.request, "Zmiana została przekazana do akceptacji.")
             return redirect(self.success_url)
 
-        messages.success(self.request, "Składnik majątku został zapisany.")
         response = super().form_valid(form)
         record_asset_history(
             asset=self.object,
@@ -763,6 +766,7 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
             event_type="created",
             description="Utworzono środek",
         )
+        messages.success(self.request, "Składnik majątku został zapisany.")
         return response
 
 
@@ -825,7 +829,6 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
                 messages.success(self.request, "Zmiana została przekazana do akceptacji.")
             return redirect(self.get_success_url())
 
-        messages.success(self.request, "Składnik majątku został zaktualizowany.")
         before_asset = (
             self.get_queryset()
             .select_related("asset_type_ref", "location_fk", "responsible_person", "current_user")
@@ -838,6 +841,7 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
             operator=self.request.user,
             before_values=before_values,
         )
+        messages.success(self.request, "Składnik majątku został zaktualizowany.")
         return response
 
     def get_success_url(self):

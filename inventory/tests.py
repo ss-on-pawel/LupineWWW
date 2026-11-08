@@ -3160,15 +3160,9 @@ class MobileScannerTests(TestCase):
             data=json.dumps({"code": loc_code}),
             content_type="application/json",
         )
-        # location codes pass through record_mobile_scan which checks barcode→asset, not found → unknown_code
-        # actual behavior: location code doesn't match any asset barcode → unknown_code in DB
-        # But the VIEW doesn't call record_mobile_scan for location codes...
-        # Actually the view calls record_mobile_scan for all codes, so let's check what it returns
         self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertTrue(data["ok"])
-        # Location code not found as asset barcode → 'unknown' type
-        self.assertIn(data["type"], ("unknown", "asset"))
+        self.assertEqual(response.json()["type"], "location")
+        self.assertFalse(InventoryObservedItem.objects.filter(session=self.session_a, code=loc_code).exists())
 
     # 6. Asset barcode recognized as asset
     def test_asset_barcode_recognized_as_asset(self):

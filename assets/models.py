@@ -315,6 +315,12 @@ class Asset(models.Model):
             return None
 
 
+class ScanCode(models.Model):
+    code = models.CharField(max_length=120, primary_key=True)
+    asset_id = models.BigIntegerField(null=True, db_index=True)
+    location_id = models.BigIntegerField(null=True, db_index=True)
+
+
 class OtDocumentSequence(models.Model):
     year = models.PositiveSmallIntegerField(unique=True)
     next_number = models.PositiveBigIntegerField(default=1)

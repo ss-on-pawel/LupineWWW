@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction, IntegrityError
 
 
 class OrganizationSettings(models.Model):
@@ -27,10 +27,10 @@ class OrganizationSettings(models.Model):
 class Location(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nazwa")
     code = models.CharField(
-        max_length=32,
+        max_length=120,
         unique=True,
         blank=True,
-        editable=False,
+        editable=True,
         verbose_name="Kod",
     )
     parent = models.ForeignKey(
@@ -80,6 +80,11 @@ class Location(models.Model):
         return list(reversed(nodes))
 
     def clean(self):
+        from assets.scan_codes import validate_scan_code
+        try:
+            validate_scan_code(self.code, kind='location', owner_id=self.pk)
+        except ValidationError as error:
+            raise ValidationError({'code': error.messages})
         sibling_query = type(self).objects.filter(name=self.name)
         if self.parent_id is None:
             sibling_query = sibling_query.filter(parent__isnull=True)
@@ -94,11 +99,25 @@ class Location(models.Model):
                 {"name": "Lokalizacja o tej nazwie już istnieje w tym samym miejscu struktury."}
             )
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         if not kwargs.get("update_fields"):
             self.full_clean()
         super().save(*args, **kwargs)
         if is_new and not self.code:
-            self.code = f"LOC-{self.pk:06d}"
-            super().save(update_fields=["code"])
+            from assets.scan_codes import is_scan_code_conflict, validate_scan_code
+            suffix = 0
+            while True:
+                self.code = f"LOC-{self.pk:06d}" + (f"-{suffix}" if suffix else "")
+                try:
+                    validate_scan_code(self.code, kind='location', owner_id=self.pk)
+                    with transaction.atomic():
+                        super().save(update_fields=["code"])
+                    break
+                except ValidationError:
+                    suffix += 1
+                except IntegrityError as error:
+                    if not is_scan_code_conflict(error):
+                        raise
+                    suffix += 1

@@ -22,7 +22,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from accounts.utils import get_accessible_location_ids
-from assets.models import Asset, AssetHistoryEntry, AssetTypeDictionary
+from assets.models import Asset, AssetHistoryEntry, AssetTypeDictionary, ScanCode
 from config.features import FeatureRequiredMixin, require_feature
 from locations.models import Location
 
@@ -525,21 +525,22 @@ def apply_inventory_session_to_assets(request, pk):
 
 def _get_scanned_code_counts(session):
     code_counts = defaultdict(int)
+    location_codes = set(ScanCode.objects.filter(location_id__isnull=False).values_list('code', flat=True))
     raw_texts = InventoryScanBatch.objects.filter(session=session).values_list("raw_text", flat=True)
     for raw_text in raw_texts:
         lines = [line.strip() for line in str(raw_text).splitlines() if line.strip()]
         for code in lines[1:]:
-            if code.startswith("LOC-"):
+            if code in location_codes:
                 continue
             code_counts[code] += 1
     terminal_codes = (
         InventoryRawScan.objects
         .filter(session=session)
-        .exclude(processing_status=InventoryRawScan.ProcessingStatus.LOCATION)
+        .exclude(processing_status__in=[InventoryRawScan.ProcessingStatus.LOCATION, InventoryRawScan.ProcessingStatus.ERROR])
         .values_list("code", flat=True)
     )
     for code in terminal_codes:
-        if code and not code.startswith("LOC-"):
+        if code and code not in location_codes:
             code_counts[code] += 1
     return code_counts
 
@@ -917,10 +918,7 @@ def terminal_session_bootstrap_api(request, session_id):
         get_visible_inventory_sessions(request.user).filter(status=InventorySession.Status.ACTIVE),
         pk=session_id,
     )
-    locations = [
-        {"code": location.code, "name": location.name, "path": location.path}
-        for location in Location.objects.filter(is_active=True).order_by("code", "id")
-    ]
+    locations = _scan_location_catalog(get_accessible_location_ids(request.user))
     terminals = [
         {
             "id": terminal.id,
@@ -1008,6 +1006,7 @@ def terminal_sync_api(request, session_id, terminal_id):
 
     accepted = []
     errors = []
+    allowed_location_ids = get_accessible_location_ids(request.user)
     for index, scan in enumerate(scans):
         if not isinstance(scan, dict):
             errors.append({"index": index, "error": "scan must be an object."})
@@ -1025,6 +1024,7 @@ def terminal_sync_api(request, session_id, terminal_id):
             code=code,
             scanned_at=scanned_at,
             current_location_code=scan.get("current_location_code") or None,
+            allowed_location_ids=allowed_location_ids,
         )
         accepted.append(
             {
@@ -1096,7 +1096,8 @@ def scan_file_import_api(request):
         )
 
     try:
-        batch = import_inventory_scan_text(raw_text, uploaded_by=import_user)
+        batch = import_inventory_scan_text(raw_text, uploaded_by=import_user,
+                                           allowed_location_ids=get_accessible_location_ids(import_user))
     except ValueError as exc:
         return JsonResponse({"status": "error", "message": str(exc)}, status=400)
 
@@ -1173,16 +1174,26 @@ def _get_location_subtree_ids(root_locations) -> set[int]:
     return location_ids
 
 
+def _scan_location_catalog(allowed_location_ids):
+    queryset = Location.objects.filter(is_active=True).order_by('code', 'id')
+    if allowed_location_ids is not None:
+        queryset = queryset.filter(pk__in=allowed_location_ids)
+    ambiguous = set(ScanCode.objects.filter(asset_id__isnull=False, location_id__isnull=False).values_list('code', flat=True))
+    nodes = {row['id']: row for row in Location.objects.values('id', 'name', 'parent_id')}
+    def location_path(location):
+        names, seen, node_id = [], set(), location.pk
+        while node_id in nodes and node_id not in seen:
+            seen.add(node_id)
+            names.append(nodes[node_id]['name'])
+            node_id = nodes[node_id]['parent_id']
+        return ' / '.join(reversed(names))
+    return [{'code': location.code, 'name': location.name, 'path': location_path(location),
+             'ambiguous': location.code in ambiguous} for location in queryset]
+
+
 def mobile_scan_view(request, token):
     session = get_object_or_404(InventorySession, mobile_scan_token=token)
-    locations = list(
-        Location.objects.filter(is_active=True)
-        .order_by("code")
-        .values("code", "name")
-    )
-    for loc in locations:
-        obj = Location.objects.filter(code=loc["code"]).first()
-        loc["path"] = obj.path if obj else loc["name"]
+    locations = _scan_location_catalog(_get_location_subtree_ids(session.scope_root_locations.all()))
 
     scan_count = InventoryObservedItem.objects.filter(session=session).count()
     context = {
@@ -1216,7 +1227,8 @@ def mobile_scan_api(request, token):
         return JsonResponse({"ok": False, "error": "Missing code."}, status=400)
 
     current_location_code = data.get("current_location_code") or None
-    result = record_mobile_scan(session, code, current_location_code)
+    result = record_mobile_scan(session, code, current_location_code,
+                               allowed_location_ids=_get_location_subtree_ids(session.scope_root_locations.all()))
     result["scan_count"] = InventoryObservedItem.objects.filter(session=session).count()
     return JsonResponse(result)
 
@@ -1243,7 +1255,7 @@ def session_location_sheet_pdf(request, pk):
                         content_type="application/pdf", filename=f"lokalizacje-{session.number}.pdf")
 
 
-TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v4"
+TERMINAL_SHELL_CACHE = "lupine-terminal-shell-v5"
 
 
 def _terminal_config():

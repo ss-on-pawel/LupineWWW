@@ -128,6 +128,9 @@ class AssetForm(forms.ModelForm):
         if not barcode:
             return ""
 
+        from .scan_codes import validate_scan_code
+        validate_scan_code(barcode, kind='asset', owner_id=self.instance.pk)
+
         barcode_query = Asset.objects.filter(barcode=barcode)
         if self.instance and self.instance.pk:
             barcode_query = barcode_query.exclude(pk=self.instance.pk)
@@ -144,7 +147,7 @@ class AssetForm(forms.ModelForm):
         if not unchanged_barcode and Asset.objects.filter(inventory_number=barcode).exists():
             raise forms.ValidationError("Kod kreskowy nie może być taki sam jak istniejący numer inwentarzowy.")
 
-        if Location.objects.filter(code=barcode).exists():
+        if not unchanged_barcode and Location.objects.filter(code=barcode).exists():
             raise forms.ValidationError("Kod kreskowy nie może być taki sam jak kod lokalizacji.")
 
         return barcode
