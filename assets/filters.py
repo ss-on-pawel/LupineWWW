@@ -89,7 +89,7 @@ ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
         (
             ("active", "Aktywny"),
             ("inactive", "Nieaktywny"),
-            ("liquidated", "Zlikwidowany"),
+            ("liquidated", "Wycofany"),
         ),
     ),
     "asset_type": FilterFieldSpec(

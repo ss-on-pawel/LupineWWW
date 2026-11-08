@@ -1,3 +1,4 @@
+import uuid
 import csv
 import json
 import importlib
@@ -4639,7 +4640,7 @@ class AssetExportCsvApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         rows = self._csv_rows(response)
-        self.assertEqual(rows, [["Nr inwentarzowy", "Status"], ["EXP-ARCHIVE-001", "Zlikwidowany"]])
+        self.assertEqual(rows, [["Nr inwentarzowy", "Status"], ["EXP-ARCHIVE-001", "Wycofany"]])
 
     def test_export_respects_search(self):
         response = self._export({"columns": "inventory_number,name", "search": "Monitor"})
@@ -5435,7 +5436,7 @@ class AssetBulkWithdrawApiTests(TestCase):
     def _post_bulk_withdraw(self, asset_ids):
         return self.client.post(
             reverse("assets:api-bulk-withdraw"),
-            data={"asset_ids": asset_ids},
+            data={"asset_ids": asset_ids, "method":"liquidation", "action_date":"2026-11-08", "notes":"", "document_number":"", "request_id":str(uuid.uuid4())},
             content_type="application/json",
         )
 
@@ -5537,11 +5538,11 @@ class AssetBulkWithdrawApiTests(TestCase):
         )
         self.assertEqual(entries.count(), 2)
         for entry in entries:
-            self.assertEqual(entry.description, "Wycofano środek do Archiwum.")
+            self.assertIn("Wycofanie: Likwidacja", entry.description)
             self.assertEqual(entry.operator, self.manager_user)
             self.assertEqual(entry.field_name, "is_active")
-            self.assertEqual(entry.old_value, "Aktywna Ewidencja")
-            self.assertEqual(entry.new_value, "Archiwum - Zlikwidowany")
+            self.assertEqual(entry.old_value, "W ewidencji")
+            self.assertEqual(entry.new_value, "Wycofany")
 
     def test_bulk_withdraw_rejects_archived_asset(self):
         asset = self._create_asset(
@@ -6505,7 +6506,7 @@ class AssetWithdrawViewTests(TestCase):
         return [str(message) for message in get_messages(response.wsgi_request)]
 
     def _withdraw(self, asset, status=Asset.Status.LIQUIDATED, **overrides):
-        data = {"status": status}
+        data = {"status": status, "method":"liquidation", "action_date":"2026-11-08", "notes":"", "document_number":"", "request_id":str(uuid.uuid4()), "expected_quantity":asset.current_quantity}
         data.update(overrides)
         return self.client.post(reverse("assets:asset-withdraw", kwargs={"id": asset.id}), data)
 
@@ -6526,10 +6527,10 @@ class AssetWithdrawViewTests(TestCase):
 
         entry = AssetHistoryEntry.objects.get(asset=asset)
         self.assertEqual(entry.event_type, AssetHistoryEntry.EventType.WITHDRAWN)
-        self.assertEqual(entry.description, "Wycofano środek z aktywnej ewidencji")
+        self.assertIn("Wycofanie: Likwidacja", entry.description)
         self.assertEqual(entry.field_name, "is_active")
-        self.assertEqual(entry.old_value, "Aktywna Ewidencja")
-        self.assertEqual(entry.new_value, "Archiwum - Zlikwidowany")
+        self.assertEqual(entry.old_value, "W ewidencji")
+        self.assertEqual(entry.new_value, "Wycofany")
         self.assertEqual(entry.operator, self.user)
 
     def test_withdraw_moves_asset_from_active_list_to_archive(self):
@@ -6636,7 +6637,7 @@ class AssetWithdrawViewTests(TestCase):
         self.assertEqual(entry.new_value, "7")
         self.assertEqual(entry.operator, self.user)
         self.assertIn("wycofano 3", entry.description)
-        self.assertEqual(self._messages(response), ["Część ilości środka została wycofana."])
+        self.assertEqual(self._messages(response), ["Zapisano wycofanie z ewidencji."])
 
         active_response = self.client.get(reverse("assets:api-list"), {"search": asset.inventory_number})
         archive_response = self.client.get(

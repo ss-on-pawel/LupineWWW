@@ -3771,7 +3771,28 @@ let searchDebounceId = null;
                 elements.listNotice.hidden = !message;
             }
 
+            let withdrawalMetadata = null;
             function submitBulkWithdraw(assetIds) {
+                if (!withdrawalMetadata) {
+                    const dialog = document.getElementById("withdrawal-dialog");
+                    const form = dialog.querySelector("form");
+                    form.reset();
+                    form.elements.notes.setCustomValidity("");
+                    form.elements.action_date.value = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+                    form.onsubmit = function(event) {
+                        event.preventDefault();
+                        if (form.elements.method.value === "other" && !form.elements.notes.value.trim()) { form.elements.notes.setCustomValidity("Podaj adnotację."); form.reportValidity(); return; }
+                        withdrawalMetadata = Object.fromEntries(new FormData(form));
+                        withdrawalMetadata.request_id = crypto.randomUUID();
+                        dialog.close();
+                        submitBulkWithdraw(assetIds);
+                    };
+                    form.elements.notes.oninput = function() { this.setCustomValidity(""); };
+                    dialog.showModal();
+                    return;
+                }
+                const metadata = withdrawalMetadata;
+                withdrawalMetadata = null;
                 state.withdrawSubmitting = true;
                 syncToolbarControls();
 
@@ -3783,7 +3804,7 @@ let searchDebounceId = null;
                         "X-CSRFToken": getCsrfToken(),
                     },
                     body: JSON.stringify({
-                        asset_ids: assetIds,
+                        asset_ids: assetIds, ...metadata,
                     }),
                 })
                     .then(function (response) {
@@ -4295,6 +4316,15 @@ let searchDebounceId = null;
             }
         })();
     </script>
+
+<dialog id="withdrawal-dialog" style="max-width:460px;border:1px solid #ccc;border-radius:12px;padding:24px">
+    <form><h2>Wycofaj z ewidencji</h2><p>Wspólne dane dla zaznaczonych środków.</p>
+    <p><label>Sposób <select name="method" required><option value="">Wybierz</option><option value="sale">Sprzedaż</option><option value="transfer">Przekazanie</option><option value="liquidation">Likwidacja</option><option value="other">Inny</option></select></label></p>
+    <p><label>Data wycofania <input type="date" name="action_date" required></label></p>
+    <p><label>Adnotacja <textarea name="notes" maxlength="2000"></textarea></label></p>
+    <p><label>Nr dokumentu <input name="document_number" maxlength="120"></label></p>
+    <button type="button" onclick="this.closest('dialog').close()">Anuluj</button> <button type="submit">Wycofaj zaznaczone</button></form>
+</dialog>
 {% endblock %}
 
 

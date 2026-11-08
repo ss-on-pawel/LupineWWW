@@ -6,7 +6,7 @@ from django.utils.text import slugify
 
 from locations.models import Location
 
-from .models import Asset, AssetDepreciationPlan, AssetTypeDictionary
+from .models import Asset, AssetDepreciationPlan, AssetTypeDictionary, AssetWithdrawal
 
 
 SYSTEM_MANAGED_ASSET_FIELDS = frozenset(
@@ -52,6 +52,10 @@ class AssetForm(forms.ModelForm):
         ]
         self.fields["asset_type"].choices = [("", "---------")] + asset_type_choices
         self.fields["asset_type"].label = "Rodzaj"
+        if self.instance.pk and not self.instance.is_active:
+            self.fields["status"].disabled = True
+        else:
+            self.fields["status"].choices = [c for c in Asset.Status.choices if c[0] != Asset.Status.LIQUIDATED]
         self.fields["location_fk"].queryset = (
             location_queryset
             if location_queryset is not None
@@ -312,3 +316,18 @@ class AssetTypeDictionaryForm(forms.ModelForm):
         if not re.fullmatch(r"[A-Z0-9]{2,3}", prefix):
             raise forms.ValidationError("Prefix kodu musi miec 2-3 znaki i zawierac tylko wielkie litery oraz cyfry.")
         return prefix
+
+
+class AssetWithdrawalForm(forms.Form):
+    method = forms.ChoiceField(label="Sposób wycofania", choices=[("", "Wybierz sposób")] + [c for c in AssetWithdrawal.Method.choices if c[0] != "unknown"])
+    action_date = forms.DateField(label="Data wycofania", widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}))
+    notes = forms.CharField(label="Adnotacja", required=False, max_length=2000, widget=forms.Textarea(attrs={"rows": 2}))
+    document_number = forms.CharField(label="Nr dokumentu wycofania", required=False, max_length=120)
+    request_id = forms.UUIDField(widget=forms.HiddenInput)
+    expected_quantity = forms.IntegerField(min_value=0, widget=forms.HiddenInput)
+
+    def clean(self):
+        data = super().clean()
+        if data.get("method") == "other" and not data.get("notes"):
+            self.add_error("notes", "Podaj adnotację dla sposobu Inny.")
+        return data

@@ -1,3 +1,4 @@
+import uuid
 import csv
 import io
 import json
@@ -24,8 +25,10 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 import urllib.parse
 
+from .withdrawals import withdraw_asset
+from .models import AssetWithdrawal
 from .filters import apply_asset_filters, get_asset_filter_ui_schema, parse_asset_filters
-from .forms import AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm, DepreciationPlanForm, OtDocumentForm
+from .forms import AssetWithdrawalForm, AssetAttachmentForm, AssetForm, AssetTypeDictionaryForm, DepreciationPlanForm, OtDocumentForm
 from .models import Asset, AssetAttachment, AssetChangeRequest, AssetDepreciationPlan, AssetHistoryEntry, AssetServiceAlert, AssetTypeDictionary
 from .services import (
     approve_asset_change_request,
@@ -873,6 +876,8 @@ def asset_detail(request, id):
             "can_delete_attachment": _user_can_restore_asset(request.user),
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
             "withdraw_capabilities": get_asset_withdraw_capabilities(asset),
+            "withdrawal_form": AssetWithdrawalForm(initial={"action_date": timezone.localdate(), "request_id": uuid.uuid4(), "expected_quantity": asset.current_quantity}),
+            "withdrawals": asset.withdrawals.select_related("operator").all(),
             "history_entries": history_entries,
             "is_in_active_inventory": is_in_active_inventory,
             "runtime_status": "inventory" if is_in_active_inventory else "",
@@ -891,12 +896,13 @@ def asset_detail(request, id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def asset_restore(request, id):
     require_feature(request, "asset_archive")
     if not _user_can_restore_asset(request.user):
         raise PermissionDenied
 
-    asset = get_object_or_404(Asset.objects.select_related("asset_type_ref", "location_fk"), pk=id)
+    asset = get_object_or_404(Asset.objects.select_for_update(of=("self",)).select_related("asset_type_ref", "location_fk"), pk=id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
         raise Http404
@@ -924,80 +930,30 @@ def asset_restore(request, id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def asset_withdraw(request, id):
     require_feature(request, "asset_withdraw")
-    asset = get_object_or_404(Asset.objects.select_related("asset_type_ref", "location_fk"), pk=id)
+    asset = get_object_or_404(Asset.objects.select_for_update(of=("self",)).select_related("asset_type_ref", "location_fk"), pk=id)
     accessible_location_ids = get_accessible_location_ids(request.user)
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
         raise Http404
 
-    if not asset.is_active:
-        return HttpResponse("Asset is already archived.", status=400)
-
-    status = request.POST.get("status", "").strip()
-    if status not in ASSET_WITHDRAW_STATUSES:
+    if request.POST.get("status") not in (None, "", Asset.Status.LIQUIDATED):
         return HttpResponse("Invalid withdraw status.", status=400)
-
-    capabilities = get_asset_withdraw_capabilities(asset)
-    current_quantity = capabilities["current_quantity"]
-    raw_withdraw_quantity = request.POST.get("withdraw_quantity", "").strip()
-    withdraw_quantity = current_quantity
-    if raw_withdraw_quantity:
-        try:
-            withdraw_quantity = int(raw_withdraw_quantity)
-        except ValueError:
-            messages.error(request, "Ilość do wycofania musi być liczbą całkowitą.")
-            return redirect("assets:detail", id=asset.pk)
-
-        if withdraw_quantity < 1:
-            messages.error(request, "Ilość do wycofania musi być większa od zera.")
-            return redirect("assets:detail", id=asset.pk)
-        if withdraw_quantity > current_quantity:
-            messages.error(request, "Ilość do wycofania nie może przekraczać aktualnej ilości.")
-            return redirect("assets:detail", id=asset.pk)
-        if withdraw_quantity < current_quantity and not capabilities["can_partial_withdraw"]:
-            messages.error(request, "Częściowe wycofanie jest dostępne tylko dla aktywnych środków ilościowych.")
-            return redirect("assets:detail", id=asset.pk)
-
-    status_label = dict(Asset.Status.choices)[status]
-    remaining_quantity = current_quantity - withdraw_quantity
-    if remaining_quantity > 0:
-        now = timezone.now()
-        asset.current_quantity = remaining_quantity
-        asset.updated_at = now
-        asset.save(update_fields=["current_quantity", "updated_at"])
-
-        record_asset_history(
-            asset=asset,
-            operator=request.user,
-            event_type=AssetHistoryEntry.EventType.UPDATED,
-            description=(
-                "Wycofano część ilości środka: "
-                f"przed {current_quantity}, wycofano {withdraw_quantity}, "
-                f"po {remaining_quantity}, powód {status_label}"
-            ),
-            old_value=str(current_quantity),
-            new_value=str(remaining_quantity),
-            field_name="current_quantity",
-        )
-        messages.success(request, "Część ilości środka została wycofana.")
+    if not asset.is_active and not AssetWithdrawal.objects.filter(asset=asset, request_id=request.POST.get("request_id") or None).exists():
+        return HttpResponse("Asset is already archived.", status=400)
+    form = AssetWithdrawalForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, " ".join(str(e) for errors in form.errors.values() for e in errors))
         return redirect("assets:detail", id=asset.pk)
-
-    asset.status = status
-    asset.is_active = False
-    asset.updated_at = timezone.now()
-    asset.save(update_fields=["status", "is_active", "updated_at"])
-
-    record_asset_history(
-        asset=asset,
-        operator=request.user,
-        event_type=AssetHistoryEntry.EventType.WITHDRAWN,
-        description="Wycofano środek z aktywnej ewidencji",
-        old_value="Aktywna Ewidencja",
-        new_value=f"Archiwum - {status_label}",
-        field_name="is_active",
-    )
-    messages.success(request, "Środek został wycofany z aktywnej Ewidencji.")
+    try:
+        raw_quantity = request.POST.get("withdraw_quantity", "").strip()
+        quantity = int(raw_quantity) if raw_quantity else None
+        withdraw_asset(asset_id=asset.pk, operator=request.user, data=form.cleaned_data, quantity=quantity)
+    except (ValidationError, ValueError) as error:
+        messages.error(request, "; ".join(error.messages) if isinstance(error, ValidationError) else "Nieprawidłowa ilość.")
+    else:
+        messages.success(request, "Zapisano wycofanie z ewidencji.")
     return redirect("assets:detail", id=asset.pk)
 
 
@@ -1766,39 +1722,20 @@ def asset_bulk_withdraw_api(request):
         if withdrawable_assets.count() != len(unique_asset_ids):
             return JsonResponse({"success": False, "error": "One or more assets were not found."}, status=404)
 
-    if withdrawable_assets.filter(is_active=False).exists():
-        return JsonResponse({"success": False, "error": "Archived assets cannot be withdrawn again."}, status=400)
-
-    assets = list(withdrawable_assets)
-    now = timezone.now()
-    history_entries = [
-        AssetHistoryEntry(
-            asset=asset,
-            operator=request.user,
-            event_type=AssetHistoryEntry.EventType.WITHDRAWN,
-            description="Wycofano środek do Archiwum.",
-            old_value="Aktywna Ewidencja",
-            new_value="Archiwum - Zlikwidowany",
-            field_name="is_active",
-        )
-        for asset in assets
-    ]
-
-    with transaction.atomic():
-        updated_count = withdrawable_assets.update(
-            status=Asset.Status.LIQUIDATED,
-            is_active=False,
-            updated_at=now,
-        )
-        AssetHistoryEntry.objects.bulk_create(history_entries)
-
-    return JsonResponse(
-        {
-            "success": True,
-            "updated_count": updated_count,
-            "message": f"Wycofano {updated_count} środków do Archiwum.",
-        }
-    )
+    form = AssetWithdrawalForm({**payload, "expected_quantity": 0})
+    if not form.is_valid():
+        return JsonResponse({"success": False, "error": " ".join(str(e) for errors in form.errors.values() for e in errors)}, status=400)
+    try:
+        with transaction.atomic():
+            assets = list(withdrawable_assets.select_for_update().order_by("pk"))
+            for asset in assets:
+                data = dict(form.cleaned_data)
+                data["expected_quantity"] = asset.current_quantity
+                data["request_id"] = uuid.uuid5(form.cleaned_data["request_id"], str(asset.pk))
+                withdraw_asset(asset_id=asset.pk, operator=request.user, data=data)
+    except ValidationError as error:
+        return JsonResponse({"success": False, "error": "; ".join(error.messages)}, status=400)
+    return JsonResponse({"success": True, "updated_count": len(assets), "message": f"Wycofano {len(assets)} środków do Archiwum."})
 
 
 @login_required

@@ -466,11 +466,22 @@ def apply_inventory_session_to_assets(request, pk):
             return redirect("inventory:session-detail", pk=session.pk)
 
         now = timezone.now()
+        from .models import InventorySnapshotItem
+        # Serialize with withdrawals; old inventory results must not resurrect quantities.
+        locked_assets = {asset.pk: asset for asset in Asset.objects.select_for_update().filter(
+            pk__in=InventorySnapshotItem.objects.filter(session=session).values('asset_id')
+        ).order_by('pk')}
+        from assets.models import AssetWithdrawal
+        from .models import InventorySnapshotItem
+        if AssetWithdrawal.objects.filter(asset_id__in=locked_assets, is_historical=False,
+                registered_at__gte=session.started_at).exists():
+            messages.error(request, "Po rozpoczęciu spisu zarejestrowano wycofanie środka. Wyniki wymagają uzgodnienia; nie naniesiono zmian.")
+            return redirect("inventory:session-detail", pk=session.pk)
         analysis = _build_inventory_session_analysis(session)
         assets_to_update = []
         history_entries = []
         for work_item in analysis["inventory_work_items"]:
-            asset = work_item["snapshot"].asset
+            asset = locked_assets.get(work_item["snapshot"].asset_id)
             if asset is None:
                 continue
             if not asset.is_active:

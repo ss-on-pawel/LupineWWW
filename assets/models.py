@@ -25,7 +25,7 @@ class Asset(models.Model):
     class Status(models.TextChoices):
         ACTIVE = "active", "Aktywny"
         INACTIVE = "inactive", "Nieaktywny"
-        LIQUIDATED = "liquidated", "Zlikwidowany"
+        LIQUIDATED = "liquidated", "Wycofany"
 
     class TechnicalCondition(models.TextChoices):
         NEW = "new", "Nowy"
@@ -656,3 +656,30 @@ class AssetServiceAlert(models.Model):
 
     def __str__(self) -> str:
         return f"{self.asset_id}: {self.reason[:60]} ({self.alert_date})"
+
+
+class AssetWithdrawal(models.Model):
+    class Method(models.TextChoices):
+        SALE = "sale", "Sprzedaż"
+        TRANSFER = "transfer", "Przekazanie"
+        LIQUIDATION = "liquidation", "Likwidacja"
+        OTHER = "other", "Inny"
+        UNKNOWN = "unknown", "Nieustalony / dane historyczne"
+
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="withdrawals")
+    method = models.CharField(max_length=20, choices=Method.choices)
+    action_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    document_number = models.CharField(max_length=120, blank=True)
+    quantity = models.PositiveIntegerField(null=True, blank=True)
+    quantity_before = models.PositiveIntegerField(null=True, blank=True)
+    quantity_after = models.PositiveIntegerField(null=True, blank=True)
+    is_full = models.BooleanField(default=True)
+    is_historical = models.BooleanField(default=False)
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    registered_at = models.DateTimeField(default=timezone.now)
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    source_reference = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-registered_at", "-pk"]
