@@ -1,6 +1,7 @@
 from django import forms
 
 from assets.models import Asset
+from .scope import UNASSIGNED_ASSET_TYPE, UNASSIGNED_ASSET_TYPE_LABEL, get_inventory_asset_type_choices
 
 
 DEFAULT_ASSET_TYPES = [Asset.AssetType.FIXED, Asset.AssetType.LOW_VALUE]
@@ -11,6 +12,7 @@ START_ASSET_TYPE_CHOICES = [
     (Asset.AssetType.INTANGIBLE, "WNiP"),
     (Asset.AssetType.QUANTITY, "Ilościowy"),
     (Asset.AssetType.OTHER, "Inny"),
+    (UNASSIGNED_ASSET_TYPE, UNASSIGNED_ASSET_TYPE_LABEL),
 ]
 
 
@@ -34,6 +36,7 @@ class InventorySessionStartForm(forms.Form):
     def __init__(self, *args, available_locations, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["root_locations"].queryset = available_locations
+        self.fields["asset_types"].choices = get_inventory_asset_type_choices()
 
 
 class SimpleInventorySessionStartForm(forms.Form):

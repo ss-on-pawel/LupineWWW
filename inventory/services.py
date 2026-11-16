@@ -18,6 +18,9 @@ from .models import (
 )
 
 
+from .scope import UNASSIGNED_ASSET_TYPE_LABEL
+
+
 SESSION_NUMBER_PREFIX = "INV-"
 SESSION_NUMBER_WIDTH = 6
 
@@ -37,7 +40,7 @@ def start_inventory_session(*, created_by, root_locations, asset_types):
     location_ids = _get_location_subtree_ids(roots)
     assets = (
         Asset.objects
-        .select_related("location_fk")
+        .select_related("location_fk", "asset_type_ref")
         .filter(location_fk_id__in=location_ids, asset_type__in=asset_type_values, is_active=True)
         .order_by("id")
     )
@@ -340,7 +343,7 @@ def _build_snapshot_item(session: InventorySession, asset: Asset) -> InventorySn
         name=asset.name,
         barcode=asset.barcode,
         asset_type=asset.asset_type,
-        asset_type_display=asset.get_asset_type_display(),
+        asset_type_display=(asset.asset_type_ref.name if asset.asset_type_ref_id else asset.get_asset_type_display()) if asset.asset_type else UNASSIGNED_ASSET_TYPE_LABEL,
         # Legacy column name; stores the expected quantity copied from Asset.current_quantity.
         record_quantity_snapshot=asset.current_quantity,
         purchase_value_snapshot=asset.purchase_value,

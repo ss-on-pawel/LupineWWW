@@ -112,13 +112,20 @@
         </header>
 
         <section class="inventory-start-shell">
-            <form class="inventory-start-form" method="post">
+            <form id="inventory-start-form" class="inventory-start-form" method="post">
                 {% csrf_token %}
                 {% if form.non_field_errors %}
                     <div class="inventory-errors">{{ form.non_field_errors }}</div>
                 {% endif %}
 
                 {% if can_configure_scope %}
+                    <div class="inventory-form-section">
+                        <div class="inventory-actions">
+                            <button class="ui-btn ui-btn--secondary" type="button" id="inventory-select-all">Wybierz całość</button>
+                            <button class="ui-btn ui-btn--secondary" type="button" id="inventory-clear-all">Wyczyść wybór</button>
+                        </div>
+                        <p class="inventory-start-note">Wybór całości obejmuje wszystkie dostępne lokalizacje i rodzaje, także środki bez przypisanego rodzaju.</p>
+                    </div>
                     <div class="inventory-form-section">
                         <p class="inventory-start-section-label">Lokalizacje</p>
                         <div class="inventory-form-title">{{ form.root_locations.label }}</div>
@@ -167,4 +174,26 @@
             </form>
         </section>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    {% if can_configure_scope %}
+    <script>
+        (() => {
+            const form = document.getElementById("inventory-start-form");
+            const selectAll = document.getElementById("inventory-select-all");
+            const clearAll = document.getElementById("inventory-clear-all");
+            if (!form || !selectAll || !clearAll) return;
+            const setSelection = (checked) => {
+                form.querySelectorAll('input[type="checkbox"][name="root_locations"], input[type="checkbox"][name="asset_types"]').forEach((checkbox) => {
+                    if (checkbox.disabled) return;
+                    checkbox.checked = checked;
+                    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+            };
+            selectAll.addEventListener("click", () => setSelection(true));
+            clearAll.addEventListener("click", () => setSelection(false));
+        })();
+    </script>
+    {% endif %}
 {% endblock %}

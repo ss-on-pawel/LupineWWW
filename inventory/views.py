@@ -27,6 +27,7 @@ from config.features import FeatureRequiredMixin, require_feature
 from locations.models import Location
 
 from .forms import DEFAULT_ASSET_TYPES, InventorySessionStartForm, SimpleInventorySessionStartForm
+from .scope import get_inventory_asset_type_choices
 from .models import (
     InventoryObservedItem,
     InventoryRawScan,
@@ -62,7 +63,7 @@ class InventorySessionListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        asset_type_labels = dict(Asset.AssetType.choices)
+        asset_type_labels = dict(get_inventory_asset_type_choices())
         for session in context["sessions"]:
             session.root_locations_display = ", ".join(
                 location.path for location in session.scope_root_locations.all()
@@ -285,7 +286,7 @@ class InventorySessionSheetView(FeatureRequiredMixin, LoginRequiredMixin, Detail
 
 def _build_inventory_session_analysis(session):
         context = {}
-        asset_type_labels = dict(Asset.AssetType.choices)
+        asset_type_labels = dict(get_inventory_asset_type_choices())
         observed_items = list(
             InventoryObservedItem.objects
             .filter(session=session)
