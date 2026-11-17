@@ -783,6 +783,7 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["location_queryset"] = _get_asset_form_location_queryset(self.request.user)
+        kwargs["preserve_catalogued"] = True
         return kwargs
 
     def get_queryset(self):
@@ -893,6 +894,47 @@ def asset_detail(request, id):
             "can_manage_service_alerts": _user_can_restore_asset(request.user),
         },
     )
+
+
+@login_required
+@require_POST
+def asset_set_catalogued(request, id):
+    value = request.POST.get("is_catalogued", "0")
+    expected = request.POST.get("expected_catalogued")
+    if value not in {"0", "1"} or expected not in {"0", "1"}:
+        return HttpResponse("Nieprawidłowa wartość oznaczenia.", status=400)
+    desired = value == "1"
+    with transaction.atomic():
+        asset = get_object_or_404(Asset.objects.select_for_update(), pk=id, is_active=True)
+        location_ids = get_accessible_location_ids(request.user)
+        if location_ids is not None and asset.location_fk_id not in location_ids:
+            raise Http404
+        if asset.is_catalogued == desired:
+            return redirect("assets:detail", id=asset.pk)
+        if asset.is_catalogued != (expected == "1"):
+            return HttpResponse("Oznaczenie zmieniło się w innej karcie. Odśwież kartę środka.", status=409)
+        if AssetChangeRequest.objects.filter(asset=asset, status=AssetChangeRequest.Status.PENDING).exists():
+            return HttpResponse("Środek ma oczekującą zmianę. Najpierw rozpatrz wniosek.", status=409)
+        if user_requires_asset_change_approval(request.user):
+            current = serialize_asset_form_payload(
+                {name: getattr(asset, name) for name in AssetForm.Meta.fields},
+                exclude_system_managed=True,
+            )
+            proposed = dict(current, is_catalogued=desired)
+            AssetChangeRequest.objects.create(asset=asset, requested_by=request.user,
+                operation=AssetChangeRequest.Operation.UPDATE,
+                payload={"current": current, "proposed": proposed})
+            messages.success(request, "Zmiana katalogowania została przekazana do akceptacji.")
+        else:
+            # A one-field action must not normalize unrelated legacy asset data.
+            Asset.objects.filter(pk=asset.pk).update(is_catalogued=desired, updated_at=timezone.now())
+            record_asset_history(asset=asset, operator=request.user,
+                event_type=AssetHistoryEntry.EventType.UPDATED,
+                description="Zmieniono oznaczenie katalogowania", field_name="is_catalogued",
+                old_value="Tak" if asset.is_catalogued else "Nie",
+                new_value="Tak" if desired else "Nie")
+            messages.success(request, "Oznaczenie katalogowania zapisane.")
+    return redirect("assets:detail", id=asset.pk)
 
 
 @login_required

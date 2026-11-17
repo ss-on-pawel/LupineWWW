@@ -59,11 +59,7 @@
                     {{ form.category }}
                     {{ form.category.errors }}
                 </div>
-                <div class="form-field field-wide">
-                    <label for="{{ form.is_catalogued.id_for_label }}">{{ form.is_catalogued }} Katalogowany</label>
-                    <div class="helptext">{{ form.is_catalogued.help_text }}</div>
-                    {{ form.is_catalogued.errors }}
-                </div>
+                {{ form.is_catalogued.as_hidden }}
                 <div class="form-field field-wide">
                     {{ form.description.label_tag }}
                     {{ form.description }}

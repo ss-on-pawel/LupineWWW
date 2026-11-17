@@ -513,7 +513,21 @@
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Katalogowany</span>
-                            <div class="detail-value">{{ asset.is_catalogued|yesno:"Tak,Nie" }}{% if asset.is_catalogued %} — etykieta w segregatorze{% endif %}</div>
+                            <div class="detail-value">
+                                {% if asset.is_active %}
+                                <form method="post" action="{% url 'assets:set-catalogued' asset.pk %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="expected_catalogued" value="{{ asset.is_catalogued|yesno:'1,0' }}">
+                                    <label style="display:flex; align-items:center; gap:8px; font:inherit;">
+                                        <input type="checkbox" name="is_catalogued" value="1" {% if asset.is_catalogued %}checked{% endif %} onchange="this.form.requestSubmit()" style="width:18px; height:18px; margin:0;">
+                                        Etykieta w segregatorze
+                                    </label>
+                                    <noscript><button type="submit">Zapisz</button></noscript>
+                                </form>
+                                {% else %}
+                                <label><input type="checkbox" {% if asset.is_catalogued %}checked{% endif %} disabled> Etykieta w segregatorze</label>
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="detail-item" style="grid-column: 1 / -1; overflow-wrap: anywhere;">
                             <span class="detail-label">Opis</span>

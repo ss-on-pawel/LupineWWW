@@ -44,12 +44,15 @@ class AssetForm(forms.ModelForm):
     current_quantity = forms.IntegerField(label="Ilość", min_value=1, initial=1)
 
     def __init__(self, *args, **kwargs):
+        preserve_catalogued = kwargs.pop("preserve_catalogued", False)
         location_queryset = kwargs.pop("location_queryset", None)
         super().__init__(*args, **kwargs)
         asset_type_choices = [
             (asset_type.code, asset_type.name)
             for asset_type in AssetTypeDictionary.objects.filter(is_active=True).order_by("sort_order", "name")
         ]
+        if preserve_catalogued and self.instance.pk:
+            self.fields["is_catalogued"].disabled = True
         self.fields["asset_type"].choices = [("", "---------")] + asset_type_choices
         self.fields["asset_type"].label = "Rodzaj"
         # New assets may receive a generated code when saved; existing codes cannot be cleared.
