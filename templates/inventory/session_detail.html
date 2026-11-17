@@ -510,6 +510,12 @@
             color: #991b1b;
         }
 
+        .inventory-search { padding: 12px; }
+        .inventory-search label { display: block; margin-bottom: 6px; }
+        .inventory-search-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+        .inventory-search input { flex: 1 1 260px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); }
+        .inventory-search p { margin: 8px 0 0; color: var(--muted); }
+
         .inventory-empty {
             padding: 10px;
             border: 1px solid var(--border);
@@ -727,6 +733,15 @@
                     <span class="inventory-table-tool-stat">Problemy <strong data-summary-value="problem_count">{{ wrong_location_count|add:found_out_of_scope_count|add:unknown_code_count }}</strong></span>
                 </div>
             </div>
+            <form method="get" action="{% url 'inventory:session-detail' session.pk %}" class="inventory-search" role="search">
+                <label for="inventory-search-input">Szukaj w tej inwentaryzacji</label>
+                <div class="inventory-search-controls">
+                    <input id="inventory-search-input" type="search" name="q" value="{{ inventory_search_query }}" placeholder="Kod, numer inwentarzowy lub fragment nazwy">
+                    <button class="ui-btn ui-btn--primary" type="submit">Szukaj</button>
+                    {% if inventory_search_query %}<a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Wyczyść</a>{% endif %}
+                </div>
+                {% if inventory_search_query %}<p role="status">Znaleziono {{ inventory_work_page.paginator.count }} z {{ snapshot_total }} pozycji.</p>{% endif %}
+            </form>
             {% if inventory_work_items %}
                 {% if inventory_work_page.paginator.num_pages > 1 %}
                     <nav class="inventory-table-pagination" aria-label="Paginacja składników inwentaryzacji">
@@ -735,17 +750,17 @@
                         </span>
                         <span class="inventory-table-pagination-controls">
                             {% if inventory_work_page.has_previous %}
-                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
                             {% endif %}
                             <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
                             {% if inventory_work_page.has_next %}
-                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
                             {% endif %}
                         </span>
                     </nav>
                 {% endif %}
                 <div class="inventory-table-wrap">
-                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}" data-inventory-paginated="{% if inventory_work_page.paginator.num_pages > 1 %}true{% else %}false{% endif %}">
+                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}" data-inventory-paginated="{% if inventory_search_query or inventory_work_page.paginator.num_pages > 1 %}true{% else %}false{% endif %}">
                         <thead>
                             <tr>
                                 <th class="inventory-col-number">Numer inwentarzowy</th>
@@ -807,17 +822,17 @@
                         </span>
                         <span class="inventory-table-pagination-controls">
                             {% if inventory_work_page.has_previous %}
-                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
                             {% endif %}
                             <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
                             {% if inventory_work_page.has_next %}
-                                <a class="ui-btn ui-btn--secondary" href="?items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
                             {% endif %}
                         </span>
                     </nav>
                 {% endif %}
             {% else %}
-                <div class="inventory-empty">Brak pozycji ewidencji na dzień spisu dla tej sesji.</div>
+                <div class="inventory-empty">{% if inventory_search_query %}Brak pozycji pasujących do wyszukiwania w tej inwentaryzacji.{% else %}Brak pozycji ewidencji na dzień spisu dla tej sesji.{% endif %}</div>
             {% endif %}
         </section>
         </div>

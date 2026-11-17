@@ -396,6 +396,35 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertContains(response, 'data-role="inventory-manual-quantity"')
         self.assertNotContains(response, f'aria-label="Potwierdź {asset.inventory_number}"')
 
+    def test_detail_searches_entire_snapshot_and_keeps_global_summary(self):
+        from unittest.mock import patch
+        for index in range(5):
+            self._create_asset(f"SEARCH-{index}", self.child,
+                               name=f"Krzesło obrotowe {index}", barcode=f"0000{index}")
+        session = self._start_session(self.root)
+        # A later catalogue edit must not change what belongs to the historical spis.
+        Asset.objects.filter(inventory_number="SEARCH-4").update(name="Nowa nazwa")
+        self._create_asset("OUTSIDE", self.child, name="Tylko poza spisem", barcode="99999")
+        self.client.force_login(self.admin_user)
+        url = reverse("inventory:session-detail", kwargs={"pk": session.pk})
+        with patch("inventory.views.INVENTORY_DETAIL_PAGE_SIZE", 2):
+            for query in ("00004", "search-4", "OBROTOWE 4"):
+                response = self.client.get(url, {"q": query})
+                self.assertEqual(response.context["snapshot_total"], 5)
+                self.assertEqual(len(response.context["inventory_work_items"]), 1)
+                self.assertEqual(response.context["inventory_work_items"][0]["snapshot"].barcode, "00004")
+                self.assertContains(response, 'data-inventory-paginated="true"')
+            response = self.client.get(url, {"q": " krzesło ", "items_page": 2})
+            self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
+            self.assertEqual(len(response.context["inventory_work_items"]), 2)
+            self.assertContains(response, "q=krzes%C5%82o&amp;items_page=3")
+        for query in ("99999", "Nowa nazwa", "<script>"):
+            response = self.client.get(url, {"q": query})
+            self.assertEqual(response.context["inventory_work_page"].paginator.count, 0)
+            self.assertContains(response, "Brak pozycji pasujących")
+        response = self.client.get(url, {"q": "  "})
+        self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
+
     def test_detail_paginates_snapshot_items(self):
         for index in range(205):
             self._create_asset(

@@ -154,13 +154,23 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         session = self.object
         analysis = _build_inventory_session_analysis(session)
+        search_query = self.request.GET.get("q", "").strip()
+        work_items = analysis["inventory_work_items"]
+        if search_query:
+            needle = search_query.casefold()
+            work_items = [
+                item for item in work_items
+                if any(needle in (getattr(item["snapshot"], field) or "").casefold()
+                       for field in ("barcode", "inventory_number", "name"))
+            ]
         work_items_page = Paginator(
-            analysis["inventory_work_items"],
+            work_items,
             INVENTORY_DETAIL_PAGE_SIZE,
         ).get_page(self.request.GET.get("items_page"))
 
         context.update(analysis)
         context["inventory_work_items"] = list(work_items_page.object_list)
+        context["inventory_search_query"] = search_query
         context["inventory_work_page"] = work_items_page
         context["inventory_work_page_size"] = INVENTORY_DETAIL_PAGE_SIZE
         context["page_title"] = session.number
