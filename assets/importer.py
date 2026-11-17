@@ -1,4 +1,9 @@
 import io
+import re
+import logging
+from django.db import transaction
+from django.core.exceptions import PermissionDenied
+from accounts.utils import get_accessible_location_ids
 from decimal import Decimal, InvalidOperation
 
 import openpyxl
@@ -23,8 +28,16 @@ def parse_import_xlsx(file_obj):
     ws = wb.active
     rows = []
 
-    for i, row_cells in enumerate(ws.iter_rows(min_row=2, values_only=True)):
-        raw = list(row_cells)
+    for i, row_cells in enumerate(ws.iter_rows(min_row=2, values_only=False)):
+        raw = [cell.value for cell in row_cells]
+        if row_cells and isinstance(raw[0], (int, float)) and not isinstance(raw[0], bool):
+            numeric = raw[0]
+            if float(numeric).is_integer():
+                text = str(int(numeric))
+                number_format = row_cells[0].number_format or ''
+                if re.fullmatch(r'0{1,100}', number_format):
+                    text = text.zfill(len(number_format))
+                raw[0] = text
         cells = [("" if c is None else str(c).strip()) for c in (raw + [""] * 5)[:5]]
         if not any(cells):
             continue
@@ -69,13 +82,14 @@ def _validate_row(row):
                 errors.append("Niepoprawna ilość (musi być liczbą całkowitą)")
             elif int(qty_float) <= 0:
                 errors.append("Ilość musi być większa od zera")
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             errors.append("Niepoprawna ilość (musi być liczbą całkowitą)")
 
     value_str = row.get("value", "")
     if value_str:
         try:
-            Decimal(value_str.replace(",", "."))
+            if not Decimal(value_str.replace(",", ".")).is_finite():
+                raise InvalidOperation
         except InvalidOperation:
             errors.append("Niepoprawna wartość (musi być liczbą, np. 1500.00)")
 
@@ -108,72 +122,55 @@ def resolve_location_path(root_location, path_str):
     return current, new_ids
 
 
-def import_assets_from_rows(rows, *, root_location, asset_type_ref, operator=None):
-    """
-    Import assets with partial success.
-    Valid rows are saved; invalid rows are skipped and reported.
-    Returns dict: imported_count, created_locations_count, error_rows.
-    """
+def import_assets_from_rows(rows, *, root_location, asset_type_ref, operator=None, idempotency_key=None):
+    if operator is not None:
+        allowed = get_accessible_location_ids(operator)
+        if allowed is not None and root_location.pk not in allowed:
+            raise PermissionDenied
+    if idempotency_key is None:
+        return _import_rows(rows, root_location, asset_type_ref, operator)
+    from .models import AssetImportReceipt
+    with transaction.atomic():
+        receipt, created = AssetImportReceipt.objects.get_or_create(source_sha256=idempotency_key,
+            root_id_snapshot=root_location.pk, asset_type_id_snapshot=asset_type_ref.pk,
+            defaults={'created_by': operator})
+        if not created:
+            return dict(receipt.report, already_imported=True)
+        report = _import_rows(rows, root_location, asset_type_ref, operator)
+        receipt.report = report
+        receipt.save(update_fields=['report'])
+        return report
+
+
+def _import_rows(rows, root_location, asset_type_ref, operator):
     imported_count = 0
     created_location_ids = set()
     error_rows = []
-
     for row in rows:
-        row_number = row["row_number"]
-
-        row_errors = _validate_row(row)
-        if row_errors:
-            for err in row_errors:
-                error_rows.append({"row": row_number, "message": err})
+        errors = _validate_row(row)
+        if errors:
+            error_rows.extend({'row': row['row_number'], 'message': message} for message in errors)
             continue
-
-        quantity_str = row.get("quantity", "")
-        quantity = int(float(quantity_str)) if quantity_str else 1
-
-        value_str = row.get("value", "")
-        purchase_value = Decimal(value_str.replace(",", ".")) if value_str else None
-
         try:
-            barcode = generate_unique_asset_barcode(asset_type_ref=asset_type_ref)
-        except ValidationError as exc:
-            error_rows.append({"row": row_number, "message": f"Błąd generowania kodu kreskowego: {exc}"})
-            continue
-
-        try:
-            location, new_ids = resolve_location_path(root_location, row["location_path"])
+            with transaction.atomic():
+                barcode = generate_unique_asset_barcode(asset_type_ref=asset_type_ref)
+                location, new_ids = resolve_location_path(root_location, row['location_path'])
+                quantity = int(float(row['quantity'])) if row.get('quantity') else 1
+                asset = Asset(name=row['name'], inventory_number=row.get('inventory_number',''),
+                    asset_type_ref=asset_type_ref, current_quantity=quantity, record_quantity=quantity,
+                    purchase_value=Decimal(row['value'].replace(',', '.')) if row.get('value') else None,
+                    location_fk=location, barcode=barcode, status=Asset.Status.ACTIVE)
+                asset.save()
+                record_asset_history(asset=asset, operator=operator,
+                    event_type=AssetHistoryEntry.EventType.CREATED, description='Środek zaimportowany z pliku XLSX')
             created_location_ids.update(new_ids)
-        except (ValidationError, Exception) as exc:
-            error_rows.append({"row": row_number, "message": f"Błąd lokalizacji: {exc}"})
-            continue
-
-        try:
-            asset = Asset(
-                name=row["name"],
-                inventory_number=row.get("inventory_number", ""),
-                asset_type_ref=asset_type_ref,
-                current_quantity=quantity,
-                record_quantity=quantity,
-                purchase_value=purchase_value,
-                location_fk=location,
-                barcode=barcode,
-                status=Asset.Status.ACTIVE,
-            )
-            asset.save()
-            record_asset_history(
-                asset=asset,
-                operator=operator,
-                event_type=AssetHistoryEntry.EventType.CREATED,
-                description="Środek zaimportowany z pliku XLSX",
-            )
             imported_count += 1
-        except (ValidationError, Exception) as exc:
-            error_rows.append({"row": row_number, "message": f"Błąd zapisu: {exc}"})
-
-    return {
-        "imported_count": imported_count,
-        "created_locations_count": len(created_location_ids),
-        "error_rows": error_rows,
-    }
+        except ValidationError as error:
+            error_rows.append({'row': row['row_number'], 'message': '; '.join(error.messages)})
+        except Exception:
+            logging.getLogger(__name__).exception('Asset import row failed: row %s',row['row_number'])
+            error_rows.append({'row': row['row_number'], 'message': 'Nie zapisano wiersza. Sprawdź dane; szczegóły błędu zapisano w dzienniku serwera.'})
+    return {'imported_count': imported_count, 'created_locations_count': len(created_location_ids), 'error_rows': error_rows}
 
 
 def build_import_template_xlsx():

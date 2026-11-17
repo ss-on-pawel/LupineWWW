@@ -141,7 +141,7 @@ ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
     "purchase_value": FilterFieldSpec("purchase_value", "Wartość", "number", "purchase_value", TYPE_OPERATORS["number"]),
     "purchase_date": FilterFieldSpec("purchase_date", "Data zakupu", "date", "purchase_date", TYPE_OPERATORS["date"]),
     "commissioning_date": FilterFieldSpec("commissioning_date", "Przyjęcie do użycia", "date", "commissioning_date", TYPE_OPERATORS["date"]),
-    "last_inventory_date": FilterFieldSpec("last_inventory_date", "Ost. inwentaryzacja", "date", "last_inventory_date", TYPE_OPERATORS["date"]),
+    "last_inventory_date": FilterFieldSpec("last_inventory_date", "Ost. inwentaryzacja", "date", "effective_inventory_date", TYPE_OPERATORS["date"]),
     "next_review_date": FilterFieldSpec("next_review_date", "Nast. przegląd", "date", "next_review_date", TYPE_OPERATORS["date"]),
     "warranty_until": FilterFieldSpec("warranty_until", "Gwarancja do", "date", "warranty_until", TYPE_OPERATORS["date"]),
     "insurance_until": FilterFieldSpec("insurance_until", "Ubezpieczenie do", "date", "insurance_until", TYPE_OPERATORS["date"]),

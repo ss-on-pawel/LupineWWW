@@ -710,7 +710,9 @@ class InventorySessionStartViewTests(TestCase):
         self.assertContains(response, "Start Root")
         self.assertContains(response, "Środek trwały")
         self.assertContains(response, "Niskocenny")
-        self.assertNotContains(response, "Start Other")
+        self.assertContains(response, "Start Other")
+
+
 
     def test_manager_post_creates_session_for_selected_locations(self):
         self.client.force_login(self.manager_user)
@@ -729,20 +731,7 @@ class InventorySessionStartViewTests(TestCase):
         self.assertEqual(session.asset_type_scope, [Asset.AssetType.FIXED])
         self.assertEqual(session.snapshot_items.count(), 1)
 
-    def test_manager_cannot_create_session_outside_scope(self):
-        self.client.force_login(self.manager_user)
 
-        response = self.client.post(
-            reverse("inventory:session-start"),
-            {
-                "root_locations": [str(self.other_root.id)],
-                "asset_types": [Asset.AssetType.FIXED],
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(InventorySession.objects.count(), 0)
-        self.assertContains(response, "Wybierz poprawną wartość")
 
     def test_superuser_can_create_session_for_root_location(self):
         self.client.force_login(self.admin_user)
@@ -3025,14 +3014,12 @@ class ScanFileImportApiTests(TestCase):
         self.assertTrue(response.url.startswith(reverse("accounts:login")))
 
     @override_settings(DEBUG=True)
-    def test_anonymous_post_imports_with_first_superuser_when_debug_true(self):
+    def test_anonymous_post_redirects_without_import_when_debug_true(self):
         response = self._post_text(f"{self.session.number}\n{self.child.code}\nBC-API-ASSET")
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["status"], "ok")
-        batch = InventoryScanBatch.objects.get()
-        self.assertEqual(batch.uploaded_by, self.superuser)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("accounts:login")))
+        self.assertFalse(InventoryScanBatch.objects.exists())
 
     def test_logged_user_posts_text_plain_and_gets_ok(self):
         response = self._post_text(
@@ -3082,15 +3069,7 @@ class ScanFileImportApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
-    def test_manager_cannot_import_to_session_outside_scope(self):
-        response = self._post_text(
-            f"{self.session.number}\n{self.child.code}\nBC-API-ASSET",
-            user=self.out_of_scope_manager,
-        )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["message"], "Brak dostępu do tej sesji inwentaryzacji.")
-        self.assertEqual(InventoryScanBatch.objects.count(), 0)
 
     def test_superuser_can_import_to_any_session(self):
         response = self._post_text(

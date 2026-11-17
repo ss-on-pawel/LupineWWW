@@ -15,7 +15,7 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.core.paginator import EmptyPage, Paginator
 from django.db import transaction, IntegrityError
 from django.db.models import DateField, Exists, OuterRef, Q, Subquery
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -50,6 +50,11 @@ from locations.models import Location, OrganizationSettings
 ASSET_WITHDRAW_STATUSES = {
     Asset.Status.LIQUIDATED,
 }
+
+
+def _scoped_assets(user):
+    ids = get_accessible_location_ids(user)
+    return Asset.objects.all() if ids is None else Asset.objects.filter(location_fk_id__in=ids)
 
 
 def _format_csv_date(value):
@@ -173,7 +178,7 @@ EXPORTABLE_ASSET_COLUMNS = {
     },
     "last_inventory_date": {
         "label": "Ost. inwentaryzacja",
-        "value": lambda asset, context: _format_csv_date(asset.last_inventory_date),
+        "value": lambda asset, context: _format_csv_date(timezone.localtime(asset.last_inventory_at).date() if asset.last_inventory_at else asset.last_inventory_date),
     },
     "last_inventory_at": {
         "label": "Data inwent.",
@@ -241,15 +246,7 @@ def _user_can_manage_asset_types(user):
 
 
 def _user_can_restore_asset(user):
-    if not getattr(user, "is_authenticated", False):
-        return False
-    if user.is_superuser:
-        return True
-    try:
-        profile = user.profile
-    except ObjectDoesNotExist:
-        return False
-    return profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}
+    return bool(getattr(user, "is_authenticated", False))
 
 
 def _user_can_bulk_withdraw_assets(user):
@@ -493,7 +490,7 @@ class AssetListView(LoginRequiredMixin, TemplateView):
         context["page_title"] = self.page_title
         context["status_options"] = Asset.Status.choices
         context["location_options"] = list(
-            Asset.objects.exclude(location="")
+            _scoped_assets(self.request.user).exclude(location="")
             .order_by("location")
             .values_list("location", flat=True)
             .distinct()
@@ -745,6 +742,11 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
     template_name = "assets/asset_form.html"
     success_url = reverse_lazy("assets:list")
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['location_queryset'] = _get_asset_form_location_queryset(self.request.user)
+        return kwargs
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Dodaj składnik majątku"
@@ -800,7 +802,13 @@ class AssetUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
     @_ot_number_conflicts_as_form_errors
+    @transaction.atomic
     def form_valid(self, form):
+        current = self.get_queryset().select_for_update().get(pk=self.object.pk)
+        expected = form.cleaned_data.get('expected_updated_at')
+        if expected and expected != current.updated_at.isoformat():
+            form.add_error(None, 'Kartoteka zmieniła się od otwarcia formularza. Odśwież kartę i ponów edycję.')
+            return self.form_invalid(form)
         if user_requires_asset_change_approval(self.request.user):
             current_asset = self.get_queryset().get(pk=self.object.pk)
             current_payload = {
@@ -913,7 +921,7 @@ def asset_set_catalogued(request, id):
             return redirect("assets:detail", id=asset.pk)
         if asset.is_catalogued != (expected == "1"):
             return HttpResponse("Oznaczenie zmieniło się w innej karcie. Odśwież kartę środka.", status=409)
-        if AssetChangeRequest.objects.filter(asset=asset, status=AssetChangeRequest.Status.PENDING).exists():
+        if user_requires_asset_change_approval(request.user) and AssetChangeRequest.objects.filter(asset=asset, status=AssetChangeRequest.Status.PENDING).exists():
             return HttpResponse("Środek ma oczekującą zmianę. Najpierw rozpatrz wniosek.", status=409)
         if user_requires_asset_change_approval(request.user):
             current = serialize_asset_form_payload(
@@ -1043,8 +1051,9 @@ def asset_attachment_download(request, asset_id, attachment_id):
         raise Http404
 
     encoded_name = urllib.parse.quote(attachment.original_filename, safe="")
-    response = FileResponse(file_handle, content_type=attachment.content_type)
-    response["Content-Disposition"] = f"inline; filename*=UTF-8''{encoded_name}"
+    response = FileResponse(file_handle, content_type="application/octet-stream")
+    response["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded_name}"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
 
 
@@ -1157,6 +1166,8 @@ def build_asset_list_queryset(request):
     location = request.GET.get("location", "").strip()
     ordering = request.GET.get("ordering", "-updated_at").strip() or "-updated_at"
     asset_scope = request.GET.get("asset_scope", "active").strip()
+    if asset_scope == 'archive':
+        require_feature(request, 'asset_archive')
     if asset_scope not in {"active", "archive"}:
         asset_scope = "active"
 
@@ -1279,6 +1290,9 @@ def build_asset_list_queryset(request):
             output_field=DateField(),
         ),
     )
+    from django.db.models.functions import Coalesce, TruncDate
+    queryset = queryset.annotate(effective_inventory_date=Coalesce(
+        TruncDate('last_inventory_at'), 'last_inventory_date', output_field=DateField()))
     parsed_filters = parse_asset_filters(request.GET)
     queryset = apply_asset_filters(queryset, parsed_filters)
     queryset = queryset.filter(is_active=(asset_scope == "active"))
@@ -1349,10 +1363,10 @@ def asset_list_api(request):
             "runtime_status_display": "Inwentaryzowany" if asset.is_in_active_inventory else "",
             "technical_condition": asset.technical_condition,
             "technical_condition_display": asset.get_technical_condition_display(),
-            "last_inventory_date": asset.last_inventory_date.isoformat() if asset.last_inventory_date else "",
+            "last_inventory_date": (timezone.localtime(asset.last_inventory_at).date().isoformat() if asset.last_inventory_at else (asset.last_inventory_date.isoformat() if asset.last_inventory_date else "")),
             "last_inventory_at": asset.last_inventory_at.isoformat() if asset.last_inventory_at else "",
             "last_inventory_at_display": (
-                asset.last_inventory_at.strftime("%Y-%m-%d %H:%M") if asset.last_inventory_at else ""
+                timezone.localtime(asset.last_inventory_at).strftime("%Y-%m-%d %H:%M") if asset.last_inventory_at else ""
             ),
             "last_inventory_session_id": asset.last_inventory_session_id,
             "last_inventory_session_number": (
@@ -1364,7 +1378,7 @@ def asset_list_api(request):
             "is_active": asset.is_active,
             "is_active_display": "Tak" if asset.is_active else "Nie",
             "updated_at": asset.updated_at.isoformat(),
-            "updated_at_display": asset.updated_at.strftime("%Y-%m-%d %H:%M"),
+            "updated_at_display": timezone.localtime(asset.updated_at).strftime("%Y-%m-%d %H:%M"),
             "has_active_service_alert": asset.has_active_service_alert,
             "service_alert_overdue": asset.service_alert_overdue,
             "service_alert_label": asset.service_alert_label or "",
@@ -1398,23 +1412,19 @@ def asset_export_csv_api(request):
 
     queryset, _active_filters = build_asset_list_queryset(request)
     today = timezone.localdate().isoformat()
-    response = HttpResponse(content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = f'attachment; filename="assets-export-{today}.csv"'
-    response.write("\ufeff")
-
-    writer = csv.writer(response, delimiter=";")
-    writer.writerow([EXPORTABLE_ASSET_COLUMNS[column]["label"] for column in selected_columns])
-
-    context = {
-        "asset_type_names_by_code": dict(AssetTypeDictionary.objects.values_list("code", "name")),
-    }
-    for asset in queryset.iterator(chunk_size=500):
-        writer.writerow(
-            [
-                _normalize_csv_value(EXPORTABLE_ASSET_COLUMNS[column]["value"](asset, context))
-                for column in selected_columns
-            ]
-        )
+    class Echo:
+        def write(self, value):
+            return value
+    writer = csv.writer(Echo(), delimiter=';')
+    context = {'asset_type_names_by_code': dict(AssetTypeDictionary.objects.values_list('code','name'))}
+    def rows():
+        yield '\ufeff'
+        yield writer.writerow([EXPORTABLE_ASSET_COLUMNS[column]['label'] for column in selected_columns])
+        for asset in queryset.iterator(chunk_size=500):
+            yield writer.writerow([_normalize_csv_value(EXPORTABLE_ASSET_COLUMNS[column]['value'](asset,context))
+                                   for column in selected_columns])
+    response = StreamingHttpResponse(rows(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="assets-export-{today}.csv"'
 
     return response
 
@@ -1439,7 +1449,7 @@ def _normalize_csv_value(value):
 
 def _parse_asset_id_list_payload(payload):
     raw_asset_ids = payload.get("asset_ids")
-    if not isinstance(raw_asset_ids, list) or not raw_asset_ids:
+    if not isinstance(raw_asset_ids, list) or not raw_asset_ids or len(raw_asset_ids) > 1000:
         return None, JsonResponse({"success": False, "error": "asset_ids must be a non-empty list."}, status=400)
 
     asset_ids = []
@@ -1497,7 +1507,11 @@ def asset_labels_pdf(request):
     if not ids or len(ids) > 200:
         return HttpResponse("Nieprawidłowa liczba identyfikatorów.", status=400)
 
-    assets = list(Asset.objects.filter(id__in=ids, is_active=True).order_by("id"))
+    queryset = Asset.objects.filter(id__in=ids, is_active=True)
+    allowed = get_accessible_location_ids(request.user)
+    if allowed is not None:
+        queryset = queryset.filter(location_fk_id__in=allowed)
+    assets = list(queryset.order_by('id'))
     if not assets:
         return HttpResponse("Brak środków do wydruku.", status=404)
 
@@ -1701,44 +1715,14 @@ def asset_generate_lt_pdf(request):
     issuing_unit_text = request.POST.get("issuing_unit_text", "").strip()
     notes = request.POST.get("notes", "").strip()
 
-    now = timezone.now()
-    year = now.year
-    existing_count = AssetAttachment.objects.filter(document_type=AssetAttachment.DocumentType.LT).count()
-    doc_number = f"LT/{existing_count + 1:06d}/{year}"
-
-    org = OrganizationSettings.get()
-    pdf_buffer = generate_lt_pdf(
-        assets=assets,
-        org=org,
-        date_of_action=date_of_action,
-        generated_by=request.user,
-        generated_at=now,
-        issuing_unit_text=issuing_unit_text,
-        notes=notes,
-        doc_number=doc_number,
-    )
-    pdf_bytes = pdf_buffer.read()
-    safe_doc_num = doc_number.replace("/", "-")
-    filename = f"LT_{date_of_action.strftime('%Y%m%d')}_{safe_doc_num}.pdf"
-
-    first_att = None
-    with transaction.atomic():
-        for asset in assets:
-            att = AssetAttachment(
-                asset=asset,
-                title=f"LT — Likwidacja ({date_of_action.strftime('%d.%m.%Y')})",
-                original_filename=filename,
-                content_type="application/pdf",
-                size_bytes=len(pdf_bytes),
-                uploaded_by=request.user,
-                document_type=AssetAttachment.DocumentType.LT,
-                date_of_action=date_of_action,
-                is_system_generated=True,
-                is_protected=True,
-            )
-            att.file.save(filename, ContentFile(pdf_bytes), save=True)
-            if first_att is None:
-                first_att = att
+    from .lt_documents import create_lt_document
+    try:
+        document, first_att, pdf_bytes, filename = create_lt_document(
+            assets=assets, org=OrganizationSettings.get(), date_of_action=date_of_action,
+            operator=request.user, issuing_unit_text=issuing_unit_text, notes=notes)
+    except ValidationError as error:
+        return _form_error("; ".join(error.messages))
+    doc_number = document.number
 
     if is_json:
         pdf_url = reverse("assets:attachment-download", kwargs={
@@ -1851,30 +1835,20 @@ def asset_bulk_move_api(request):
     if movable_assets.filter(is_active=False).exists():
         return JsonResponse({"success": False, "error": "Archived assets cannot be moved."}, status=400)
 
-    movable_asset_snapshots = list(movable_assets.select_related("location_fk"))
-    history_entries = []
-    for asset in movable_asset_snapshots:
-        old_location_path = asset.location_fk.path if asset.location_fk else ""
-        if old_location_path == target_location.path:
-            continue
-        history_entries.append(
-            AssetHistoryEntry(
-                asset=asset,
-                operator=request.user,
-                event_type=AssetHistoryEntry.EventType.MOVED,
-                description="Przeniesiono środek",
-                old_value=old_location_path,
-                new_value=target_location.path,
-                field_name="location_fk",
-            )
-        )
-
     with transaction.atomic():
-        updated_count = movable_assets.update(
-            location=target_location.path,
-            location_fk=target_location,
-        )
-        AssetHistoryEntry.objects.bulk_create(history_entries)
+        movable_asset_snapshots = list(movable_assets.select_for_update(of=('self',)).order_by('pk'))
+        if len(movable_asset_snapshots) != len(unique_asset_ids):
+            return JsonResponse({'success': False, 'error': 'Zakres środków zmienił się. Odśwież listę.'}, status=409)
+        if any(not asset.is_active for asset in movable_asset_snapshots):
+            return JsonResponse({'success': False, 'error': 'Archived assets cannot be moved.'}, status=400)
+        target_path = target_location.path
+        history_entries = [AssetHistoryEntry(asset=asset, operator=request.user,
+            event_type=AssetHistoryEntry.EventType.MOVED, description='Przeniesiono środek',
+            old_value=asset.location, new_value=target_path, field_name='location_fk')
+            for asset in movable_asset_snapshots if asset.location != target_path]
+        updated_count = Asset.objects.filter(pk__in=[asset.pk for asset in movable_asset_snapshots]).update(
+            location=target_path, location_fk=target_location, updated_at=timezone.now())
+        AssetHistoryEntry.objects.bulk_create(history_entries, batch_size=500)
 
     return JsonResponse(
         {
@@ -1943,24 +1917,19 @@ def _resolve_asset_ordering(raw_ordering):
 
 
 def _user_can_import_assets(user):
-    if not getattr(user, "is_authenticated", False):
-        return False
-    if user.is_superuser:
-        return True
-    try:
-        profile = user.profile
-    except ObjectDoesNotExist:
-        return False
-    return profile.pk is not None and profile.role == profile.Role.ADMIN
+    return bool(getattr(user, "is_authenticated", False))
 
 
 @login_required
+
 def asset_import(request):
     require_feature(request, "asset_import")
     if not _user_can_import_assets(request.user):
         raise PermissionDenied
 
-    root_locations = Location.objects.filter(parent=None, is_active=True).order_by("name")
+    root_locations = _get_asset_form_location_queryset(request.user)
+    if get_accessible_location_ids(request.user) is None:
+        root_locations = root_locations.filter(parent=None)
     asset_types = (
         AssetTypeDictionary.objects
         .filter(is_active=True)
@@ -1991,7 +1960,7 @@ def asset_import(request):
         form_errors.append("Wybierz lokalizację root / filię.")
     else:
         try:
-            root_location = Location.objects.get(pk=root_id, is_active=True)
+            root_location = root_locations.get(pk=root_id)
         except Location.DoesNotExist:
             form_errors.append("Wybrana lokalizacja nie istnieje.")
 
@@ -2018,6 +1987,11 @@ def asset_import(request):
         context["form_errors"] = form_errors
         return render(request, "assets/import_assets.html", context)
 
+    import hashlib
+    digest = hashlib.sha256()
+    for chunk in import_file.chunks():
+        digest.update(chunk)
+    import_file.seek(0)
     try:
         rows = parse_import_xlsx(import_file)
     except Exception as exc:
@@ -2033,7 +2007,12 @@ def asset_import(request):
         root_location=root_location,
         asset_type_ref=asset_type_ref,
         operator=request.user,
+        idempotency_key=digest.hexdigest(),
     )
+    if report.get('already_imported'):
+        messages.info(request, 'Ten plik był już przetworzony w tej lokalizacji i rodzaju. Nie utworzono kolejnych kartotek.')
+    if report.get('error_rows'):
+        messages.warning(request, 'Import jest częściowy. Po poprawieniu danych prześlij tylko wiersze, których nie zaimportowano.')
     context["report"] = report
     context["selected_root"] = root_location
     context["selected_asset_type"] = asset_type_ref
@@ -2153,7 +2132,7 @@ def depreciation_report(request):
     show_results = year is not None and error is None
 
     if show_results:
-        rows, totals, label = build_depreciation_report(year, month)
+        rows, totals, label = build_depreciation_report(year, month, location_ids=get_accessible_location_ids(request.user))
 
         if fmt == "pdf":
             from .documents import generate_depreciation_report_pdf
@@ -2280,7 +2259,7 @@ def depreciation_report_monthly(request):
     show_results = year is not None and error is None
 
     if show_results:
-        rows, totals = build_depreciation_report_full_year(year)
+        rows, totals = build_depreciation_report_full_year(year, location_ids=get_accessible_location_ids(request.user))
 
         if fmt == "pdf":
             from .documents import generate_depreciation_full_year_pdf

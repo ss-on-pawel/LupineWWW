@@ -45,7 +45,7 @@ class CatalogueCardTests(TestCase):
         self.asset.status=Asset.Status.LIQUIDATED;self.asset.save()
         self.assertEqual(self.client.post(self.url,{'is_catalogued':'1','expected_catalogued':'0'}).status_code,404)
 
-    def test_approval_and_pending_request_not_overwritten(self):
+    def test_old_approval_flag_does_not_queue_cataloguing(self):
         user=User.objects.create_user(username='approval-user')
         user.profile.asset_changes_require_approval=True
         user.profile.save(update_fields=['asset_changes_require_approval'])
@@ -53,11 +53,9 @@ class CatalogueCardTests(TestCase):
         self.client.force_login(user)
         response=self.client.post(self.url,{'is_catalogued':'1','expected_catalogued':'0'})
         self.assertEqual(response.status_code,302)
-        self.asset.refresh_from_db();self.assertFalse(self.asset.is_catalogued)
-        change=AssetChangeRequest.objects.get(asset=self.asset)
-        self.assertEqual(self.client.post(self.url,{'is_catalogued':'1','expected_catalogued':'0'}).status_code,409)
-        approve_asset_change_request(change,self.user)
         self.asset.refresh_from_db();self.assertTrue(self.asset.is_catalogued)
+        self.assertFalse(AssetChangeRequest.objects.exists())
+
 
     def test_normal_edit_preserves_catalogued_even_if_hidden_value_is_stale(self):
         self.asset.is_catalogued=True;self.asset.save()

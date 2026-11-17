@@ -4,6 +4,7 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.http import JsonResponse
 from django.http import Http404, FileResponse, HttpResponse
+from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_GET
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -20,6 +21,9 @@ def location_list(request):
     query = request.GET.get("q", "").strip()
     queryset = Location.objects.select_related("parent").order_by("name", "id")
 
+    allowed = get_accessible_location_ids(request.user)
+    if allowed is not None:
+        queryset = queryset.filter(pk__in=allowed)
     if query:
         queryset = queryset.filter(
             Q(name__icontains=query)
@@ -61,7 +65,7 @@ def location_list(request):
 
 @login_required
 def location_detail(request, id):
-    location = _get_location(id)
+    location = _get_location(id, user=request.user)
     assigned_assets = list(
         _get_assigned_assets_queryset(location).only("id", "inventory_number", "name", "status", "location")
     )
@@ -95,6 +99,8 @@ def _save_location_form(form):
 
 @login_required
 def location_create(request):
+    if get_accessible_location_ids(request.user) is not None:
+        raise PermissionDenied('Nową gałąź może utworzyć kierownik lub administrator.')
     form = LocationForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
@@ -119,7 +125,7 @@ def location_create(request):
 
 @login_required
 def location_create_child(request, id):
-    parent_location = _get_location(id)
+    parent_location = _get_location(id, user=request.user)
     form = LocationForm(request.POST or None, parent=parent_location)
 
     if request.method == "POST" and form.is_valid():
@@ -144,7 +150,7 @@ def location_create_child(request, id):
 
 @login_required
 def location_update(request, id):
-    location = _get_location(id)
+    location = _get_location(id, user=request.user)
     form = LocationForm(request.POST or None, instance=location, parent=location.parent)
 
     if request.method == "POST" and form.is_valid():
@@ -169,7 +175,7 @@ def location_update(request, id):
 
 @login_required
 def location_delete(request, id):
-    location = _get_location(id)
+    location = _get_location(id, user=request.user)
 
     if request.method != "POST":
         return redirect("locations:detail", id=location.id)
@@ -208,6 +214,8 @@ def location_options_api(request):
 
 @login_required
 def organization_settings(request):
+    if get_accessible_location_ids(request.user) is not None:
+        raise PermissionDenied
     org = OrganizationSettings.get()
     form = OrganizationSettingsForm(request.POST or None, instance=org)
     if request.method == "POST" and form.is_valid():
@@ -224,7 +232,10 @@ def organization_settings(request):
     )
 
 
-def _get_location(id):
+def _get_location(id, *, user):
+    allowed = get_accessible_location_ids(user)
+    if allowed is not None and id not in allowed:
+        raise Http404
     try:
         return Location.objects.select_related("parent").get(pk=id)
     except Location.DoesNotExist as exc:
@@ -244,7 +255,10 @@ def _build_location_tree_rows(locations):
             ordered_locations.append(location)
             walk(location.id, depth + 1)
 
-    walk(None, 0)
+    ids = {location.pk for location in locations}
+    for parent in children_by_parent_id:
+        if parent not in ids:
+            walk(parent, 0)
     return ordered_locations
 
 
@@ -267,7 +281,7 @@ def _count_assigned_assets(location):
 def _get_assigned_assets_queryset(location):
     # Safe integration point until Asset gets a real FK to Location.
     return Asset.objects.filter(
-        Q(location__iexact=location.name) | Q(location__iexact=location.path)
+        Q(location_fk=location) | (Q(location_fk__isnull=True) & (Q(location__iexact=location.name) | Q(location__iexact=location.path)))
     ).order_by("inventory_number", "id")
 
 

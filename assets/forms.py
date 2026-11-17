@@ -35,6 +35,7 @@ class OtDocumentForm(forms.Form):
 
 
 class AssetForm(forms.ModelForm):
+    expected_updated_at = forms.CharField(required=False, widget=forms.HiddenInput)
     asset_type = forms.ChoiceField(label="Rodzaj", required=False)
     location_fk = forms.ModelChoiceField(
         label="Lokalizacja",
@@ -47,6 +48,9 @@ class AssetForm(forms.ModelForm):
         preserve_catalogued = kwargs.pop("preserve_catalogued", False)
         location_queryset = kwargs.pop("location_queryset", None)
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial['expected_updated_at'] = self.instance.updated_at.isoformat()
+            self.fields['current_quantity'] = forms.IntegerField(label='Ilość', min_value=0)
         asset_type_choices = [
             (asset_type.code, asset_type.name)
             for asset_type in AssetTypeDictionary.objects.filter(is_active=True).order_by("sort_order", "name")
@@ -198,7 +202,7 @@ class AssetForm(forms.ModelForm):
             for field_name in SYSTEM_MANAGED_ASSET_FIELDS:
                 setattr(asset, field_name, getattr(current_asset, field_name))
         else:
-            asset.record_quantity = 1
+            asset.record_quantity = asset.current_quantity
             asset.is_active = True
             asset.last_inventory_date = None
 

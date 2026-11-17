@@ -52,7 +52,7 @@ def _active_months_in_year(plan, year: int) -> int:
     return count
 
 
-def build_depreciation_report(year: int, month: int | None = None):
+def build_depreciation_report(year: int, month: int | None = None, *, location_ids=None):
     """
     Returns (rows, totals, label).
 
@@ -76,6 +76,8 @@ def build_depreciation_report(year: int, month: int | None = None):
         .order_by("asset__inventory_number")
     )
 
+    if location_ids is not None:
+        plans = plans.filter(asset__location_fk_id__in=location_ids)
     rows = []
     for plan in plans:
         start = plan.depreciation_start_date
@@ -145,7 +147,7 @@ def build_depreciation_report(year: int, month: int | None = None):
     return rows, totals, label
 
 
-def build_depreciation_report_full_year(year: int):
+def build_depreciation_report_full_year(year: int, *, location_ids=None):
     """
     Annual report with month-by-month breakdown.
 
@@ -168,6 +170,8 @@ def build_depreciation_report_full_year(year: int):
         .order_by("asset__inventory_number")
     )
 
+    if location_ids is not None:
+        plans = plans.filter(asset__location_fk_id__in=location_ids)
     rows = []
     for plan in plans:
         start = plan.depreciation_start_date

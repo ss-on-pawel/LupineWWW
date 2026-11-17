@@ -295,8 +295,11 @@
       const tx = db.transaction(STORE, 'readwrite');
       const store = tx.objectStore(STORE);
       const req = store.add(record);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = e => reject(e.target.error);
+      let key;
+      req.onsuccess = () => { key = req.result; };
+      tx.oncomplete = () => resolve(key);
+      tx.onabort = () => reject(tx.error || new Error('Nie zapisano skanu.'));
+      tx.onerror = () => {};
     });
   }
 
@@ -318,8 +321,9 @@
       const tx = db.transaction(STORE, 'readwrite');
       const store = tx.objectStore(STORE);
       const req = store.delete(id);
-      req.onsuccess = () => resolve();
-      req.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error || new Error('Nie potwierdzono skanu.'));
+      tx.onerror = () => {};
     });
   }
 
@@ -334,10 +338,11 @@
         const resp = await fetch(api_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: item.code, current_location_code: item.location_code }),
+          body: JSON.stringify({code: item.code, current_location_code: item.location_code, client_scan_id: item.client_scan_id || ('legacy-phone-' + item.id), scanned_at: item.scanned_at}),
         });
         if (resp.ok) {
           const data = await resp.json();
+          elLastType.textContent = formatResultType(data);
           await dbDelete(item.id);
           pendingCount = Math.max(0, pendingCount - 1);
           if (data.scan_count !== undefined) {
@@ -399,32 +404,17 @@
     elLastCode.textContent = code;
     elLastType.textContent = 'Skanowanie…';
 
-    const entry = { token: SESSION_DATA.token, code, location_code: currentLocationCode };
-
-    if (navigator.onLine) {
-      try {
-        const resp = await fetch(api_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, current_location_code: currentLocationCode }),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data.scan_count !== undefined) {
-            scanCount = data.scan_count;
-            elScanCount.textContent = scanCount;
-          }
-          elLastType.textContent = formatResultType(data);
-          updateSyncUI();
-          return;
-        }
-      } catch { /* fall through to buffer */ }
+    const entry = {token: SESSION_DATA.token, code, location_code: currentLocationCode,
+                   client_scan_id: crypto.randomUUID(), scanned_at: new Date().toISOString()};
+    try {
+      await dbAdd(entry);
+      pendingCount++;
+      elLastType.textContent = 'Zapisano w buforze';
+      updateSyncUI();
+      await syncPending();
+    } catch (error) {
+      elLastType.textContent = 'Nie zapisano skanu. Ponów odczyt.';
     }
-
-    await dbAdd(entry);
-    pendingCount++;
-    elLastType.textContent = 'Zapisano w buforze';
-    updateSyncUI();
   }
 
   function formatResultType(data) {

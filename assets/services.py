@@ -273,27 +273,12 @@ def record_asset_field_changes(*, asset, operator, before_values, source_object=
 
 
 def user_requires_asset_change_approval(user) -> bool:
-    if not getattr(user, "is_authenticated", False):
-        return True
-
-    if getattr(user, "is_superuser", False):
+    # Current product policy: all business changes are immediate within scope.
+    # Keep existing requests reviewable, but never create new approval work.
+    if getattr(user, 'is_superuser', False):
         return False
-
-    try:
-        profile = user.profile
-    except ObjectDoesNotExist:
-        return True
-
-    if profile.pk is None:
-        return True
-
-    if profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}:
-        return False
-
-    if profile.role != profile.Role.USER and profile.can_approve_asset_changes:
-        return False
-
-    return profile.asset_changes_require_approval
+    profile = getattr(user, 'profile', None)
+    return not getattr(user, 'is_authenticated', False) or profile is None or profile.pk is None
 
 
 def get_asset_withdraw_capabilities(asset):
@@ -413,7 +398,13 @@ def approve_asset_change_request(change_request, reviewer):
             form_data = deserialize_asset_payload_for_form(payload["proposed"])
             form_data.setdefault("ot_document_number", asset.ot_document_number)
             form_data.setdefault("is_catalogued", asset.is_catalogued)
-            form = AssetForm(data=form_data, instance=asset)
+            from accounts.utils import get_accessible_location_ids
+            from locations.models import Location
+            allowed = get_accessible_location_ids(reviewer)
+            choices = Location.objects.filter(is_active=True)
+            if allowed is not None:
+                choices = choices.filter(pk__in=allowed)
+            form = AssetForm(data=form_data, instance=asset, location_queryset=choices)
             if not form.is_valid():
                 raise ValidationError(form.errors)
 

@@ -1070,25 +1070,27 @@ class UserRequiresAssetChangeApprovalTests(TestCase):
 
         self.assertFalse(user_requires_asset_change_approval(user))
 
-    def test_user_with_approver_flag_and_approval_required_still_requires_approval(self):
+    def test_old_approver_flags_do_not_require_approval(self):
         user = User.objects.create_user(username="approval-approver", password="test-pass-123")
         user.profile.can_approve_asset_changes = True
         user.profile.asset_changes_require_approval = True
         user.profile.save(update_fields=["can_approve_asset_changes", "asset_changes_require_approval"])
 
-        self.assertTrue(user_requires_asset_change_approval(user))
+        self.assertFalse(user_requires_asset_change_approval(user))
+
 
     def test_user_with_approval_disabled_does_not_require_approval(self):
         user = User.objects.create_user(username="approval-disabled", password="test-pass-123")
 
         self.assertFalse(user_requires_asset_change_approval(user))
 
-    def test_user_with_approval_enabled_requires_approval(self):
+    def test_old_approval_flag_does_not_require_approval(self):
         user = User.objects.create_user(username="approval-enabled", password="test-pass-123")
         user.profile.asset_changes_require_approval = True
         user.profile.save(update_fields=["asset_changes_require_approval"])
 
-        self.assertTrue(user_requires_asset_change_approval(user))
+        self.assertFalse(user_requires_asset_change_approval(user))
+
 
     def test_user_without_profile_requires_approval(self):
         user = User.objects.create_user(username="approval-no-profile", password="test-pass-123")
@@ -1629,43 +1631,9 @@ class ApproveAssetChangeRequestCreateTests(TestCase):
         self.assertIsNotNone(change_request.reviewed_at)
         self.assertEqual(change_request.asset, asset)
 
-    def test_manager_outside_scope_cannot_approve_create(self):
-        in_scope = Location.objects.create(name="Approve Create Manager In Scope")
-        out_of_scope = Location.objects.create(name="Approve Create Manager Out Scope")
-        requester = User.objects.create_user(username="approve-create-mgr-out-requester", password="test-pass-123")
-        reviewer = User.objects.create_user(username="approve-create-mgr-out-reviewer", password="test-pass-123")
-        reviewer.profile.role = UserProfile.Role.MANAGER
-        reviewer.profile.save(update_fields=["role"])
-        reviewer.profile.allowed_locations.add(in_scope)
-        change_request = self._create_request(
-            requester,
-            payload=self._create_payload(inventory_number="APPROVE-CREATE-MGR-OUT-001", location_fk=out_of_scope.id),
-        )
 
-        with self.assertRaises(PermissionDenied):
-            approve_asset_change_request(change_request, reviewer)
 
-        change_request.refresh_from_db()
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertIsNone(change_request.asset)
-        self.assertFalse(Asset.objects.filter(inventory_number="APPROVE-CREATE-MGR-OUT-001").exists())
 
-    def test_manager_without_allowed_locations_cannot_approve_create(self):
-        requester = User.objects.create_user(username="approve-create-mgr-noloc-requester", password="test-pass-123")
-        reviewer = User.objects.create_user(username="approve-create-mgr-noloc-reviewer", password="test-pass-123")
-        reviewer.profile.role = UserProfile.Role.MANAGER
-        reviewer.profile.save(update_fields=["role"])
-        change_request = self._create_request(
-            requester,
-            payload=self._create_payload(inventory_number="APPROVE-CREATE-MGR-NOLOC-001"),
-        )
-
-        with self.assertRaises(PermissionDenied):
-            approve_asset_change_request(change_request, reviewer)
-
-        change_request.refresh_from_db()
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertFalse(Asset.objects.filter(inventory_number="APPROVE-CREATE-MGR-NOLOC-001").exists())
 
 
 class ApproveAssetChangeRequestUpdateTests(TestCase):
@@ -1912,35 +1880,23 @@ class ApproveAssetChangeRequestUpdateTests(TestCase):
         change_request.refresh_from_db()
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
 
-    def test_manager_cannot_approve_update_outside_scope(self):
-        allowed_location, outside_location = self._create_location_tree()
-        requester = User.objects.create_user(username="approve-update-outside-requester", password="test-pass-123")
-        reviewer = self._manager_with_location("approve-update-outside-manager", allowed_location)
-        asset = self._create_asset(inventory_number="APPROVE-UPDATE-OUTSIDE-001", location_obj=outside_location)
-        change_request = self._update_request(requester, asset)
 
-        with self.assertRaises(PermissionDenied):
-            approve_asset_change_request(change_request, reviewer)
 
-        asset.refresh_from_db()
-        change_request.refresh_from_db()
-        self.assertEqual(asset.name, "Original Asset")
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
-
-    def test_manager_cannot_approve_update_without_location_fk(self):
+    def test_manager_cannot_approve_invalid_update_without_location_fk(self):
         allowed_location, _ = self._create_location_tree()
         requester = User.objects.create_user(username="approve-update-nofk-requester", password="test-pass-123")
         reviewer = self._manager_with_location("approve-update-nofk-manager", allowed_location)
         asset = self._create_asset(inventory_number="APPROVE-UPDATE-NOFK-001", location_obj=None, location_fk=None)
         change_request = self._update_request(requester, asset)
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(ValidationError):
             approve_asset_change_request(change_request, reviewer)
 
         asset.refresh_from_db()
         change_request.refresh_from_db()
         self.assertEqual(asset.name, "Original Asset")
         self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
+
 
     def test_regular_user_cannot_approve_update(self):
         location, _ = self._create_location_tree()
@@ -2478,109 +2434,11 @@ class AssetChangeRequestListViewTests(TestCase):
         self.assertContains(response, "QUEUE-ADMIN-CREATE-001")
         self.assertContains(response, "QUEUE-ADMIN-UPD-001")
 
-    def test_manager_sees_only_update_requests_in_scope(self):
-        requester = User.objects.create_user(username="queue-scope-requester", password="test-pass-123")
-        reviewer = User.objects.create_user(username="queue-scope-manager", password="test-pass-123")
-        reviewer.profile.role = UserProfile.Role.MANAGER
-        reviewer.profile.save(update_fields=["role"])
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer.profile.allowed_locations.add(allowed_location)
-        in_scope_asset = self._create_asset("QUEUE-IN-SCOPE-001", allowed_location)
-        outside_asset = self._create_asset("QUEUE-OUT-SCOPE-001", outside_location)
-        null_location_asset = self._create_asset("QUEUE-NO-FK-001", None)
-        self._create_change_request(requester, AssetChangeRequest.Operation.CREATE, "QUEUE-CREATE-NO-FK-001")
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.UPDATE,
-            "QUEUE-IN-SCOPE-UPDATE",
-            asset=in_scope_asset,
-            payload={"current": {"name": in_scope_asset.name}, "proposed": {"name": "QUEUE-IN-SCOPE-UPDATE"}},
-        )
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.UPDATE,
-            "QUEUE-OUT-SCOPE-UPDATE",
-            asset=outside_asset,
-            payload={"current": {"name": outside_asset.name}, "proposed": {"name": "QUEUE-OUT-SCOPE-UPDATE"}},
-        )
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.UPDATE,
-            "QUEUE-NO-FK-UPDATE",
-            asset=null_location_asset,
-            payload={"current": {"name": null_location_asset.name}, "proposed": {"name": "QUEUE-NO-FK-UPDATE"}},
-        )
-        self.client.force_login(reviewer)
 
-        response = self.client.get(reverse("assets:change-list"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "QUEUE-IN-SCOPE-001")
-        self.assertNotContains(response, "QUEUE-OUT-SCOPE-001")
-        self.assertNotContains(response, "QUEUE-NO-FK-001")
-        self.assertNotContains(response, "QUEUE-CREATE-NO-FK-001")
 
-    def test_manager_sees_create_request_with_location_in_scope(self):
-        requester = User.objects.create_user(username="queue-create-scope-requester", password="test-pass-123")
-        reviewer = User.objects.create_user(username="queue-create-scope-manager", password="test-pass-123")
-        reviewer.profile.role = UserProfile.Role.MANAGER
-        reviewer.profile.save(update_fields=["role"])
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer.profile.allowed_locations.add(allowed_location)
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.CREATE,
-            "QUEUE-CREATE-IN-SCOPE-001",
-            payload={
-                "name": "QUEUE-CREATE-IN-SCOPE-001",
-                "inventory_number": "QUEUE-CREATE-IN-SCOPE-001",
-                "location_fk": allowed_location.id,
-            },
-        )
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.CREATE,
-            "QUEUE-CREATE-OUT-SCOPE-001",
-            payload={
-                "name": "QUEUE-CREATE-OUT-SCOPE-001",
-                "inventory_number": "QUEUE-CREATE-OUT-SCOPE-001",
-                "location_fk": outside_location.id,
-            },
-        )
-        self.client.force_login(reviewer)
 
-        response = self.client.get(reverse("assets:change-list"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "QUEUE-CREATE-IN-SCOPE-001")
-        self.assertNotContains(response, "QUEUE-CREATE-OUT-SCOPE-001")
-
-    def test_manager_without_allowed_locations_sees_empty_queue(self):
-        requester = User.objects.create_user(username="queue-noloc-requester", password="test-pass-123")
-        reviewer = User.objects.create_user(username="queue-noloc-manager", password="test-pass-123")
-        reviewer.profile.role = UserProfile.Role.MANAGER
-        reviewer.profile.save(update_fields=["role"])
-        allowed_location, _ = self._create_location_tree()
-        asset = self._create_asset("QUEUE-NOLOC-ASSET-001", allowed_location)
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.CREATE,
-            "QUEUE-NOLOC-CREATE",
-            payload={"name": "QUEUE-NOLOC-CREATE", "inventory_number": "QUEUE-NOLOC-CREATE", "location_fk": allowed_location.id},
-        )
-        self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.UPDATE,
-            "QUEUE-NOLOC-UPDATE",
-            asset=asset,
-            payload={"current": {"name": asset.name}, "proposed": {"name": "QUEUE-NOLOC-UPDATE"}},
-        )
-        self.client.force_login(reviewer)
-
-        response = self.client.get(reverse("assets:change-list"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Brak zmian do wyświetlenia.")
 
     def test_default_list_shows_only_pending_requests(self):
         requester = User.objects.create_user(username="queue-status-requester", password="test-pass-123")
@@ -3194,56 +3052,11 @@ class AssetChangeRequestDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Detail Scope Updated")
 
-    def test_manager_gets_404_for_update_outside_scope(self):
-        requester = User.objects.create_user(username="change-detail-outside-requester", password="test-pass-123")
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer = self._manager_with_location("change-detail-outside-manager", allowed_location)
-        asset = self._create_asset("DETAIL-OUTSIDE-ASSET-001", outside_location)
-        change_request = self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.UPDATE,
-            "DETAIL-OUTSIDE-UPDATE",
-            asset=asset,
-            payload={"current": {"name": asset.name}, "proposed": {"name": "Outside Updated"}},
-        )
-        self.client.force_login(reviewer)
 
-        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
 
-        self.assertEqual(response.status_code, 404)
 
-    def test_manager_gets_404_for_update_without_location_fk(self):
-        requester = User.objects.create_user(username="change-detail-nofk-requester", password="test-pass-123")
-        allowed_location, _ = self._create_location_tree()
-        reviewer = self._manager_with_location("change-detail-nofk-manager", allowed_location)
-        asset = self._create_asset("DETAIL-NOFK-ASSET-001", None)
-        change_request = self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.UPDATE,
-            "DETAIL-NOFK-UPDATE",
-            asset=asset,
-            payload={"current": {"name": asset.name}, "proposed": {"name": "No FK Updated"}},
-        )
-        self.client.force_login(reviewer)
 
-        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
 
-        self.assertEqual(response.status_code, 404)
-
-    def test_manager_gets_404_for_create_without_location_fk(self):
-        requester = User.objects.create_user(username="change-detail-create-scope-requester", password="test-pass-123")
-        allowed_location, _ = self._create_location_tree()
-        reviewer = self._manager_with_location("change-detail-create-scope-manager", allowed_location)
-        change_request = self._create_change_request(
-            requester,
-            AssetChangeRequest.Operation.CREATE,
-            "DETAIL-CREATE-SCOPE-HIDDEN",
-        )
-        self.client.force_login(reviewer)
-
-        response = self.client.get(reverse("assets:change-detail", kwargs={"pk": change_request.pk}))
-
-        self.assertEqual(response.status_code, 404)
 
     def test_update_detail_shows_only_changed_fields(self):
         requester = User.objects.create_user(username="change-detail-diff-requester", password="test-pass-123")
@@ -3552,21 +3365,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         self.assertEqual(asset.name, "Post Scoped Approved")
         self.assertEqual(change_request.status, AssetChangeRequest.Status.APPROVED)
 
-    def test_manager_cannot_approve_out_of_scope_update(self):
-        requester = User.objects.create_user(username="post-approve-outside-requester", password="test-pass-123")
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer = self._manager_with_location("post-approve-outside-manager", allowed_location)
-        asset = self._create_asset("POST-APPROVE-OUTSIDE-001", outside_location)
-        change_request = self._update_request(requester, asset, proposed_name="Post Outside Approved")
-        self.client.force_login(reviewer)
 
-        response = self.client.post(reverse("assets:change-approve", kwargs={"pk": change_request.pk}))
-
-        self.assertEqual(response.status_code, 404)
-        asset.refresh_from_db()
-        change_request.refresh_from_db()
-        self.assertNotEqual(asset.name, "Post Outside Approved")
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
 
     def test_regular_user_gets_403_for_approve(self):
         requester = User.objects.create_user(username="post-approve-regular-requester", password="test-pass-123")
@@ -3631,28 +3430,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         self.assertEqual(first_request.status, AssetChangeRequest.Status.APPROVED)
         self.assertEqual(second_request.status, AssetChangeRequest.Status.APPROVED)
 
-    def test_bulk_approve_skips_out_of_scope_changes(self):
-        requester = User.objects.create_user(username="bulk-approve-scope-requester", password="test-pass-123")
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer = self._manager_with_location("bulk-approve-scope-manager", allowed_location)
-        in_scope_asset = self._create_asset("BULK-APPROVE-IN-SCOPE", allowed_location)
-        out_of_scope_asset = self._create_asset("BULK-APPROVE-OUT-SCOPE", outside_location)
-        in_scope_request = self._update_request(requester, in_scope_asset, proposed_name="Bulk In Scope Approved")
-        out_of_scope_request = self._update_request(requester, out_of_scope_asset, proposed_name="Bulk Out Scope Skipped")
-        self.client.force_login(reviewer)
 
-        response = self.client.post(
-            reverse("assets:bulk-approve"),
-            data=json.dumps({"ids": [in_scope_request.pk, out_of_scope_request.pk]}),
-            content_type="application/json",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"approved_count": 1, "skipped_count": 1})
-        in_scope_request.refresh_from_db()
-        out_of_scope_request.refresh_from_db()
-        self.assertEqual(in_scope_request.status, AssetChangeRequest.Status.APPROVED)
-        self.assertEqual(out_of_scope_request.status, AssetChangeRequest.Status.PENDING)
 
     def test_bulk_approve_skips_non_pending_changes(self):
         requester = User.objects.create_user(username="bulk-approve-nonpending-requester", password="test-pass-123")
@@ -3741,30 +3519,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         self.assertIsNone(change_request.reviewed_by)
         self.assertIsNone(change_request.reviewed_at)
 
-    def test_bulk_reject_skips_out_of_scope_changes(self):
-        requester = User.objects.create_user(username="bulk-reject-scope-requester", password="test-pass-123")
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer = self._manager_with_location("bulk-reject-scope-manager", allowed_location)
-        in_scope_asset = self._create_asset("BULK-REJECT-IN-SCOPE", allowed_location)
-        out_of_scope_asset = self._create_asset("BULK-REJECT-OUT-SCOPE", outside_location)
-        in_scope_request = self._update_request(requester, in_scope_asset, proposed_name="Bulk In Scope Rejected")
-        out_of_scope_request = self._update_request(requester, out_of_scope_asset, proposed_name="Bulk Out Scope Skipped")
-        self.client.force_login(reviewer)
 
-        response = self.client.post(
-            reverse("assets:bulk-reject"),
-            data=json.dumps({"ids": [in_scope_request.pk, out_of_scope_request.pk], "comment": "Poza zakresem pomijane"}),
-            content_type="application/json",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"rejected": 1, "skipped": 1})
-        in_scope_request.refresh_from_db()
-        out_of_scope_request.refresh_from_db()
-        self.assertEqual(in_scope_request.status, AssetChangeRequest.Status.REJECTED)
-        self.assertEqual(in_scope_request.review_comment, "Poza zakresem pomijane")
-        self.assertEqual(out_of_scope_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertEqual(out_of_scope_request.review_comment, "")
 
     def test_bulk_reject_skips_non_pending_changes(self):
         requester = User.objects.create_user(username="bulk-reject-nonpending-requester", password="test-pass-123")
@@ -3906,23 +3661,7 @@ class AssetChangeRequestPostWorkflowViewTests(TestCase):
         self.assertEqual(change_request.status, AssetChangeRequest.Status.REJECTED)
         self.assertEqual(change_request.review_comment, "Rejected in scope")
 
-    def test_manager_cannot_reject_out_of_scope_update(self):
-        requester = User.objects.create_user(username="post-reject-outside-requester", password="test-pass-123")
-        allowed_location, outside_location = self._create_location_tree()
-        reviewer = self._manager_with_location("post-reject-outside-manager", allowed_location)
-        asset = self._create_asset("POST-REJECT-OUTSIDE-001", outside_location)
-        change_request = self._update_request(requester, asset)
-        self.client.force_login(reviewer)
 
-        response = self.client.post(
-            reverse("assets:change-reject", kwargs={"pk": change_request.pk}),
-            {"comment": "Should not save"},
-        )
-
-        self.assertEqual(response.status_code, 404)
-        change_request.refresh_from_db()
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertEqual(change_request.review_comment, "")
 
     def test_regular_user_gets_403_for_reject(self):
         requester = User.objects.create_user(username="post-reject-regular-requester", password="test-pass-123")
@@ -4380,7 +4119,7 @@ class AssetListApiTests(TestCase):
         self.assertEqual(row["last_inventory_session_id"], session.id)
         self.assertEqual(row["last_inventory_session_number"], "INV-API-0001")
         self.assertEqual(row["last_inventory_at"], applied_at.isoformat())
-        self.assertEqual(row["last_inventory_at_display"], applied_at.strftime("%Y-%m-%d %H:%M"))
+        self.assertEqual(row["last_inventory_at_display"], timezone.localtime(applied_at).strftime("%Y-%m-%d %H:%M"))
 
     def test_api_returns_zero_current_quantity_as_zero(self):
         asset = Asset.objects.create(
@@ -4598,7 +4337,7 @@ class AssetExportCsvApiTests(TestCase):
             password="test-pass-123",
         )
         cls.manager_user = User.objects.create_user(username="export-manager", password="test-pass-123")
-        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.role = UserProfile.Role.USER
         cls.manager_user.profile.save(update_fields=["role"])
         cls.manager_user.profile.allowed_locations.add(cls.root_location)
 
@@ -4652,7 +4391,7 @@ class AssetExportCsvApiTests(TestCase):
         return self.client.get(reverse("assets:api-export"), params or {})
 
     def _csv_rows(self, response):
-        text = response.content.decode("utf-8-sig")
+        text = (b"".join(response.streaming_content) if response.streaming else response.content).decode("utf-8-sig")
         return list(csv.reader(StringIO(text), delimiter=";"))
 
     def test_export_requires_login(self):
@@ -4753,7 +4492,7 @@ class AssetExportCsvApiTests(TestCase):
         response = self._export({"columns": "name", "search": "EXP-001"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Za\u017c\u00f3\u0142\u0107", response.content.decode("utf-8-sig"))
+        self.assertIn("Za\u017c\u00f3\u0142\u0107", (b"".join(response.streaming_content) if response.streaming else response.content).decode("utf-8-sig"))
 
     def test_export_content_type_is_csv_utf8(self):
         response = self._export({"columns": "inventory_number"})
@@ -5285,7 +5024,7 @@ class AssetBulkMoveApiAccessTests(TestCase):
             password="test-pass-123",
         )
         cls.manager_user = User.objects.create_user(username="bulk-scope-manager", password="test-pass-123")
-        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.role = UserProfile.Role.USER
         cls.manager_user.profile.save(update_fields=["role"])
         cls.manager_user.profile.allowed_locations.add(cls.root_location)
 
@@ -5532,30 +5271,36 @@ class AssetBulkWithdrawApiTests(TestCase):
         self.assertFalse(asset.is_active)
         self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
 
-    def test_manager_cannot_bulk_withdraw_assets_outside_scope(self):
+    def test_manager_can_bulk_withdraw_globally(self):
         asset = self._create_asset("BULK-WITHDRAW-SCOPE-002", location=self.other_location)
         self.client.force_login(self.manager_user)
 
         response = self._post_bulk_withdraw([asset.id])
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["success"], False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success"], True)
         asset.refresh_from_db()
-        self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.ACTIVE)
-        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+        self.assertTrue(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
-    def test_user_cannot_bulk_withdraw_assets(self):
+
+
+
+    def test_user_can_bulk_withdraw_within_scope(self):
         asset = self._create_asset("BULK-WITHDRAW-USER-001")
         self.client.force_login(self.regular_user)
 
         response = self._post_bulk_withdraw([asset.id])
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["success"], False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success"], True)
         asset.refresh_from_db()
-        self.assertTrue(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+        self.assertFalse(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
+
+
+
 
     def test_bulk_withdraw_moves_asset_from_active_list_to_archive(self):
         asset = self._create_asset("BULK-WITHDRAW-LISTS-001")
@@ -5676,7 +5421,7 @@ class AssetListApiLocationAccessTests(TestCase):
             password="test-pass-123",
         )
         cls.manager_user = User.objects.create_user(username="scope-manager", password="test-pass-123")
-        cls.manager_user.profile.role = UserProfile.Role.MANAGER
+        cls.manager_user.profile.role = UserProfile.Role.USER
         cls.manager_user.profile.save(update_fields=["role"])
         cls.manager_user.profile.allowed_locations.add(cls.root_location)
 
@@ -5798,11 +5543,12 @@ class AssetListViewTests(TestCase):
         self.assertContains(response, 'const selectAll = event.target.closest("[data-role=\'asset-select-all\']");')
         self.assertContains(response, 'elements.managementDeleteButton.disabled = !enabledFeatures.assetWithdraw || state.withdrawSubmitting || getSelectedAssetIds().length < 1;')
         self.assertContains(response, 'const selectedAsset = event.target.closest("[data-role=\'asset-select\']");')
-        self.assertContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
+        self.assertNotContains(response, "<option value=\"Warehouse\">Warehouse</option>", html=True)
         self.assertContains(response, "W aktywnej inwentaryzacji")
         self.assertContains(response, "asset-runtime-status-pill")
         self.assertContains(response, "row.is_in_active_inventory")
         self.assertNotContains(response, "asset-status-stack")
+
 
     def test_archive_view_renders_with_archive_api_url(self):
         Asset.objects.create(
@@ -5976,7 +5722,7 @@ class AssetDetailViewTests(TestCase):
             category="IT",
         )
         user = User.objects.create_user(username="detail-viewer", password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(location)
         self.client.force_login(user)
@@ -6077,7 +5823,7 @@ class AssetDetailViewTests(TestCase):
             is_active=False,
         )
         user = User.objects.create_user(username="detail-archive-viewer", password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(location)
         self.client.force_login(user)
@@ -6102,7 +5848,7 @@ class AssetDetailViewTests(TestCase):
             category="IT",
         )
         user = User.objects.create_user(username="detail-scoped-user", password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(allowed_location)
         self.client.force_login(user)
@@ -6123,7 +5869,7 @@ class AssetDetailViewTests(TestCase):
             category="IT",
         )
         user = User.objects.create_user(username="detail-no-fk-user", password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(allowed_location)
         self.client.force_login(user)
@@ -6287,7 +6033,7 @@ class AssetDetailViewTests(TestCase):
             field_name="name",
         )
         user = User.objects.create_user(username="detail-history-scoped-user", password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(allowed_location)
         self.client.force_login(user)
@@ -6358,7 +6104,7 @@ class AssetDetailViewTests(TestCase):
             is_active=False,
         )
         user = User.objects.create_user(username="detail-restore-manager", password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(location)
         self.client.force_login(user)
@@ -6369,7 +6115,7 @@ class AssetDetailViewTests(TestCase):
         self.assertContains(response, "Przywróć do Ewidencji")
         self.assertContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
 
-    def test_archived_asset_does_not_show_restore_button_for_regular_user(self):
+    def test_archived_asset_shows_restore_button_for_regular_user(self):
         location = Location.objects.create(name="Detail Restore User")
         asset = Asset.objects.create(
             name="Archived Restore Hidden",
@@ -6387,8 +6133,9 @@ class AssetDetailViewTests(TestCase):
         response = self.client.get(reverse("assets:detail", kwargs={"id": asset.id}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Przywróć do Ewidencji")
-        self.assertNotContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
+        self.assertContains(response, "Przywróć do Ewidencji")
+        self.assertContains(response, reverse("assets:asset-restore", kwargs={"id": asset.id}))
+
 
 
 class AssetRestoreViewTests(TestCase):
@@ -6417,7 +6164,7 @@ class AssetRestoreViewTests(TestCase):
 
     def _manager(self, username="restore-manager", location=None):
         user = User.objects.create_user(username=username, password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(location or self.location)
         return user
@@ -6472,17 +6219,20 @@ class AssetRestoreViewTests(TestCase):
         self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
-    def test_regular_user_cannot_restore_asset(self):
+    def test_scoped_regular_user_can_restore_asset(self):
         asset = self._create_asset("RESTORE-USER-001")
         self.client.force_login(self._regular_user())
 
         response = self._restore(asset)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
         asset.refresh_from_db()
-        self.assertFalse(asset.is_active)
-        self.assertEqual(asset.status, Asset.Status.LIQUIDATED)
-        self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
+        self.assertTrue(asset.is_active)
+        self.assertEqual(asset.status, Asset.Status.ACTIVE)
+        self.assertTrue(AssetHistoryEntry.objects.filter(asset=asset).exists())
+
+
+
 
     def test_cannot_restore_active_asset(self):
         asset = self._create_asset("RESTORE-ACTIVE-001", status=Asset.Status.ACTIVE, is_active=True)
@@ -6535,7 +6285,7 @@ class AssetWithdrawViewTests(TestCase):
         self.location = Location.objects.create(name="Withdraw Location")
         self.other_location = Location.objects.create(name="Withdraw Other")
         self.user = User.objects.create_user(username="withdraw-user", password="test-pass-123")
-        self.user.profile.role = UserProfile.Role.MANAGER
+        self.user.profile.role = UserProfile.Role.USER
         self.user.profile.save(update_fields=["role"])
         self.user.profile.allowed_locations.add(self.location)
         self.client.force_login(self.user)
@@ -6891,7 +6641,7 @@ class AssetUpdateViewTests(TestCase):
 
     def _manager_with_location(self, username, location):
         user = User.objects.create_user(username=username, password="test-pass-123")
-        user.profile.role = UserProfile.Role.MANAGER
+        user.profile.role = UserProfile.Role.USER
         user.profile.save(update_fields=["role"])
         user.profile.allowed_locations.add(location)
         return user
@@ -7225,167 +6975,13 @@ class AssetUpdateViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(AssetHistoryEntry.objects.filter(asset=asset).exists())
 
-    def test_user_requiring_approval_queues_update_without_saving_asset(self):
-        allowed_location, _ = self._create_location_tree()
-        asset = self._create_asset(location_obj=allowed_location, name="Original Name", location=allowed_location.path)
-        user = self._user_with_location("update-approval-required", allowed_location)
-        user.profile.asset_changes_require_approval = True
-        user.profile.save(update_fields=["asset_changes_require_approval"])
-        self.client.force_login(user)
 
-        response = self.client.post(
-            reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(
-                asset,
-                name="Queued Update",
-                malicious_field="not-in-payload",
-            ),
-        )
 
-        asset.refresh_from_db()
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("assets:detail", kwargs={"id": asset.pk}))
-        self.assertEqual(asset.name, "Original Name")
-        self.assertEqual(asset.location, allowed_location.path)
-        self.assertEqual(AssetChangeRequest.objects.count(), 1)
-        change_request = AssetChangeRequest.objects.get()
-        self.assertEqual(change_request.operation, AssetChangeRequest.Operation.UPDATE)
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertEqual(change_request.asset, asset)
-        self.assertEqual(change_request.requested_by, user)
-        self.assertSetEqual(set(change_request.payload.keys()), {"current", "proposed"})
-        self.assertEqual(change_request.payload["current"]["name"], "Original Name")
-        self.assertEqual(change_request.payload["current"]["location_fk"], allowed_location.id)
-        self.assertEqual(change_request.payload["proposed"]["name"], "Queued Update")
-        self.assertEqual(change_request.payload["proposed"]["location_fk"], allowed_location.id)
-        self.assertNotIn("record_quantity", change_request.payload["current"])
-        self.assertNotIn("record_quantity", change_request.payload["proposed"])
-        self.assertNotIn("is_active", change_request.payload["current"])
-        self.assertNotIn("is_active", change_request.payload["proposed"])
-        self.assertNotIn("last_inventory_date", change_request.payload["current"])
-        self.assertNotIn("last_inventory_date", change_request.payload["proposed"])
-        self.assertNotIn("malicious_field", change_request.payload["current"])
-        self.assertNotIn("malicious_field", change_request.payload["proposed"])
-        self.assertEqual(self._messages(response), ["Zmiana została przekazana do akceptacji."])
 
-    def test_user_requiring_approval_updates_existing_pending_update_request(self):
-        allowed_location, _ = self._create_location_tree()
-        asset = self._create_asset(location_obj=allowed_location, name="Original Name", location=allowed_location.path)
-        user = self._user_with_location("update-pending-same-user", allowed_location)
-        user.profile.asset_changes_require_approval = True
-        user.profile.save(update_fields=["asset_changes_require_approval"])
-        self.client.force_login(user)
 
-        first_response = self.client.post(
-            reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(asset, name="First Queued Update", room="101"),
-        )
-        self.assertEqual(self._messages(first_response), ["Zmiana została przekazana do akceptacji."])
-        first_request = AssetChangeRequest.objects.get()
 
-        second_response = self.client.post(
-            reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(asset, name="Second Queued Update", room="202"),
-        )
 
-        asset.refresh_from_db()
-        first_request.refresh_from_db()
-        self.assertEqual(first_response.status_code, 302)
-        self.assertEqual(second_response.status_code, 302)
-        self.assertEqual(AssetChangeRequest.objects.count(), 1)
-        self.assertEqual(first_request.operation, AssetChangeRequest.Operation.UPDATE)
-        self.assertEqual(first_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertEqual(first_request.asset, asset)
-        self.assertEqual(first_request.requested_by, user)
-        self.assertEqual(first_request.payload["current"]["name"], "Original Name")
-        self.assertEqual(first_request.payload["proposed"]["name"], "Second Queued Update")
-        self.assertEqual(first_request.payload["proposed"]["room"], "202")
-        self.assertEqual(asset.name, "Original Name")
-        self.assertEqual(asset.room, "")
-        self.assertIn("Oczekująca zmiana została zaktualizowana.", self._messages(second_response))
 
-    def test_user_requiring_approval_cannot_overwrite_another_users_pending_request(self):
-        allowed_location, _ = self._create_location_tree()
-        asset = self._create_asset(location_obj=allowed_location, name="Original Name", location=allowed_location.path)
-        first_user = self._user_with_location("update-cross-user-first", allowed_location)
-        first_user.profile.asset_changes_require_approval = True
-        first_user.profile.save(update_fields=["asset_changes_require_approval"])
-        second_user = self._user_with_location("update-cross-user-second", allowed_location)
-        second_user.profile.asset_changes_require_approval = True
-        second_user.profile.save(update_fields=["asset_changes_require_approval"])
-
-        self.client.force_login(first_user)
-        self.client.post(
-            reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(asset, name="First User Change"),
-        )
-        first_request = AssetChangeRequest.objects.get()
-
-        second_client = Client()
-        second_client.force_login(second_user)
-        second_response = second_client.post(
-            reverse("assets:update", kwargs={"pk": asset.pk}),
-            data=self._valid_update_payload(asset, name="Second User Overwrite Attempt"),
-        )
-
-        first_request.refresh_from_db()
-        asset.refresh_from_db()
-        self.assertEqual(second_response.status_code, 302)
-        self.assertEqual(AssetChangeRequest.objects.count(), 1)
-        self.assertEqual(first_request.requested_by, first_user)
-        self.assertEqual(first_request.payload["proposed"]["name"], "First User Change")
-        self.assertEqual(asset.name, "Original Name")
-        self.assertIn(
-            "Dla tego środka istnieje już oczekujący wniosek innego użytkownika.",
-            self._messages(second_response),
-        )
-
-    def test_user_requiring_approval_creates_separate_pending_update_for_other_asset(self):
-        allowed_location, _ = self._create_location_tree()
-        first_asset = self._create_asset(
-            inventory_number="UPDATE-PENDING-OTHER-001",
-            location_obj=allowed_location,
-            name="First Original",
-        )
-        second_asset = self._create_asset(
-            inventory_number="UPDATE-PENDING-OTHER-002",
-            location_obj=allowed_location,
-            name="Second Original",
-        )
-        user = self._user_with_location("update-pending-other-asset", allowed_location)
-        user.profile.asset_changes_require_approval = True
-        user.profile.save(update_fields=["asset_changes_require_approval"])
-        self.client.force_login(user)
-
-        self.client.post(
-            reverse("assets:update", kwargs={"pk": first_asset.pk}),
-            data=self._valid_update_payload(first_asset, name="First Queued"),
-        )
-        response = self.client.post(
-            reverse("assets:update", kwargs={"pk": second_asset.pk}),
-            data=self._valid_update_payload(second_asset, name="Second Queued"),
-        )
-
-        first_asset.refresh_from_db()
-        second_asset.refresh_from_db()
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(AssetChangeRequest.objects.count(), 2)
-        self.assertTrue(
-            AssetChangeRequest.objects.filter(
-                asset=first_asset,
-                operation=AssetChangeRequest.Operation.UPDATE,
-                status=AssetChangeRequest.Status.PENDING,
-            ).exists()
-        )
-        self.assertTrue(
-            AssetChangeRequest.objects.filter(
-                asset=second_asset,
-                operation=AssetChangeRequest.Operation.UPDATE,
-                status=AssetChangeRequest.Status.PENDING,
-            ).exists()
-        )
-        self.assertEqual(first_asset.name, "First Original")
-        self.assertEqual(second_asset.name, "Second Original")
 
     def test_invalid_update_post_does_not_save_changes(self):
         allowed_location, _ = self._create_location_tree()
@@ -7559,6 +7155,7 @@ class AssetCreateViewTests(TestCase):
 
     def test_authenticated_user_can_create_asset(self):
         user = User.objects.create_user(username="asset-creator", password="test-pass-123")
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
 
         response = self.client.post(reverse("assets:create"), data=self._valid_asset_payload(current_quantity="6"))
@@ -7577,6 +7174,7 @@ class AssetCreateViewTests(TestCase):
 
     def test_create_ignores_system_managed_post_fields(self):
         user = User.objects.create_user(username="asset-create-system-fields", password="test-pass-123")
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
 
         payload = self._valid_asset_payload(
@@ -7591,12 +7189,14 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         asset = Asset.objects.get(inventory_number="CREATE-SYSTEM-FIELDS-001")
         self.assertEqual(asset.current_quantity, 8)
-        self.assertEqual(asset.record_quantity, 1)
+        self.assertEqual(asset.record_quantity, 8)
         self.assertTrue(asset.is_active)
         self.assertIsNone(asset.last_inventory_date)
 
+
     def test_create_without_approval_creates_history_entry(self):
         user = User.objects.create_user(username="asset-history-creator", password="test-pass-123")
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
 
         response = self.client.post(
@@ -7618,6 +7218,7 @@ class AssetCreateViewTests(TestCase):
 
     def test_invalid_create_form_does_not_create_asset(self):
         user = User.objects.create_user(username="asset-invalid", password="test-pass-123")
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
         asset_count = Asset.objects.count()
 
@@ -7629,56 +7230,9 @@ class AssetCreateViewTests(TestCase):
         self.assertIn("name", response.context["form"].errors)
         self.assertNotIn("inventory_number", response.context["form"].errors)
 
-    def test_user_requiring_approval_creates_change_request_without_asset(self):
-        user = User.objects.create_user(username="asset-approval-required", password="test-pass-123")
-        user.profile.asset_changes_require_approval = True
-        user.profile.save(update_fields=["asset_changes_require_approval"])
-        self.client.force_login(user)
 
-        response = self.client.post(
-            reverse("assets:create"),
-            data=self._valid_asset_payload(
-                inventory_number="CREATE-APPROVAL-001",
-                name="Queued Asset",
-            ),
-        )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertFalse(Asset.objects.filter(inventory_number="CREATE-APPROVAL-001").exists())
-        self.assertEqual(AssetChangeRequest.objects.count(), 1)
-        change_request = AssetChangeRequest.objects.get()
-        self.assertEqual(change_request.operation, AssetChangeRequest.Operation.CREATE)
-        self.assertEqual(change_request.status, AssetChangeRequest.Status.PENDING)
-        self.assertIsNone(change_request.asset)
-        self.assertEqual(change_request.requested_by, user)
-        self.assertEqual(change_request.payload["name"], "Queued Asset")
-        self.assertEqual(change_request.payload["inventory_number"], "CREATE-APPROVAL-001")
-        self.assertEqual(change_request.payload["asset_type"], Asset.AssetType.FIXED)
-        self.assertEqual(change_request.payload["current_quantity"], 1)
-        self.assertEqual(change_request.payload["status"], Asset.Status.ACTIVE)
-        self.assertEqual(change_request.payload["technical_condition"], Asset.TechnicalCondition.GOOD)
-        self.assertIn("location_fk", change_request.payload)
-        self.assertNotIn("record_quantity", change_request.payload)
-        self.assertNotIn("is_active", change_request.payload)
-        self.assertNotIn("last_inventory_date", change_request.payload)
 
-    def test_approval_payload_uses_cleaned_data_and_ignores_extra_post_fields(self):
-        user = User.objects.create_user(username="asset-approval-payload", password="test-pass-123")
-        user.profile.asset_changes_require_approval = True
-        user.profile.save(update_fields=["asset_changes_require_approval"])
-        self.client.force_login(user)
-
-        response = self.client.post(
-            reverse("assets:create"),
-            data=self._valid_asset_payload(
-                inventory_number="CREATE-PAYLOAD-001",
-                malicious_field="should-not-be-saved",
-            ),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        change_request = AssetChangeRequest.objects.get()
-        self.assertNotIn("malicious_field", change_request.payload)
 
     def test_superuser_creates_asset_without_queue(self):
         superuser = User.objects.create_superuser(
@@ -7699,30 +7253,14 @@ class AssetCreateViewTests(TestCase):
         self.assertTrue(Asset.objects.filter(inventory_number="CREATE-BYPASS-001").exists())
         self.assertFalse(AssetChangeRequest.objects.exists())
 
-    def test_user_with_approver_flag_and_approval_required_creates_queue_not_asset(self):
-        user = User.objects.create_user(username="asset-create-user-flag", password="test-pass-123")
-        user.profile.can_approve_asset_changes = True
-        user.profile.asset_changes_require_approval = True
-        user.profile.save(update_fields=["can_approve_asset_changes", "asset_changes_require_approval"])
-        self.client.force_login(user)
 
-        response = self.client.post(
-            reverse("assets:create"),
-            data=self._valid_asset_payload(inventory_number="CREATE-USER-FLAG-001"),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertFalse(Asset.objects.filter(inventory_number="CREATE-USER-FLAG-001").exists())
-        self.assertEqual(AssetChangeRequest.objects.filter(
-            operation=AssetChangeRequest.Operation.CREATE,
-            status=AssetChangeRequest.Status.PENDING,
-        ).count(), 1)
 
     def test_admin_role_with_approval_required_creates_asset_directly(self):
         user = User.objects.create_user(username="asset-create-admin-approval-required", password="test-pass-123")
         user.profile.role = UserProfile.Role.ADMIN
         user.profile.asset_changes_require_approval = True
         user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
 
         response = self.client.post(
@@ -7742,6 +7280,7 @@ class AssetCreateViewTests(TestCase):
         user.profile.role = UserProfile.Role.ADMIN
         user.profile.asset_changes_require_approval = False
         user.profile.save(update_fields=["role", "asset_changes_require_approval"])
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
 
         response = self.client.post(
@@ -7759,6 +7298,8 @@ class AssetCreateViewTests(TestCase):
     def test_create_uses_posted_location_fk_and_syncs_location_cache(self):
         user = User.objects.create_user(username="asset-location-fk", password="test-pass-123")
         location = Location.objects.create(name="Used Location")
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
+        user.profile.allowed_locations.add(location)
         self.client.force_login(user)
 
         response = self.client.post(
@@ -7774,8 +7315,10 @@ class AssetCreateViewTests(TestCase):
         self.assertEqual(asset.location_fk, location)
         self.assertEqual(asset.location, location.path)
 
+
     def test_create_without_location_fk_does_not_create_asset(self):
         user = User.objects.create_user(username="asset-legacy-location", password="test-pass-123")
+        user.profile.allowed_locations.add(Location.objects.get_or_create(name="Create Warehouse")[0])
         self.client.force_login(user)
 
         response = self.client.post(
@@ -7906,6 +7449,7 @@ class AssetLabelsPdfViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_view_returns_pdf(self):
+        self.user.profile.allowed_locations.set(Location.objects.all())
         self.client.force_login(self.user)
         response = self.client.get(self.url, {"ids": str(self.asset.id)})
         self.assertEqual(response.status_code, 200)
@@ -7913,22 +7457,26 @@ class AssetLabelsPdfViewTests(TestCase):
 
     @override_settings(LUPINE_EDITION="lite")
     def test_lite_mode_keeps_labels_pdf_available(self):
+        self.user.profile.allowed_locations.set(Location.objects.all())
         self.client.force_login(self.user)
         response = self.client.get(self.url, {"ids": str(self.asset.id)})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_empty_ids_returns_400(self):
+        self.user.profile.allowed_locations.set(Location.objects.all())
         self.client.force_login(self.user)
         response = self.client.get(self.url, {"ids": ""})
         self.assertEqual(response.status_code, 400)
 
     def test_invalid_ids_returns_400(self):
+        self.user.profile.allowed_locations.set(Location.objects.all())
         self.client.force_login(self.user)
         response = self.client.get(self.url, {"ids": "abc,def"})
         self.assertEqual(response.status_code, 400)
 
     def test_no_ids_param_returns_400(self):
+        self.user.profile.allowed_locations.set(Location.objects.all())
         self.client.force_login(self.user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 400)
@@ -8003,7 +7551,7 @@ class AssetLtDocumentViewTests(TestCase):
         cls.scoped_user = User.objects.create_user(
             username="lt-scoped", password="pass123"
         )
-        cls.scoped_user.profile.role = UserProfile.Role.MANAGER
+        cls.scoped_user.profile.role = UserProfile.Role.USER
         cls.scoped_user.profile.save()
         cls.scoped_user.profile.allowed_locations.add(cls.location_a)
 
@@ -8356,10 +7904,11 @@ class AssetImportViewTests(TestCase):
         resp = self.client.get(self._import_url())
         self.assertEqual(resp.status_code, 200)
 
-    def test_regular_user_is_forbidden(self):
+    def test_regular_user_can_open_import(self):
         self.client.force_login(self.regular_user)
         resp = self.client.get(self._import_url())
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+
 
     def test_template_download_returns_xlsx(self):
         self.client.force_login(self.admin_user)
@@ -8371,10 +7920,11 @@ class AssetImportViewTests(TestCase):
         )
         self.assertIn("szablon_importu.xlsx", resp["Content-Disposition"])
 
-    def test_template_download_forbidden_for_user(self):
+    def test_template_download_available_to_user(self):
         self.client.force_login(self.regular_user)
         resp = self.client.get(self._template_url())
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+
 
     def test_import_creates_assets(self):
         self.client.force_login(self.admin_user)
@@ -8521,7 +8071,7 @@ class AssetAttachmentViewTests(TestCase):
         self.assertRedirects(resp, reverse("assets:detail", kwargs={"id": self.asset.pk}))
         self.assertFalse(AssetAttachment.objects.filter(pk=att.pk).exists())
 
-    def test_delete_by_regular_user_forbidden(self):
+    def test_delete_outside_user_scope_is_hidden(self):
         from .models import AssetAttachment
         att = AssetAttachment.objects.create(
             asset=self.asset,
@@ -8534,8 +8084,9 @@ class AssetAttachmentViewTests(TestCase):
         )
         self.client.force_login(self.regular)
         resp = self.client.post(self._delete_url(att.pk))
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 404)
         self.assertTrue(AssetAttachment.objects.filter(pk=att.pk).exists())
+
 
     def test_delete_protected_attachment_is_blocked(self):
         from .models import AssetAttachment
@@ -8673,7 +8224,7 @@ class AssetServiceAlertTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(self.asset.service_alerts.exists())
 
-    def test_resolve_alert_requires_manager_or_admin(self):
+    def test_scoped_user_can_resolve_alert(self):
         alert = AssetServiceAlert.objects.create(
             asset=self.asset,
             reason="Przegląd",
@@ -8681,9 +8232,11 @@ class AssetServiceAlertTests(TestCase):
         )
         self.client.force_login(self.user_in_scope)
         response = self.client.post(self._resolve_url(alert.pk), {"status": "done"})
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
         alert.refresh_from_db()
-        self.assertEqual(alert.status, AssetServiceAlert.Status.ACTIVE)
+        self.assertEqual(alert.status, AssetServiceAlert.Status.DONE)
+
+
 
     def test_resolve_alert_done_by_superuser(self):
         alert = AssetServiceAlert.objects.create(

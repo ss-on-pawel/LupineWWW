@@ -41,12 +41,21 @@ def generate_temp_password():
 
 
 def _is_panel_admin(user):
-    if user.is_superuser or user.is_staff:
+    if user.is_superuser:
         return True
     try:
         return user.profile.role == "admin"
     except Exception:
         return False
+
+
+def _can_manage_account(actor, target):
+    # Application administrators must not cross the Django privilege boundary.
+    if actor.is_superuser:
+        return True
+    if target.is_superuser:
+        return False
+    return not target.is_staff or actor.is_staff
 
 
 def panel_admin_required(view_func):
@@ -67,6 +76,8 @@ def user_list(request):
         .prefetch_related("profile__allowed_locations")
         .order_by("username")
     )
+    for user in users:
+        user.can_manage_account = _can_manage_account(request.user, user)
     return render(request, "accounts/user_list.html", {"users": users})
 
 
@@ -88,6 +99,8 @@ def user_create(request):
 def user_edit(request, pk):
     require_feature(request, "user_admin")
     edited_user = get_object_or_404(User, pk=pk)
+    if not _can_manage_account(request.user, edited_user):
+        return HttpResponseForbidden()
     if request.method == "POST":
         form = UserEditForm(request.POST, instance=edited_user, lite_mode=is_lite_mode(request))
         if form.is_valid():
@@ -108,6 +121,8 @@ def user_edit(request, pk):
 def user_reset_password(request, pk):
     require_feature(request, "user_admin")
     user = get_object_or_404(User, pk=pk)
+    if not _can_manage_account(request.user, user):
+        return HttpResponseForbidden()
     temp_password = generate_temp_password()
     user.set_password(temp_password)
     user.save(update_fields=["password"])

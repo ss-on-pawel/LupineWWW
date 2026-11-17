@@ -88,18 +88,3 @@ class InventoryUnassignedScopeTests(TestCase):
         response = self.client.post(reverse("inventory:session-start"), {"root_locations": [self.root.pk], "asset_types": [""]})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(InventorySession.objects.get().snapshot_items.get().asset_id_snapshot, asset.pk)
-
-    def test_selecting_unassigned_does_not_expand_manager_permissions(self):
-        manager = User.objects.create_user(username="scope-manager")
-        manager.profile.role = UserProfile.Role.MANAGER
-        manager.profile.save()
-        manager.profile.allowed_locations.add(self.root)
-        self.asset("MANAGER-IN")
-        self.asset("MANAGER-OUT", location=self.outside)
-        self.client.force_login(manager)
-        response = self.client.post(reverse("inventory:session-start"), {"root_locations": [self.outside.pk], "asset_types": [""]})
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(InventorySession.objects.exists())
-        response = self.client.post(reverse("inventory:session-start"), {"root_locations": [self.root.pk], "asset_types": [""]})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(InventorySession.objects.get().snapshot_items.count(), 1)

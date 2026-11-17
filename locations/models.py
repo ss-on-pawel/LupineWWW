@@ -102,9 +102,23 @@ class Location(models.Model):
     @transaction.atomic
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+        previous = type(self).objects.filter(pk=self.pk).values('name', 'parent_id').first() if not is_new else None
         if not kwargs.get("update_fields"):
             self.full_clean()
         super().save(*args, **kwargs)
+        changed_fields = kwargs.get('update_fields')
+        renamed = previous and previous['name'] != self.name and (changed_fields is None or 'name' in changed_fields)
+        moved = previous and previous['parent_id'] != self.parent_id and (changed_fields is None or 'parent' in changed_fields or 'parent_id' in changed_fields)
+        if renamed or moved:
+            # Derived current paths only. Never rewrite snapshots or old documents.
+            from assets.models import Asset
+            from inventory.services import _build_location_paths, _get_location_subtree_ids
+            nodes = {pk: (name, parent) for pk, name, parent in
+                     type(self).objects.values_list('id', 'name', 'parent_id')}
+            descendants = _get_location_subtree_ids([self], nodes=nodes)
+            paths = _build_location_paths(nodes, descendants)
+            for pk in descendants:
+                Asset.objects.filter(location_fk_id=pk).update(location=paths[pk])
         if is_new and not self.code:
             from assets.scan_codes import is_scan_code_conflict, validate_scan_code
             suffix = 0

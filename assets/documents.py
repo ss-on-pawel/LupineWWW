@@ -7,6 +7,8 @@ Production requirement for Polish character support:
 
 Without a TTF font, Helvetica is used as fallback (limited Polish chars).
 """
+
+from xml.sax.saxutils import escape
 import io
 import os
 from datetime import date, datetime
@@ -582,12 +584,12 @@ def _asset_table(assets):
     for i, asset in enumerate(assets, 1):
         rows.append([
             Paragraph(str(i), tr),
-            Paragraph(asset.inventory_number or "—", tm),
-            Paragraph(asset.barcode or "—", tm),
-            Paragraph(asset.name or "—", td),
-            Paragraph(_asset_type_display(asset), td),
+            Paragraph(escape(str(asset.inventory_number or "—")), tm),
+            Paragraph(escape(str(asset.barcode or "—")), tm),
+            Paragraph(escape(str(asset.name or "—")), td),
+            Paragraph(escape(str(_asset_type_display(asset))), td),
             Paragraph(str(asset.current_quantity), tr),
-            Paragraph(asset.location or "—", td),
+            Paragraph(escape(str(asset.location or "—")), td),
             Paragraph(asset.get_status_display() if hasattr(asset, "get_status_display") else "—", td),
         ])
 

@@ -5,6 +5,7 @@
 {% block content %}
     <form method="post">
         {% csrf_token %}
+        {{ form.expected_updated_at }}
         {{ form.is_active.as_hidden }}
         {{ form.last_inventory_date.as_hidden }}
 

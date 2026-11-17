@@ -66,7 +66,7 @@ class InventorySnapshotItem(models.Model):
         on_delete=models.SET_NULL,
         related_name="inventory_snapshot_items",
     )
-    asset_id_snapshot = models.PositiveBigIntegerField()
+    asset_id_snapshot = models.PositiveBigIntegerField(db_index=True)
     inventory_number = models.CharField(max_length=100)
     name = models.CharField(max_length=255)
     barcode = models.CharField(max_length=120, blank=True)
@@ -134,6 +134,7 @@ class InventoryScanTerminal(models.Model):
         related_name="scan_terminals",
     )
     name = models.CharField(max_length=80)
+    source = models.CharField(max_length=16, default='terminal', choices=[('terminal', 'Terminal'), ('phone', 'Telefon')])
     description = models.CharField(max_length=255, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

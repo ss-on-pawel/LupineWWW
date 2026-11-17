@@ -1,16 +1,14 @@
 import json
 from collections import defaultdict
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
-from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Max, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -19,6 +17,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
+from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from accounts.utils import get_accessible_location_ids
@@ -37,7 +36,7 @@ from .models import (
     InventorySessionManualConfirmation,
     InventorySessionManualQuantity,
 )
-from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session
+from .services import import_inventory_scan_text, record_mobile_scan, record_terminal_raw_scan, start_inventory_session, _build_location_paths, ScanContext
 
 INVENTORY_DETAIL_PAGE_SIZE = 200
 INVENTORY_SHEET_FIRST_PAGE_ROWS = 24
@@ -53,20 +52,39 @@ class TerminalLoginView(LoginView):
         return self.get_redirect_url() or reverse("inventory:terminal-app")
 
 
+def _visible_roots(roots, allowed, nodes):
+    if allowed is None:
+        return roots
+    ancestors = set(allowed)
+    pending = list(allowed)
+    while pending:
+        node = nodes.get(pending.pop())
+        parent = node[1] if node else None
+        if parent is not None and parent not in ancestors:
+            ancestors.add(parent)
+            pending.append(parent)
+    return [root for root in roots if root.pk in ancestors]
+
+
 class InventorySessionListView(LoginRequiredMixin, ListView):
     model = InventorySession
     template_name = "inventory/session_list.html"
     context_object_name = "sessions"
 
     def get_queryset(self):
-        return get_visible_inventory_sessions(self.request.user)
+        return get_visible_inventory_sessions(self.request.user, include_counts=True)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         asset_type_labels = dict(get_inventory_asset_type_choices())
+        nodes = {pk: (name, parent) for pk, name, parent in Location.objects.values_list('id', 'name', 'parent_id')}
+        roots_by_session = {session.pk: list(session.scope_root_locations.all()) for session in context['sessions']}
+        paths = _build_location_paths(nodes, {root.pk for roots in roots_by_session.values() for root in roots})
+        allowed = get_accessible_location_ids(self.request.user)
         for session in context["sessions"]:
+            roots = _visible_roots(roots_by_session[session.pk], allowed, nodes)
             session.root_locations_display = ", ".join(
-                location.path for location in session.scope_root_locations.all()
+                paths[location.pk] for location in roots
             )
             session.asset_type_scope_display = ", ".join(
                 asset_type_labels.get(asset_type, asset_type)
@@ -148,12 +166,12 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "session"
 
     def get_queryset(self):
-        return get_visible_inventory_sessions(self.request.user).prefetch_related("snapshot_items")
+        return get_visible_inventory_sessions(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.object
-        analysis = _build_inventory_session_analysis(session)
+        analysis = _build_inventory_session_analysis(session, user=self.request.user)
         search_query = self.request.GET.get("q", "").strip()
         work_items = analysis["inventory_work_items"]
         if search_query:
@@ -227,7 +245,7 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
         context["inventory_work_page_size"] = INVENTORY_DETAIL_PAGE_SIZE
         context["page_title"] = session.number
         mobile_scan_path = reverse("inventory:mobile-scan", kwargs={"token": session.mobile_scan_token})
-        context["mobile_scan_url"] = self.request.build_absolute_uri(mobile_scan_path)
+        context["mobile_scan_url"] = self.request.build_absolute_uri(mobile_scan_path) if context["can_manage_session"] else ""
         return context
 
 
@@ -238,12 +256,12 @@ class InventorySessionReportView(FeatureRequiredMixin, LoginRequiredMixin, Detai
     context_object_name = "session"
 
     def get_queryset(self):
-        return get_visible_inventory_sessions(self.request.user).prefetch_related("snapshot_items")
+        return get_visible_inventory_sessions(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.object
-        analysis = _build_inventory_session_analysis(session)
+        analysis = _build_inventory_session_analysis(session, user=self.request.user)
         inventory_work_items = analysis["inventory_work_items"]
 
         context.update(analysis)
@@ -281,13 +299,13 @@ class InventorySessionDiscrepancyReportView(FeatureRequiredMixin, LoginRequiredM
         return (
             get_visible_inventory_sessions(self.request.user)
             .filter(status=InventorySession.Status.CLOSED)
-            .prefetch_related("snapshot_items")
+
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.object
-        analysis = _build_inventory_session_analysis(session)
+        analysis = _build_inventory_session_analysis(session, user=self.request.user)
         inventory_work_items = analysis["inventory_work_items"]
 
         context.update(analysis)
@@ -325,12 +343,12 @@ class InventorySessionSheetView(FeatureRequiredMixin, LoginRequiredMixin, Detail
     context_object_name = "session"
 
     def get_queryset(self):
-        return get_visible_inventory_sessions(self.request.user).prefetch_related("snapshot_items")
+        return get_visible_inventory_sessions(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.object
-        analysis = _build_inventory_session_analysis(session)
+        analysis = _build_inventory_session_analysis(session, user=self.request.user)
 
         context.update(analysis)
         context["page_title"] = f"Arkusz spisu {session.number}"
@@ -346,12 +364,20 @@ class InventorySessionSheetView(FeatureRequiredMixin, LoginRequiredMixin, Detail
         return context
 
 
-def _build_inventory_session_analysis(session):
+def _build_inventory_session_analysis(session, user=None):
         context = {}
+        allowed = get_accessible_location_ids(user) if user is not None else None
+        snapshots = session.snapshot_items.select_related('asset')
+        observations = InventoryObservedItem.objects.filter(session=session)
+        if allowed is not None:
+            snapshots = snapshots.filter(location_fk_id_snapshot__in=allowed)
+            observations = observations.filter(
+                Q(asset_id__in=snapshots.values('asset_id_snapshot')) |
+                Q(asset__isnull=True, scanned_location_id__in=allowed) |
+                Q(asset__location_fk_id__in=allowed))
         asset_type_labels = dict(get_inventory_asset_type_choices())
         observed_items = list(
-            InventoryObservedItem.objects
-            .filter(session=session)
+            observations
             .select_related("asset", "scanned_location")
             .order_by("-last_seen_at", "-id")
         )
@@ -361,9 +387,14 @@ def _build_inventory_session_analysis(session):
             InventoryObservedItem.Status.FOUND_OUT_OF_SCOPE: "Poza zakresem",
             InventoryObservedItem.Status.UNKNOWN_CODE: "Nieznany kod",
         }
+        nodes = {pk: (name, parent) for pk, name, parent in
+                 Location.objects.values_list("id", "name", "parent_id")}
+        roots = _visible_roots(list(session.scope_root_locations.all()), allowed, nodes)
+        paths = _build_location_paths(nodes, {item.scanned_location_id for item in observed_items
+                                             if item.scanned_location_id} | {root.pk for root in roots})
         for item in observed_items:
             item.status_display_pl = status_labels.get(item.status, item.status)
-            item.scanned_location_display = item.scanned_location.path if item.scanned_location else "-"
+            item.scanned_location_display = paths[item.scanned_location_id] if item.scanned_location_id else "-"
 
         is_quantity_based_by_type = dict(
             AssetTypeDictionary.objects.values_list("code", "is_quantity_based")
@@ -383,7 +414,7 @@ def _build_inventory_session_analysis(session):
             .filter(session=session)
             .values_list("asset_id", flat=True)
         )
-        snapshot_items = list(session.snapshot_items.select_related("asset").all())
+        snapshot_items = list(snapshots)
         inventory_work_items = []
         for snapshot_item in snapshot_items:
             observed_item = observed_by_asset_id.get(snapshot_item.asset_id_snapshot)
@@ -459,7 +490,7 @@ def _build_inventory_session_analysis(session):
 
         context["page_title"] = session.number
         context["root_locations_display"] = ", ".join(
-            location.path for location in session.scope_root_locations.all()
+            paths[location.pk] for location in roots
         )
         context["asset_type_scope_display"] = ", ".join(
             asset_type_labels.get(asset_type, asset_type)
@@ -495,19 +526,35 @@ def _build_inventory_session_analysis(session):
             .filter(session=session)
             .order_by("-created_at", "-id")[:10]
         )
-        context["terminal_summaries"] = _get_terminal_summaries(session)
+        full_scope = user is None or _can_manage_inventory_session(user, session)
+        context['can_manage_session'] = full_scope
+        if not full_scope:
+            context['scan_batches'] = InventoryScanBatch.objects.none()
+        context["terminal_summaries"] = _get_terminal_summaries(session) if full_scope else []
         return context
 
 
+def _can_manage_inventory_session(user, session):
+    allowed = get_accessible_location_ids(user)
+    if allowed is None:
+        return True
+    required = _get_location_subtree_ids(session.scope_root_locations.all())
+    required.update(session.snapshot_items.values_list('location_fk_id_snapshot', flat=True))
+    return bool(required) and required.issubset(allowed)
+
+
 class InventorySessionCloseView(LoginRequiredMixin, View):
+    @method_decorator(transaction.atomic)
     def post(self, request, pk):
-        session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=pk)
+        session = get_object_or_404(get_visible_inventory_sessions(request.user).select_for_update(of=('self',)), pk=pk)
+        if not _can_manage_inventory_session(request.user, session):
+            raise PermissionDenied
         if session.status == InventorySession.Status.ACTIVE:
             session.status = InventorySession.Status.CLOSED
             session.closed_at = timezone.now()
-            session.save(update_fields=["status", "closed_at", "updated_at"])
-            messages.success(request, f"Zamknięto sesję inwentaryzacji {session.number}.")
-        return redirect("inventory:session-detail", pk=session.pk)
+            session.save(update_fields=['status', 'closed_at', 'updated_at'])
+            messages.success(request, f'Zamknięto sesję inwentaryzacji {session.number}.')
+        return redirect('inventory:session-detail', pk=session.pk)
 
 
 @login_required
@@ -516,9 +563,12 @@ def apply_inventory_session_to_assets(request, pk):
     require_feature(request, "inventory_reports")
     with transaction.atomic():
         session = get_object_or_404(
-            get_visible_inventory_sessions(request.user).select_for_update(),
+            get_visible_inventory_sessions(request.user).select_for_update(of=("self",)),
             pk=pk,
         )
+
+        if not _can_manage_inventory_session(request.user, session):
+            raise PermissionDenied
 
         if session.status != InventorySession.Status.CLOSED:
             messages.error(request, "Wyniki można nanieść na Ewidencję tylko dla zamkniętej sesji.")
@@ -528,6 +578,7 @@ def apply_inventory_session_to_assets(request, pk):
             messages.info(request, "Wyniki tej sesji zostały już naniesione na Ewidencję.")
             return redirect("inventory:session-detail", pk=session.pk)
 
+        analysis = _build_inventory_session_analysis(session, user=request.user)
         now = timezone.now()
         from .models import InventorySnapshotItem
         # Serialize with withdrawals; old inventory results must not resurrect quantities.
@@ -540,7 +591,15 @@ def apply_inventory_session_to_assets(request, pk):
                 registered_at__gte=session.started_at).exists():
             messages.error(request, "Po rozpoczęciu spisu zarejestrowano wycofanie środka. Wyniki wymagają uzgodnienia; nie naniesiono zmian.")
             return redirect("inventory:session-detail", pk=session.pk)
-        analysis = _build_inventory_session_analysis(session)
+        for work_item in analysis['inventory_work_items']:
+            asset = locked_assets.get(work_item['snapshot'].asset_id)
+            snapshot = work_item['snapshot']
+            if asset is not None and (not asset.is_active or
+                    asset.current_quantity != work_item['expected_quantity'] or
+                    (asset.last_inventory_at is not None and asset.last_inventory_at > session.started_at
+                     and asset.last_inventory_session_id != session.pk)):
+                messages.error(request, 'Po rozpoczęciu spisu zmienił się stan lub ilość środka. Wymagane uzgodnienie; nie naniesiono zmian.')
+                return redirect('inventory:session-detail', pk=session.pk)
         assets_to_update = []
         history_entries = []
         for work_item in analysis["inventory_work_items"]:
@@ -570,6 +629,7 @@ def apply_inventory_session_to_assets(request, pk):
             asset.last_inventory_quantity = work_item["actual_quantity"]
             asset.last_inventory_session = session
             asset.last_inventory_at = now
+            asset.last_inventory_date = timezone.localdate(now)
             asset.updated_at = now
             assets_to_update.append(asset)
 
@@ -580,11 +640,12 @@ def apply_inventory_session_to_assets(request, pk):
                 "last_inventory_quantity",
                 "last_inventory_session",
                 "last_inventory_at",
+                "last_inventory_date",
                 "updated_at",
             ],
             batch_size=500,
         )
-        AssetHistoryEntry.objects.bulk_create(history_entries)
+        AssetHistoryEntry.objects.bulk_create(history_entries, batch_size=500)
 
         session.applied_to_assets_at = now
         session.applied_to_assets_by = request.user
@@ -597,55 +658,36 @@ def apply_inventory_session_to_assets(request, pk):
     return redirect("inventory:session-detail", pk=session.pk)
 
 
-def _get_scanned_code_counts(session):
+def _get_scanned_code_counts(session, codes=None):
     code_counts = defaultdict(int)
-    location_codes = set(ScanCode.objects.filter(location_id__isnull=False).values_list('code', flat=True))
-    raw_texts = InventoryScanBatch.objects.filter(session=session).values_list("raw_text", flat=True)
-    for raw_text in raw_texts:
+    wanted = set(codes) if codes is not None else None
+    locations = ScanCode.objects.filter(location_id__isnull=False)
+    if wanted is not None:
+        locations = locations.filter(code__in=wanted)
+    location_codes = set(locations.values_list('code', flat=True))
+    for raw_text in InventoryScanBatch.objects.filter(session=session).values_list('raw_text', flat=True).iterator():
         lines = [line.strip() for line in str(raw_text).splitlines() if line.strip()]
         for code in lines[1:]:
-            if code in location_codes:
-                continue
-            code_counts[code] += 1
-    terminal_codes = (
-        InventoryRawScan.objects
-        .filter(session=session)
-        .exclude(processing_status__in=[InventoryRawScan.ProcessingStatus.LOCATION, InventoryRawScan.ProcessingStatus.ERROR])
-        .values_list("code", flat=True)
-    )
-    for code in terminal_codes:
-        if code and code not in location_codes:
-            code_counts[code] += 1
+            if code not in location_codes and (wanted is None or code in wanted):
+                code_counts[code] += 1
+    raw = InventoryRawScan.objects.filter(session=session).exclude(processing_status__in=[
+        InventoryRawScan.ProcessingStatus.LOCATION, InventoryRawScan.ProcessingStatus.ERROR])
+    if wanted is not None:
+        raw = raw.filter(code__in=wanted)
+    for row in raw.order_by().values('code').annotate(total=Count('pk')):
+        if row['code'] and row['code'] not in location_codes:
+            code_counts[row['code']] += row['total']
     return code_counts
 
 
 def _get_terminal_summaries(session):
-    terminals = (
-        InventoryScanTerminal.objects
-        .filter(session=session)
-        .annotate(raw_scan_count=Count("raw_scans"))
-        .order_by("name", "id")
-    )
-    summaries = []
-    for terminal in terminals:
-        summaries.append(
-            {
-                "terminal": terminal,
-                "raw_scan_count": terminal.raw_scan_count,
-                "last_scan_at": (
-                    InventoryRawScan.objects
-                    .filter(terminal=terminal)
-                    .order_by("-scanned_at", "-id")
-                    .values_list("scanned_at", flat=True)
-                    .first()
-                ),
-                "unknown_count": InventoryRawScan.objects.filter(
-                    terminal=terminal,
-                    processing_result__type="unknown",
-                ).count(),
-            }
-        )
-    return summaries
+    terminals = InventoryScanTerminal.objects.filter(session=session).annotate(
+        raw_scan_count=Count('raw_scans'), last_scan=Max('raw_scans__scanned_at'),
+        unknown=Count('raw_scans', filter=Q(raw_scans__processing_result__type='unknown'))
+    ).order_by('name', 'id')
+    return [{'terminal': terminal, 'raw_scan_count': terminal.raw_scan_count,
+             'last_scan_at': terminal.last_scan, 'unknown_count': terminal.unknown}
+            for terminal in terminals]
 
 
 def _get_snapshot_expected_quantity(snapshot_item):
@@ -700,12 +742,8 @@ def _get_inventory_read_quantity(*, snapshot_item, observed_item, is_quantity_ba
     if not is_quantity_based:
         return 1 if observed_item is not None else 0
 
-    scan_codes = {
-        code
-        for code in (snapshot_item.barcode, snapshot_item.inventory_number)
-        if code
-    }
-    return sum(scanned_code_counts.get(code, 0) for code in scan_codes)
+    return scanned_code_counts.get(snapshot_item.barcode, 0) if snapshot_item.barcode else 0
+
 
 
 def _uses_quantity_count(*, snapshot_item, is_quantity_based, expected_quantity=None):
@@ -772,8 +810,9 @@ def _closed_inventory_session_response():
 
 @login_required
 @require_POST
+@transaction.atomic
 def manual_quantity_api(request, session_id):
-    session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=session_id)
+    session = get_object_or_404(get_visible_inventory_sessions(request.user).select_for_update(of=("self",)), pk=session_id)
     if session.status == InventorySession.Status.CLOSED:
         return _closed_inventory_session_response()
 
@@ -804,6 +843,9 @@ def manual_quantity_api(request, session_id):
     if snapshot_item.asset_id is None:
         return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
 
+    allowed = get_accessible_location_ids(request.user)
+    if allowed is not None and snapshot_item.location_fk_id_snapshot not in allowed:
+        raise PermissionDenied
     is_quantity_based = _is_snapshot_item_quantity_based(snapshot_item)
     uses_quantity_count = _uses_quantity_count(
         snapshot_item=snapshot_item,
@@ -826,7 +868,7 @@ def manual_quantity_api(request, session_id):
         snapshot_item=snapshot_item,
         observed_item=observed_item,
         is_quantity_based=is_quantity_based,
-        scanned_code_counts=_get_scanned_code_counts(session),
+        scanned_code_counts=_get_scanned_code_counts(session, {snapshot_item.barcode}),
     )
 
     return JsonResponse(
@@ -846,8 +888,9 @@ def manual_quantity_api(request, session_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def manual_confirmation_api(request, session_id):
-    session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=session_id)
+    session = get_object_or_404(get_visible_inventory_sessions(request.user).select_for_update(of=("self",)), pk=session_id)
     if session.status == InventorySession.Status.CLOSED:
         return _closed_inventory_session_response()
 
@@ -879,6 +922,9 @@ def manual_confirmation_api(request, session_id):
     if uses_quantity_count:
         return JsonResponse({"ok": False, "error": "Manual confirmation is only available for single regular assets."}, status=400)
 
+    allowed = get_accessible_location_ids(request.user)
+    if allowed is not None and snapshot_item.location_fk_id_snapshot not in allowed:
+        raise PermissionDenied
     if confirmed:
         InventorySessionManualConfirmation.objects.update_or_create(
             session=session,
@@ -896,7 +942,7 @@ def manual_confirmation_api(request, session_id):
         snapshot_item=snapshot_item,
         observed_item=observed_item,
         is_quantity_based=False,
-        scanned_code_counts=_get_scanned_code_counts(session),
+        scanned_code_counts={},
     )
 
     return JsonResponse(
@@ -932,7 +978,10 @@ def _parse_positive_int(raw_value, default):
 @login_required
 def session_stats_api(request, pk):
     session = get_object_or_404(get_visible_inventory_sessions(request.user), pk=pk)
-    analysis = _build_inventory_session_analysis(session)
+    from .sql_analysis import inventory_summary
+    analysis = inventory_summary(session, request.user)
+    if analysis is None:
+        analysis = _build_inventory_session_analysis(session, user=request.user)
     stat_keys = [
         "snapshot_total", "read_count", "matching_count", "shortage_count", "surplus_count",
         "no_read_count", "wrong_location_count", "found_out_of_scope_count", "unknown_code_count",
@@ -964,10 +1013,15 @@ def terminal_app_view(request):
 @require_GET
 def terminal_sessions_api(request):
     sessions = (
-        get_visible_inventory_sessions(request.user)
+        get_visible_inventory_sessions(request.user, include_counts=True)
         .filter(status=InventorySession.Status.ACTIVE)
         .order_by("-started_at", "-id")
     )
+    sessions = list(sessions)
+    nodes = {pk: (name,parent) for pk,name,parent in Location.objects.values_list('id','name','parent_id')}
+    allowed = get_accessible_location_ids(request.user)
+    roots = {session.pk: _visible_roots(list(session.scope_root_locations.all()), allowed, nodes) for session in sessions}
+    paths = _build_location_paths(nodes, {root.pk for roots in roots.values() for root in roots})
     return JsonResponse(
         {
             "ok": True,
@@ -976,7 +1030,7 @@ def terminal_sessions_api(request):
                     "id": session.id,
                     "number": session.number,
                     "started_at": session.started_at.isoformat(),
-                    "root_locations": ", ".join(location.path for location in session.scope_root_locations.all()),
+                    "root_locations": ", ".join(paths[root.pk] for root in roots[session.pk]),
                     "snapshot_items_count": session.snapshot_items_count,
                 }
                 for session in sessions
@@ -1028,6 +1082,8 @@ def terminal_create_api(request, session_id):
         return error_response
 
     name = str(payload.get("name") or "").strip()
+    if name.startswith('Telefon — skaner mobilny') or len(name) > 80:
+        return JsonResponse({'ok': False, 'error': 'Niedozwolona nazwa terminala.'}, status=400)
     if not name:
         return JsonResponse({"ok": False, "error": "Nazwa terminala jest wymagana."}, status=400)
     description = str(payload.get("description") or "").strip()
@@ -1067,7 +1123,7 @@ def terminal_sync_api(request, session_id, terminal_id):
         return _closed_inventory_session_response()
 
     terminal = get_object_or_404(
-        InventoryScanTerminal.objects.filter(session=session, is_active=True),
+        InventoryScanTerminal.objects.filter(session=session, is_active=True, source='terminal'),
         pk=terminal_id,
     )
     payload, error_response = _get_json_payload(request)
@@ -1078,28 +1134,43 @@ def terminal_sync_api(request, session_id, terminal_id):
     if not isinstance(scans, list):
         return JsonResponse({"ok": False, "error": "scans must be a list."}, status=400)
 
+    if len(scans) > 100:
+        return JsonResponse({'ok': False, 'error': 'Paczka może zawierać najwyżej 100 skanów.'}, status=400)
     accepted = []
     errors = []
     allowed_location_ids = get_accessible_location_ids(request.user)
+    codes = {str(value) for scan in scans if isinstance(scan, dict)
+             for value in (scan.get('code') or '', scan.get('current_location_code') or '')
+             if len(str(value)) <= 120}
+    scan_context = ScanContext(session, codes)
     for index, scan in enumerate(scans):
         if not isinstance(scan, dict):
             errors.append({"index": index, "error": "scan must be an object."})
             continue
         client_scan_id = str(scan.get("client_scan_id") or "").strip()
         code = str(scan.get("code") or "").strip()
+        if len(client_scan_id) > 64 or len(code) > 120 or len(str(scan.get('current_location_code') or '')) > 120:
+            errors.append({'index': index, 'error': 'Kod lub identyfikator jest zbyt długi.'})
+            continue
         if not client_scan_id or not code:
             errors.append({"index": index, "error": "client_scan_id and code are required."})
             continue
         scanned_at = _parse_client_datetime(scan.get("scanned_at"))
-        raw_scan, created = record_terminal_raw_scan(
-            session=session,
-            terminal=terminal,
-            client_scan_id=client_scan_id,
-            code=code,
-            scanned_at=scanned_at,
-            current_location_code=scan.get("current_location_code") or None,
-            allowed_location_ids=allowed_location_ids,
-        )
+        try:
+            raw_scan, created = record_terminal_raw_scan(
+                session=session,
+                terminal=terminal,
+                client_scan_id=client_scan_id,
+                code=code,
+                scanned_at=scanned_at,
+                current_location_code=scan.get("current_location_code") or None,
+                allowed_location_ids=allowed_location_ids,
+                update_terminal=False,
+                scan_context=scan_context,
+            )
+        except ValueError as error:
+            errors.append({'index': index, 'error': str(error)})
+            continue
         accepted.append(
             {
                 "client_scan_id": client_scan_id,
@@ -1109,6 +1180,8 @@ def terminal_sync_api(request, session_id, terminal_id):
             }
         )
 
+    if accepted:
+        InventoryScanTerminal.objects.filter(pk=terminal.pk).update(last_seen_at=timezone.now(), updated_at=timezone.now())
     return JsonResponse(
         {
             "ok": not errors,
@@ -1136,14 +1209,10 @@ def _parse_client_datetime(value):
     return parsed
 
 
-@csrf_exempt
+@login_required
 @require_POST
 def scan_file_import_api(request):
-    import_user = _get_scan_file_import_user(request)
-    if import_user is None:
-        if settings.DEBUG:
-            return JsonResponse({"status": "error", "message": "No superuser is available for DEBUG import."}, status=403)
-        return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
+    import_user = request.user
 
     try:
         raw_text = request.body.decode("utf-8")
@@ -1163,6 +1232,8 @@ def scan_file_import_api(request):
             status=403,
         )
 
+    if not _can_manage_inventory_session(import_user, session):
+        raise PermissionDenied
     if session.status == InventorySession.Status.CLOSED:
         return JsonResponse(
             {"ok": False, "status": "error", "error": "Sesja jest zamknięta.", "message": "Sesja jest zamknięta."},
@@ -1188,14 +1259,6 @@ def scan_file_import_api(request):
     )
 
 
-def _get_scan_file_import_user(request):
-    if request.user.is_authenticated:
-        return request.user
-    if settings.DEBUG:
-        return get_user_model().objects.filter(is_superuser=True).order_by("id").first()
-    return None
-
-
 def _get_session_number_from_scan_text(raw_text: str) -> str:
     for line in raw_text.splitlines():
         value = line.strip()
@@ -1204,28 +1267,24 @@ def _get_session_number_from_scan_text(raw_text: str) -> str:
     return ""
 
 
-def get_visible_inventory_sessions(user):
-    queryset = (
-        InventorySession.objects
-        .select_related("created_by")
-        .prefetch_related("scope_root_locations")
-        .annotate(snapshot_items_count=Count("snapshot_items"))
-        .order_by("-started_at", "-id")
-    )
-
-    accessible_location_ids = get_accessible_location_ids(user)
-    if accessible_location_ids is None:
-        return queryset
-    if not accessible_location_ids:
-        return queryset.none()
-
-    visible_session_ids = []
-    for session in queryset:
-        session_location_ids = _get_location_subtree_ids(session.scope_root_locations.all())
-        if session_location_ids.intersection(accessible_location_ids):
-            visible_session_ids.append(session.id)
-
-    return queryset.filter(id__in=visible_session_ids)
+def get_visible_inventory_sessions(user, *, include_counts=False):
+    queryset = InventorySession.objects.select_related('created_by').prefetch_related('scope_root_locations')
+    allowed = get_accessible_location_ids(user)
+    if allowed is not None:
+        if not allowed:
+            return queryset.none()
+        parents = dict(Location.objects.values_list('id', 'parent_id'))
+        ancestors = set(allowed)
+        pending = list(allowed)
+        while pending:
+            parent = parents.get(pending.pop())
+            if parent is not None and parent not in ancestors:
+                ancestors.add(parent)
+                pending.append(parent)
+        queryset = queryset.filter(pk__in=InventorySession.objects.filter(scope_root_locations__in=ancestors).values('pk'))
+    if include_counts:
+        queryset = queryset.annotate(snapshot_items_count=Count('snapshot_items', filter=(Q() if allowed is None else Q(snapshot_items__location_fk_id_snapshot__in=allowed))))
+    return queryset.order_by('-started_at', '-id')
 
 
 def _get_location_subtree_ids(root_locations) -> set[int]:
@@ -1300,9 +1359,26 @@ def mobile_scan_api(request, token):
     if not code:
         return JsonResponse({"ok": False, "error": "Missing code."}, status=400)
 
-    current_location_code = data.get("current_location_code") or None
-    result = record_mobile_scan(session, code, current_location_code,
-                               allowed_location_ids=_get_location_subtree_ids(session.scope_root_locations.all()))
+    import uuid
+    client_scan_id = str(data.get('client_scan_id') or uuid.uuid4()).strip()
+    if len(code) > 120 or len(client_scan_id) > 64:
+        return JsonResponse({'ok': False, 'error': 'Kod lub identyfikator jest zbyt długi.'}, status=400)
+    current_location_code = str(data.get('current_location_code') or '')
+    if len(current_location_code) > 120:
+        return JsonResponse({'ok': False, 'error': 'Kod lokalizacji jest zbyt długi.'}, status=400)
+    with transaction.atomic():
+        session = InventorySession.objects.select_for_update().get(pk=session.pk)
+        if session.status != InventorySession.Status.ACTIVE:
+            return _closed_inventory_session_response()
+        terminal, _ = InventoryScanTerminal.objects.get_or_create(
+            session=session, source='phone', defaults={'name': f'Telefon — skaner mobilny #{session.pk}'})
+        raw, _ = record_terminal_raw_scan(session=session, terminal=terminal,
+            client_scan_id=client_scan_id, code=code, scanned_at=_parse_client_datetime(data.get('scanned_at')),
+            current_location_code=current_location_code,
+            allowed_location_ids=_get_location_subtree_ids(session.scope_root_locations.all()))
+        result = dict(raw.processing_result)
+        result['client_scan_id'] = client_scan_id
+        result['raw_scan_id'] = raw.pk
     result["scan_count"] = InventoryObservedItem.objects.filter(session=session).count()
     return JsonResponse(result)
 

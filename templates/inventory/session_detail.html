@@ -598,13 +598,13 @@
                 </div>
                 <p class="inventory-session-description">Sesja robocza spisu z bieżącym postępem, zakresem i akcjami workflow.</p>
             </div>
-            <div class="inv-mobile-scan-block">
+            {% if mobile_scan_url %}<div class="inv-mobile-scan-block">
                 <p class="inv-mobile-scan-label">Skaner mobilny</p>
                 <div class="inv-mobile-scan-input-row">
                     <input class="inv-mobile-scan-url" id="mobile-scan-url-input" type="text" value="{{ mobile_scan_url }}" title="{{ mobile_scan_url }}" readonly>
                     <button class="ui-btn ui-btn--secondary inv-mobile-scan-copy" id="btn-copy-mobile-url" type="button">Kopiuj</button>
                 </div>
-            </div>
+            </div>{% endif %}
         </header>
 
         <section class="inventory-session-meta-grid" aria-label="Metadane sesji">
@@ -648,7 +648,7 @@
                 {% endif %}
             </div>
             <div class="inventory-session-action-group">
-                {% if features.inventory_reports and is_session_closed %}
+                {% if features.inventory_reports and is_session_closed and can_manage_session %}
                     {% if not session.applied_to_assets_at %}
                         <form method="post" action="{% url 'inventory:session-apply-to-assets' session.pk %}" onsubmit="return confirm('Naniesienie wyników zapisze wynik spisu w Ewidencji Głównej. Nie zmieni ilości ewidencyjnej, lokalizacji ani danych księgowych. Kontynuować?');">
                             {% csrf_token %}
@@ -657,10 +657,10 @@
                     {% endif %}
                 {% endif %}
                 {% if session.status == "active" %}
-                    <form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
+                    {% if can_manage_session %}<form method="post" action="{% url 'inventory:session-close' session.pk %}" onsubmit="return confirm('Czy na pewno zamknąć tę inwentaryzację?');">
                         {% csrf_token %}
                         <button class="ui-btn ui-btn--danger" type="submit">Zamknij inwentaryzację</button>
-                    </form>
+                    </form>{% endif %}
                 {% endif %}
             </div>
         </section>
@@ -1252,6 +1252,8 @@
             }
 
             function pollStats() {
+                if (document.hidden || statsInFlight) return;
+                statsInFlight = true;
                 fetch(statsUrl, { credentials: 'same-origin' })
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (data) {
@@ -1259,9 +1261,11 @@
                             setSummaryValues(data.summary);
                         }
                     })
-                    .catch(function () {});
+                    .catch(function () {})
+                    .finally(function () { statsInFlight = false; });
             }
 
+            var statsInFlight = false;
             var pollTimer = null;
             function startPolling() {
                 if (pollTimer) return;

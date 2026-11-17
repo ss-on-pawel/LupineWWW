@@ -176,6 +176,7 @@
                                     {% endif %}
                                 </td>
                                 <td style="white-space:nowrap;">
+                                    {% if u.can_manage_account %}
                                     <div style="display:flex;gap:6px;flex-wrap:nowrap;">
                                         <a class="ui-btn ui-btn--secondary" style="min-height:32px;font-size:0.82rem;padding:0 10px;" href="{% url 'accounts:user-edit' u.pk %}">Edytuj</a>
                                         <form method="post" action="{% url 'accounts:user-reset-password' u.pk %}" style="margin:0;">
@@ -183,6 +184,7 @@
                                             <button class="ui-btn ui-btn--secondary" type="submit" style="min-height:32px;font-size:0.82rem;padding:0 10px;">Reset hasła</button>
                                         </form>
                                     </div>
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}

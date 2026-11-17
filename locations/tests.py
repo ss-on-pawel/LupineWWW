@@ -38,7 +38,7 @@ class OrganizationSettingsModelTests(TestCase):
 
 class OrganizationSettingsViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="org-test-user", password="test-pass-123")
+        self.user = User.objects.create_superuser(username="org-test-user", password="test-pass-123")
         self.url = reverse("locations:organization-settings")
 
     def test_view_requires_login(self):

@@ -132,10 +132,11 @@ class UserListAccessTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("login", response["Location"])
 
-    def test_user_list_accessible_by_staff(self):
+    def test_user_list_denied_to_staff_without_admin_role(self):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("accounts:user-list"))
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+
 
     def test_user_list_accessible_by_superuser(self):
         self.client.force_login(self.superuser)
@@ -158,6 +159,8 @@ class UserCreateTests(TestCase):
         self.staff = User.objects.create_user(
             username="staffuser", password="pass123", is_staff=True
         )
+        self.staff.profile.role = UserProfile.Role.ADMIN
+        self.staff.profile.save()
         self.client.force_login(self.staff)
 
     def test_create_form_renders(self):
@@ -247,6 +250,8 @@ class UserEditTests(TestCase):
             first_name="Anna",
             last_name="Nowak",
         )
+        self.staff.profile.role = UserProfile.Role.ADMIN
+        self.staff.profile.save()
         self.client.force_login(self.staff)
 
     def test_edit_form_renders(self):
@@ -320,6 +325,8 @@ class UserPasswordResetTests(TestCase):
             password="oldpassword",
             email="target@example.com",
         )
+        self.staff.profile.role = UserProfile.Role.ADMIN
+        self.staff.profile.save()
         self.client.force_login(self.staff)
 
     def _reset_url(self):
@@ -466,13 +473,14 @@ class ManagerPanelAccessRegressionTests(TestCase):
         response = self.client.get(reverse("accounts:user-list"))
         self.assertEqual(response.status_code, 200)
 
-    def test_panel_still_accessible_by_staff(self):
+    def test_panel_denied_to_staff_without_admin_role(self):
         staff = User.objects.create_user(
             username="regression_staff", password="pass123", is_staff=True
         )
         self.client.force_login(staff)
         response = self.client.get(reverse("accounts:user-list"))
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+
 
     def test_panel_still_accessible_by_admin_role(self):
         admin = User.objects.create_user(username="regression_adminrole", password="pass123")

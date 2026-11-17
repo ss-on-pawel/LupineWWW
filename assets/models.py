@@ -506,6 +506,8 @@ class AssetAttachment(models.Model):
         db_index=True,
         verbose_name="Typ dokumentu",
     )
+    lt_document = models.ForeignKey('LtDocument', null=True, blank=True,
+        on_delete=models.PROTECT, related_name='attachments')
     document_number = models.CharField(
         max_length=120, blank=True, db_index=True, verbose_name="Numer dokumentu",
     )
@@ -685,3 +687,38 @@ class AssetWithdrawal(models.Model):
 
     class Meta:
         ordering = ["-registered_at", "-pk"]
+
+
+def _lt_document_path(instance, filename):
+    return f"documents/lt/{uuid.uuid4().hex}.pdf"
+
+
+class LtDocumentSequence(models.Model):
+    year = models.PositiveSmallIntegerField(unique=True)
+    next_number = models.PositiveIntegerField(default=1)
+
+
+class LtDocument(models.Model):
+    number = models.CharField(max_length=120, unique=True)
+    year = models.PositiveSmallIntegerField()
+    sequence = models.PositiveIntegerField()
+    file = models.FileField(upload_to=_lt_document_path)
+    date_of_action = models.DateField()
+    issued_by = models.ForeignKey('users.User', null=True, on_delete=models.SET_NULL)
+    asset_ids = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['year', 'sequence'], name='lt_document_year_sequence_unique')]
+
+
+class AssetImportReceipt(models.Model):
+    source_sha256 = models.CharField(max_length=64)
+    root_id_snapshot = models.PositiveBigIntegerField()
+    asset_type_id_snapshot = models.PositiveBigIntegerField()
+    report = models.JSONField(default=dict)
+    created_by = models.ForeignKey('users.User', null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['source_sha256','root_id_snapshot','asset_type_id_snapshot'], name='asset_import_receipt_unique_source')]

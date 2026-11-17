@@ -109,18 +109,16 @@ class OtDocumentTests(TestCase):
         self.asset.refresh_from_db()
         self.assertEqual(self.asset.commissioning_date, date(2021, 1, 1))
 
-    def test_date_cannot_bypass_approval_and_is_not_saved_on_pdf_failure(self):
+    def test_user_date_change_rolls_back_on_pdf_failure(self):
         self.client.force_login(self.user)
-        response = self.generate(date_of_action="2026-11-08")
-        self.assertContains(response, "Zmiana daty wymaga zatwierdzenia")
-        self.assertFalse(self.asset.attachments.exists())
-        self.client.force_login(self.admin)
         with patch("assets.documents.generate_ot_pdf", side_effect=RuntimeError("PDF failure")):
             with self.assertRaises(RuntimeError):
                 self.generate(date_of_action="2026-11-08", document_number="NEW")
         self.asset.refresh_from_db()
         self.assertEqual(self.asset.commissioning_date, date(2020, 2, 3))
         self.assertEqual(self.asset.ot_document_number, "OT/12/2020")
+        self.assertFalse(self.asset.attachments.exists())
+
 
     def test_admin_can_set_number_without_filling_blank_inventory_number(self):
         self.assertEqual(self.generate(document_number="OT/15/2020").status_code, 200)
@@ -208,14 +206,15 @@ class OtDocumentTests(TestCase):
         client.force_login(self.admin)
         self.assertEqual(client.post(self.url, self.payload()).status_code, 403)
 
-    def test_user_can_generate_stored_number_but_cannot_bypass_approval(self):
+    def test_user_can_generate_stored_number_and_change_it_without_approval(self):
         self.client.force_login(self.user)
         self.assertEqual(self.generate().status_code, 200)
         response = self.generate(document_number="CHANGED")
-        self.assertContains(response, "wymaga zatwierdzenia")
-        self.assertEqual(self.asset.attachments.count(), 1)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.asset.attachments.count(), 2)
         self.asset.refresh_from_db()
-        self.assertEqual(self.asset.ot_document_number, "OT/12/2020")
+        self.assertEqual(self.asset.ot_document_number, "CHANGED")
+
 
     def test_protected_ot_cannot_be_deleted_even_by_admin(self):
         self.generate()

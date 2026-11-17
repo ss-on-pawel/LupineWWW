@@ -14,7 +14,7 @@ def get_accessible_location_ids(user):
     if profile is None:
         return set()
 
-    if profile.role == profile.Role.ADMIN:
+    if profile.role in {profile.Role.ADMIN, profile.Role.MANAGER}:
         return None
 
     root_ids = list(profile.allowed_locations.values_list("id", flat=True))
