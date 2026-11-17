@@ -510,10 +510,13 @@
             color: #991b1b;
         }
 
+        .inventory-sort-link { display: block; color: inherit; text-decoration: none; }
+        .inventory-sort-link:hover { text-decoration: underline; }
         .inventory-search { padding: 12px; }
         .inventory-search label { display: block; margin-bottom: 6px; }
         .inventory-search-controls { display: flex; flex-wrap: wrap; gap: 8px; max-width: 780px; }
         .inventory-search input { flex: 1 1 260px; max-width: 400px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); }
+        .inventory-status-filter { flex: 0 0 130px; width: 130px; min-width: 130px; height: 40px; box-sizing: border-box; justify-content: center; white-space: nowrap; }
         .inventory-search p { margin: 8px 0 0; color: var(--muted); }
 
         .inventory-empty {
@@ -735,11 +738,13 @@
             </div>
             <form method="get" action="{% url 'inventory:session-detail' session.pk %}" class="inventory-search" role="search">
                 <label for="inventory-search-input">Szukaj w tej inwentaryzacji</label>
+                <input type="hidden" name="sort" value="{{ inventory_sort }}">
+                <input type="hidden" name="direction" value="{{ inventory_direction }}">
                 <input type="hidden" name="status" value="{{ inventory_status }}">
                 <div class="inventory-search-controls">
                     <input id="inventory-search-input" type="search" name="q" value="{{ inventory_search_query }}" placeholder="Kod, numer inwentarzowy lub fragment nazwy">
                     <button class="ui-btn ui-btn--primary" type="submit">Szukaj</button>
-                    <button class="ui-btn {% if inventory_status == 'matching' %}ui-btn--success{% elif inventory_status == 'discrepancies' %}ui-btn--danger{% else %}ui-btn--secondary{% endif %}" type="submit" name="status" value="{{ inventory_next_status }}" title="Zmień filtr: wszystkie → zgodne → niezgodne">{% if inventory_status == 'matching' %}Zgodne{% elif inventory_status == 'discrepancies' %}Niezgodne{% else %}Wszystkie{% endif %}</button>
+                    <button class="ui-btn inventory-status-filter {% if inventory_status == 'matching' %}ui-btn--success{% elif inventory_status == 'discrepancies' %}ui-btn--danger{% else %}ui-btn--secondary{% endif %}" type="submit" name="status" value="{{ inventory_next_status }}" title="Zmień filtr: wszystkie → zgodne → niezgodne">{% if inventory_status == 'matching' %}Zgodne{% elif inventory_status == 'discrepancies' %}Niezgodne{% else %}Wszystkie{% endif %}</button>
                 </div>
                 {% if inventory_search_query or inventory_status != "all" %}<p role="status">Znaleziono {{ inventory_work_page.paginator.count }} z {{ snapshot_total }} pozycji.</p>{% endif %}
             </form>
@@ -751,11 +756,11 @@
                         </span>
                         <span class="inventory-table-pagination-controls">
                             {% if inventory_work_page.has_previous %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;sort={{ inventory_sort }}&amp;direction={{ inventory_direction }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
                             {% endif %}
                             <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
                             {% if inventory_work_page.has_next %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;sort={{ inventory_sort }}&amp;direction={{ inventory_direction }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
                             {% endif %}
                         </span>
                     </nav>
@@ -764,20 +769,9 @@
                     <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}" data-inventory-paginated="{% if inventory_search_query or inventory_status != "all" or inventory_work_page.paginator.num_pages > 1 %}true{% else %}false{% endif %}">
                         <thead>
                             <tr>
-                                <th class="inventory-col-number">Numer inwentarzowy</th>
-                                <th class="inventory-col-name">Nazwa</th>
-                                <th class="inventory-col-type">Rodzaj</th>
-                                <th class="inventory-col-start-location">Lokalizacja startowa</th>
-                                <th class="inventory-col-status">Status spisu</th>
-                                <th class="inventory-col-scan-location">Lokalizacja odczytu</th>
-                                <th class="inventory-col-last-seen">Ostatni odczyt</th>
-                                <th class="inventory-col-read">Odczyt</th>
-                                <th class="inventory-col-barcode">Kod kreskowy</th>
-                                <th class="inventory-col-confirm">Potwierdź</th>
-                                <th class="inventory-col-manual">Ręczne</th>
-                                <th class="inventory-col-actual">Ilość faktyczna</th>
-                                <th class="inventory-col-record">Ilość oczekiwana</th>
-                                <th class="inventory-col-difference">R&Oacute;&#379;NICA</th>
+                                {% for header in inventory_sort_headers %}
+                                    <th class="inventory-col-{{ header.css }}" aria-sort="{{ header.aria_sort }}"><a class="inventory-sort-link" href="{{ header.url }}">{{ header.label }}{% if header.active %}<span aria-hidden="true"> {% if inventory_direction == 'desc' %}↓{% else %}↑{% endif %}</span>{% endif %}</a></th>
+                                {% endfor %}
                             </tr>
                         </thead>
                         <tbody>
@@ -823,11 +817,11 @@
                         </span>
                         <span class="inventory-table-pagination-controls">
                             {% if inventory_work_page.has_previous %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;sort={{ inventory_sort }}&amp;direction={{ inventory_direction }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
                             {% endif %}
                             <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
                             {% if inventory_work_page.has_next %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;status={{ inventory_status }}&amp;sort={{ inventory_sort }}&amp;direction={{ inventory_direction }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
                             {% endif %}
                         </span>
                     </nav>

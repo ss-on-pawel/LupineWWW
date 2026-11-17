@@ -170,6 +170,46 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
             work_items = [item for item in work_items if item["row_status"] != "matching"]
         elif inventory_status == "matching":
             work_items = [item for item in work_items if item["row_status"] == "matching"]
+        sort_columns = [
+            ("number", "Numer inwentarzowy", "number", lambda i: i["snapshot"].inventory_number),
+            ("name", "Nazwa", "name", lambda i: i["snapshot"].name),
+            ("type", "Rodzaj", "type", lambda i: i["snapshot"].asset_type_display),
+            ("location", "Lokalizacja startowa", "start-location", lambda i: i["snapshot"].location_path),
+            ("status", "Status spisu", "status", lambda i: i["row_status_label"]),
+            ("scan_location", "Lokalizacja odczytu", "scan-location", lambda i: i["scanned_location_display"]),
+            ("last_seen", "Ostatni odczyt", "last-seen", lambda i: i["last_seen_at"]),
+            ("read", "Odczyt", "read", lambda i: i["read_quantity"]),
+            ("barcode", "Kod kreskowy", "barcode", lambda i: i["scan_code_display"]),
+            ("confirmed", "Potwierdź", "confirm", lambda i: i["manual_confirmed"]),
+            ("manual", "Ręczne", "manual", lambda i: i["manual_quantity"]),
+            ("actual", "Ilość faktyczna", "actual", lambda i: i["actual_quantity"]),
+            ("expected", "Ilość oczekiwana", "record", lambda i: i["expected_quantity"]),
+            ("difference", "Różnica", "difference", lambda i: i["difference"]),
+        ]
+        sort_key = self.request.GET.get("sort", "number")
+        if sort_key not in {column[0] for column in sort_columns}:
+            sort_key = "number"
+        sort_direction = "desc" if self.request.GET.get("direction") == "desc" else "asc"
+        value_for = next(column[3] for column in sort_columns if column[0] == sort_key)
+        def normalized_value(item):
+            value = value_for(item)
+            return value.casefold() if isinstance(value, str) else value
+        # Stable ties across pages; missing dates/values always follow known values.
+        present = sorted((i for i in work_items if value_for(i) not in (None, "")),
+                         key=lambda i: i["snapshot"].pk)
+        missing = sorted((i for i in work_items if value_for(i) in (None, "")),
+                         key=lambda i: i["snapshot"].pk)
+        work_items = sorted(present, key=normalized_value, reverse=sort_direction == "desc") + missing
+        headers = []
+        for key, label, css, _ in sort_columns:
+            params = self.request.GET.copy()
+            params.pop("items_page", None)
+            params.pop("discrepancies", None)
+            params.update({"status": inventory_status, "sort": key,
+                           "direction": "desc" if key == sort_key and sort_direction == "asc" else "asc"})
+            headers.append({"label": label, "css": css, "url": "?" + params.urlencode(),
+                            "active": key == sort_key,
+                            "aria_sort": ("descending" if sort_direction == "desc" else "ascending") if key == sort_key else "none"})
         work_items_page = Paginator(
             work_items,
             INVENTORY_DETAIL_PAGE_SIZE,
@@ -177,6 +217,9 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
 
         context.update(analysis)
         context["inventory_work_items"] = list(work_items_page.object_list)
+        context["inventory_sort_headers"] = headers
+        context["inventory_sort"] = sort_key
+        context["inventory_direction"] = sort_direction
         context["inventory_status"] = inventory_status
         context["inventory_next_status"] = {"all": "matching", "matching": "discrepancies", "discrepancies": "all"}[inventory_status]
         context["inventory_search_query"] = search_query

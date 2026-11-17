@@ -417,7 +417,7 @@ class InventorySessionDetailViewTests(TestCase):
             response = self.client.get(url, {"q": " krzesło ", "items_page": 2})
             self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
             self.assertEqual(len(response.context["inventory_work_items"]), 2)
-            self.assertContains(response, "q=krzes%C5%82o&amp;status=all&amp;items_page=3")
+            self.assertContains(response, "q=krzes%C5%82o&amp;status=all&amp;sort=number&amp;direction=asc&amp;items_page=3")
         for query in ("99999", "Nowa nazwa", "<script>"):
             response = self.client.get(url, {"q": query})
             self.assertEqual(response.context["inventory_work_page"].paginator.count, 0)
@@ -438,7 +438,7 @@ class InventorySessionDetailViewTests(TestCase):
             self.assertEqual(response.context["snapshot_total"], 5)
             self.assertEqual(response.context["inventory_work_page"].paginator.count, 4)
             self.assertTrue(all(i["row_status"] != "matching" for i in response.context["inventory_work_items"]))
-            self.assertContains(response, "status=discrepancies&amp;items_page=2")
+            self.assertContains(response, "status=discrepancies&amp;sort=number&amp;direction=asc&amp;items_page=2")
             self.assertContains(response, 'ui-btn--danger')
             self.assertNotContains(response, '>Wyczyść</a>')
         response = self.client.get(url, {"q": "FILTER-0", "discrepancies": "1"})
@@ -457,6 +457,31 @@ class InventorySessionDetailViewTests(TestCase):
         self.assertEqual(response.context["inventory_status"], "all")
         response = self.client.get(url, {"discrepancies": "0"})
         self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
+
+    def test_detail_sorts_full_filtered_collection_with_numeric_quantities(self):
+        from unittest.mock import patch
+        for i, quantity in enumerate((2, 10, 3)):
+            self._create_asset(f"SORT-{i}", self.child, name=("Zulu", "Alpha", "Beta")[i],
+                               record_quantity=quantity, current_quantity=quantity)
+        session = self._start_session(self.root)
+        self.client.force_login(self.admin_user)
+        url = reverse("inventory:session-detail", kwargs={"pk": session.pk})
+        with patch("inventory.views.INVENTORY_DETAIL_PAGE_SIZE", 2):
+            for direction, expected in (("asc", [2, 3]), ("desc", [10, 3])):
+                response = self.client.get(url, {"sort": "expected", "direction": direction, "status": "discrepancies"})
+                self.assertEqual([i["expected_quantity"] for i in response.context["inventory_work_items"]], expected)
+                self.assertEqual(response.context["snapshot_total"], 3)
+                self.assertContains(response, "sort=expected&amp;direction=" + direction + "&amp;items_page=2")
+            response = self.client.get(url, {"sort": "name", "direction": "asc", "items_page": 2})
+            self.assertEqual(response.context["inventory_work_items"][0]["snapshot"].name, "Zulu")
+        response = self.client.get(url, {"q": "SORT-1", "sort": "name", "direction": "desc"})
+        self.assertEqual(len(response.context["inventory_work_items"]), 1)
+        for header in response.context["inventory_sort_headers"]:
+            self.assertIn("q=SORT-1", header["url"])
+            self.assertNotIn("items_page", header["url"])
+        response = self.client.get(url, {"sort": "invalid", "direction": "invalid"})
+        self.assertEqual(response.context["inventory_sort"], "number")
+        self.assertEqual(response.context["inventory_direction"], "asc")
 
     def test_detail_paginates_snapshot_items(self):
         for index in range(205):
