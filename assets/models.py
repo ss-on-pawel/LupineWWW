@@ -254,7 +254,14 @@ class Asset(models.Model):
     def __str__(self) -> str:
         return f"{self.name} ({self.inventory_number})"
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
+        if self.pk:
+            # Serialize edits with collection membership and financial checks.
+            type(self).objects.select_for_update().filter(pk=self.pk).exists()
+        return self._save_asset(*args, **kwargs)
+
+    def _save_asset(self, *args, **kwargs):
         synced_location_fields = self._sync_location_cache()
         synced_fields = self._sync_asset_type_fields()
         synced_active_fields = self._sync_active_from_status()
@@ -262,6 +269,8 @@ class Asset(models.Model):
         all_synced_fields = synced_fields | synced_location_fields | synced_active_fields
         if update_fields is not None and all_synced_fields:
             kwargs["update_fields"] = set(update_fields) | all_synced_fields
+        from .collection_safety import validate_asset_set_state
+        validate_asset_set_state(self, update_fields=kwargs.get("update_fields"))
         if self.ot_document_number and (update_fields is None or "ot_document_number" in update_fields):
             with transaction.atomic():
                 previous = type(self).objects.filter(pk=self.pk).values_list("ot_document_number", flat=True).first() if self.pk else None
@@ -353,12 +362,20 @@ class AssetTypeDictionary(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
+        self._validate_collection_quantity_type()
         if self.barcode_prefix:
             self.barcode_prefix = self.barcode_prefix.strip().upper()
         super().save(*args, **kwargs)
 
+    def _validate_collection_quantity_type(self):
+        if self.pk and self.is_quantity_based:
+            from .collection_safety import strict_memberships
+            if strict_memberships(Asset.objects.filter(asset_type_ref=self).values('pk')).exists():
+                raise ValidationError({'is_quantity_based': 'Rodzaj jest używany w zestawie; nie można zmienić go na ilościowy.'})
+
     def clean(self):
         super().clean()
+        self._validate_collection_quantity_type()
         prefix = (self.barcode_prefix or "").strip().upper()
         self.barcode_prefix = prefix
         if prefix and (len(prefix) not in {2, 3} or not all(ch.isdigit() or "A" <= ch <= "Z" for ch in prefix)):
@@ -593,6 +610,14 @@ class AssetDepreciationPlan(models.Model):
     def __str__(self) -> str:
         return f"{self.asset}: plan amortyzacji"
 
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        # A component cannot acquire a plan between membership validation and save.
+        Asset.objects.select_for_update().get(pk=self.asset_id)
+        from .collection_safety import validate_component_depreciation
+        validate_component_depreciation(self.asset_id)
+        return super().save(*args, **kwargs)
+
     def calculate_depreciation_amounts(self):
         """Return (monthly, annual) computed from current parameters, or (None, None) if data is insufficient."""
         if not self.enabled or self.initial_value is None:
@@ -722,3 +747,6 @@ class AssetImportReceipt(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['source_sha256','root_id_snapshot','asset_type_id_snapshot'], name='asset_import_receipt_unique_source')]
+
+# Collection models are imported here for Django model discovery.
+from .collection_models import AssetCollection, AssetCollectionMembership, AssetCollectionEvent

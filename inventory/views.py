@@ -415,6 +415,15 @@ def _build_inventory_session_analysis(session, user=None):
             .values_list("asset_id", flat=True)
         )
         snapshot_items = list(snapshots)
+        # A historical accounting parent outside the visible snapshot scope must
+        # not disclose its number through a component's inherited identifier.
+        from copy import copy
+        visible_parents = {item.asset_id_snapshot for item in snapshot_items if item.collection_snapshot.get('role') == 'parent'}
+        for index, item in enumerate(snapshot_items):
+            if item.collection_snapshot.get('role') == 'member' and item.collection_snapshot.get('parent_id') not in visible_parents:
+                item = copy(item)
+                item.inventory_number = '—'
+                snapshot_items[index] = item
         inventory_work_items = []
         for snapshot_item in snapshot_items:
             observed_item = observed_by_asset_id.get(snapshot_item.asset_id_snapshot)
@@ -488,6 +497,10 @@ def _build_inventory_session_analysis(session, user=None):
             )
             inventory_work_items.append(work_item)
 
+        from .collections import split_inventory_collections
+        inventory_work_items, parent_items, collection_summaries = split_inventory_collections(inventory_work_items)
+        context['collection_parent_items'] = parent_items
+        context['collection_summaries'] = collection_summaries
         context["page_title"] = session.number
         context["root_locations_display"] = ", ".join(
             paths[location.pk] for location in roots
@@ -578,38 +591,61 @@ def apply_inventory_session_to_assets(request, pk):
             messages.info(request, "Wyniki tej sesji zostały już naniesione na Ewidencję.")
             return redirect("inventory:session-detail", pk=session.pk)
 
+        from .collections import validate_inventory_collection_versions
+        from django.core.exceptions import ValidationError
+        try:
+            validate_inventory_collection_versions(session)
+        except ValidationError as error:
+            messages.error(request, '; '.join(error.messages))
+            return redirect('inventory:session-detail', pk=session.pk)
         analysis = _build_inventory_session_analysis(session, user=request.user)
+        if any(summary['partial'] for summary in analysis['collection_summaries']):
+            messages.error(request, 'Niepełny zakres zestawu. Rozliczenie wymaga uzgodnienia; nie naniesiono zmian.')
+            return redirect('inventory:session-detail', pk=session.pk)
+        for summary in analysis['collection_summaries']:
+            parent = summary['parent_item']
+            if parent is not None:
+                parent['actual_quantity'] = int(summary['complete'])
+        apply_items = analysis['inventory_work_items'] + analysis['collection_parent_items']
         now = timezone.now()
         from .models import InventorySnapshotItem
         # Serialize with withdrawals; old inventory results must not resurrect quantities.
         locked_assets = {asset.pk: asset for asset in Asset.objects.select_for_update().filter(
             pk__in=InventorySnapshotItem.objects.filter(session=session).values('asset_id')
         ).order_by('pk')}
+        try:
+            # Recheck after asset locks: a set could have been created while a
+            # legacy closed session was waiting for these asset rows.
+            validate_inventory_collection_versions(session, lock=False)
+        except ValidationError as error:
+            messages.error(request, '; '.join(error.messages))
+            return redirect('inventory:session-detail', pk=session.pk)
         from assets.models import AssetWithdrawal
         from .models import InventorySnapshotItem
         if AssetWithdrawal.objects.filter(asset_id__in=locked_assets, is_historical=False,
                 registered_at__gte=session.started_at).exists():
             messages.error(request, "Po rozpoczęciu spisu zarejestrowano wycofanie środka. Wyniki wymagają uzgodnienia; nie naniesiono zmian.")
             return redirect("inventory:session-detail", pk=session.pk)
-        for work_item in analysis['inventory_work_items']:
+        for work_item in apply_items:
             asset = locked_assets.get(work_item['snapshot'].asset_id)
             snapshot = work_item['snapshot']
             if asset is not None and (not asset.is_active or
-                    asset.current_quantity != work_item['expected_quantity'] or
+                    asset.current_quantity != snapshot.collection_snapshot.get('current_quantity_at_start', work_item['expected_quantity']) or
                     (asset.last_inventory_at is not None and asset.last_inventory_at > session.started_at
                      and asset.last_inventory_session_id != session.pk)):
                 messages.error(request, 'Po rozpoczęciu spisu zmienił się stan lub ilość środka. Wymagane uzgodnienie; nie naniesiono zmian.')
                 return redirect('inventory:session-detail', pk=session.pk)
         assets_to_update = []
         history_entries = []
-        for work_item in analysis["inventory_work_items"]:
+        for work_item in apply_items:
             asset = locked_assets.get(work_item["snapshot"].asset_id)
             if asset is None:
                 continue
             if not asset.is_active:
                 continue
             old_current_quantity = asset.current_quantity
-            new_current_quantity = work_item["actual_quantity"]
+            is_set_parent = work_item['snapshot'].collection_snapshot.get('role') == 'parent'
+            new_current_quantity = old_current_quantity if is_set_parent else work_item["actual_quantity"]
             if old_current_quantity != new_current_quantity:
                 history_entries.append(
                     AssetHistoryEntry(
@@ -625,7 +661,7 @@ def apply_inventory_session_to_assets(request, pk):
                         source_object_id=session.pk,
                     )
                 )
-            asset.current_quantity = work_item["actual_quantity"]
+            asset.current_quantity = new_current_quantity
             asset.last_inventory_quantity = work_item["actual_quantity"]
             asset.last_inventory_session = session
             asset.last_inventory_at = now
@@ -840,6 +876,8 @@ def manual_quantity_api(request, session_id):
         session.snapshot_items.select_related("asset"),
         asset_id_snapshot=asset_id,
     )
+    if snapshot_item.collection_snapshot.get('role') == 'parent':
+        return JsonResponse({'ok': False, 'error': 'Potwierdź elementy zestawu osobno; środek nadrzędny jest rozliczany zbiorczo.'}, status=400)
     if snapshot_item.asset_id is None:
         return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
 
@@ -911,6 +949,8 @@ def manual_confirmation_api(request, session_id):
         session.snapshot_items.select_related("asset"),
         asset_id_snapshot=asset_id,
     )
+    if snapshot_item.collection_snapshot.get('role') == 'parent':
+        return JsonResponse({'ok': False, 'error': 'Potwierdź elementy zestawu osobno; środek nadrzędny jest rozliczany zbiorczo.'}, status=400)
     if snapshot_item.asset_id is None:
         return JsonResponse({"ok": False, "error": "asset_id does not point to an active asset."}, status=404)
 

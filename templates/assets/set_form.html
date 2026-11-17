@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block extra_head %}{% include 'assets/collection_styles.html' %}{% endblock %}
+{% block content %}
+<section class="card collection-page">
+<h1>Utwórz zestaw</h1>
+<p>Wybrana kartoteka: <strong>{{ anchor.name }}</strong> · {{ anchor.barcode }}.</p>
+<p>Elementy otrzymają numer środka nadrzędnego do wyświetlania, zachowując własne kody i parametry. Ich własne numery pozostaną zapisane. Wartość i amortyzacja są prowadzone na środku głównym.</p>
+<form method="get"><label for="set-search">Znajdź dodatkowe elementy</label> <input id="set-search" name="q" value="{{ q }}" maxlength="255"> <button class="ui-btn ui-btn--secondary">Szukaj</button></form>
+<form method="post">
+{% csrf_token %}{{ form.non_field_errors }}{{ form.request_id }}
+<p>{{ form.parent_mode.label_tag }} {{ form.parent_mode }}{{ form.parent_mode.errors }}</p>
+<div id="new-parent-fields" {% if form.parent_mode.value != 'new' %}hidden{% endif %}>
+  <h2>Nowy środek nadrzędny</h2>
+  <p>Wybrana kartoteka zostanie jego elementem. Nowa kartoteka i powiązania zapiszą się razem.</p>
+  {{ parent_form.as_p }}
+</div>
+<h2>Dodatkowe elementy z bazy</h2>
+<p>Jeśli wybrana kartoteka ma być rodzicem, zaznacz co najmniej jeden element. Dołączenie środka z własną wartością lub planem wymaga osobnego uzgodnienia finansowego — takie środki możesz połączyć w grupę.</p>
+{% for asset in candidates %}<label style="display:block;padding:8px"><input type="checkbox" name="asset_ids" value="{{ asset.pk }}" {% if asset.pk|stringformat:'s' in selected_ids %}checked{% endif %}> {{ asset.name }} · {{ asset.barcode }} · {{ asset.inventory_number|default:'—' }}</label>{% empty %}<p>Brak dostępnych elementów.</p>{% endfor %}
+<p>Zmiana strony lub wyszukiwania odświeża wybór.</p>
+<button class="ui-btn ui-btn--primary">Utwórz zestaw</button> <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' anchor.pk %}">Anuluj</a>
+</form>
+<p>Strona {{ candidates.number }} z {{ candidates.paginator.num_pages }}.
+{% if candidates.has_previous %}<a href="?q={{ q|urlencode }}&amp;page={{ candidates.previous_page_number }}">Poprzednia</a>{% endif %}
+{% if candidates.has_next %}<a href="?q={{ q|urlencode }}&amp;page={{ candidates.next_page_number }}">Następna</a>{% endif %}</p>
+</section>
+{% endblock %}
+{% block extra_scripts %}<script>
+(function(){const select=document.getElementById('id_parent_mode'), fields=document.getElementById('new-parent-fields');
+function update(){const visible=select.value==='new';fields.hidden=!visible;fields.querySelectorAll('input,select,textarea').forEach(el=>el.disabled=!visible);}
+select.addEventListener('change',update);update();})();
+</script>{% endblock %}

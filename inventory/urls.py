@@ -1,4 +1,5 @@
 from django.urls import path
+from .collection_views import collection_report
 
 from .views import (
     InventorySessionCloseView,
@@ -33,6 +34,7 @@ from .views import (
 app_name = "inventory"
 
 urlpatterns = [
+    path("inventory/<int:pk>/collections-report/", collection_report, name="collection-report"),
     path("api/inventory/scan-files/", scan_file_import_api, name="scan-file-import-api"),
     path("api/inventory/sessions/<int:session_id>/manual-quantity/", manual_quantity_api, name="manual-quantity-api"),
     path("api/inventory/sessions/<int:session_id>/manual-confirmation/", manual_confirmation_api, name="manual-confirmation-api"),

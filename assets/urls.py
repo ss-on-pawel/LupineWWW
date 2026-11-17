@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .collection_views import group_create, collection_detail, set_create, collection_member_create, set_operation
 from .views import (
     AssetChangeRequestListView,
     AssetChangeRequestDetailView,
@@ -40,6 +41,11 @@ from .views import (
 app_name = "assets"
 
 urlpatterns = [
+    path("assets/collections/<int:pk>/operate/<str:action>/", set_operation, name="set-operation"),
+    path("assets/<int:asset_id>/set/create/", set_create, name="set-create"),
+    path("assets/collections/<int:pk>/member/create/", collection_member_create, name="collection-member-create"),
+    path("assets/<int:asset_id>/group/create/", group_create, name="group-create"),
+    path("assets/collections/<int:pk>/", collection_detail, name="collection-detail"),
     path("api/assets/", asset_list_api, name="api-list"),
     path("api/assets/export/", asset_export_csv_api, name="api-export"),
     path("api/assets/bulk-move/", asset_bulk_move_api, name="api-bulk-move"),

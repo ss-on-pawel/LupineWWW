@@ -19,6 +19,7 @@ def inventory_summary(session, user):
     sql = f'''
     WITH scoped AS (
         SELECT s.* FROM inventory_inventorysnapshotitem s WHERE s.session_id=%(session)s {scope}
+        AND COALESCE(s.collection_snapshot->>'role', '') <> 'parent'
     ), file_lines AS (
         SELECT btrim(line, %(whitespace)s) AS code,
                row_number() OVER (PARTITION BY b.id ORDER BY ordinal) AS line_number

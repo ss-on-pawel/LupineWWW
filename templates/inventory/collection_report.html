@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block extra_head %}<style>
+.set-report {max-width:1100px;margin:auto;padding:24px}.report-table-wrap {max-width:100%;overflow-x:auto}.set-report table {width:100%;border-collapse:collapse}.set-report td,.set-report th {padding:10px;border:1px solid #ccc;text-align:left;vertical-align:top}
+@media print {.app-header,.report-actions {display:none}.app-main {width:100%;max-width:none;padding:0}.set-report {padding:0;max-width:none}.report-table-wrap {overflow:visible}.set-report tr {break-inside:avoid}body {background:white}}
+@page {size:A4 portrait;margin:12mm}
+</style>{% endblock %}
+{% block content %}
+<section class="set-report">
+<h1>Raport zbiorczy — {{ session.number }}</h1>
+<p>{% if session.status == 'closed' %}Sesja zamknięta{% else %}Raport roboczy — spis w toku{% endif %}. Skład zestawów według migawki z rozpoczęcia spisu.</p>
+<p>Każdy zestaw występuje raz. Braki elementów wymagają uzgodnienia wartości; raport nie wycenia ich automatycznie wartością całego zestawu.</p>
+<p class="report-actions"><a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Wróć do spisu</a> <button class="ui-btn ui-btn--secondary" onclick="window.print()">Drukuj / PDF</button></p>
+<div class="report-table-wrap"><table><thead><tr><th>Numer / środek</th><th>Wartość zakupu z kartoteki</th><th>Potwierdzone elementy</th><th>Wynik</th><th>Braki / uwagi</th></tr></thead><tbody>
+{% for summary in summaries %}
+<tr><td>{% if summary.parent_item %}{{ summary.parent_item.snapshot.inventory_number }} · {{ summary.parent_item.snapshot.name }}{% else %}Zestaw — karta nadrzędna poza zakresem{% endif %}</td>
+<td>{% if summary.parent_item %}{{ summary.parent_item.snapshot.purchase_value_snapshot|default_if_none:'—' }}{% else %}—{% endif %}</td><td>{{ summary.found }} / {% if summary.partial %}—{% else %}{{ summary.expected }}{% endif %}</td><td>{{ summary.status }}</td><td>{% if summary.partial %}Zakres nie obejmuje pełnego składu. {% endif %}{% for name in summary.missing %}{{ name }}{% if not forloop.last %}; {% endif %}{% endfor %}</td></tr>
+{% endfor %}
+{% for item in standalone %}<tr><td>{{ item.snapshot.inventory_number }} · {{ item.snapshot.name }}</td><td>{{ item.purchase_value_display }}</td><td>{{ item.actual_quantity }} / {{ item.expected_quantity }}</td><td>{{ item.row_status_label }}</td><td>Środek samodzielny / równorzędny członek grupy</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+{% endblock %}

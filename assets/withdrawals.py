@@ -14,6 +14,8 @@ def withdraw_asset(*, asset_id, operator, data, quantity=None):
                 or (quantity is not None and previous.quantity != quantity)):
             raise ValidationError("Identyfikator operacji jest już używany.")
         return previous
+    from .collection_safety import validate_individual_withdrawal
+    validate_individual_withdrawal([asset.pk])
     if not asset.is_active:
         raise ValidationError("Środek jest już wycofany z ewidencji.")
     before = asset.current_quantity

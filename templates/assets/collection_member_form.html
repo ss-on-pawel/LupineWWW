@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block extra_head %}{% include 'assets/collection_styles.html' %}{% endblock %}
+{% block content %}
+<section class="card collection-page">
+<h1>Utwórz element: {{ collection.name }}</h1>
+<p>Powstanie zwykła kartoteka z własnym kodem kreskowym. Zapis kartoteki i dołączenie do składu są jedną operacją.</p>
+{% if collection.kind == 'set' %}<p>Numer wyświetlany będzie dziedziczony ze środka nadrzędnego. Wartość zakupu pozostaw pustą lub zerową; rozliczenie prowadzone jest na środku głównym.</p>{% endif %}
+<form method="post">
+{% csrf_token %}{{ member_form.as_p }}{{ form.as_p }}
+<button class="ui-btn ui-btn--primary">Utwórz i dołącz</button> <a class="ui-btn ui-btn--secondary" href="{% url 'assets:collection-detail' collection.pk %}">Anuluj</a>
+</form>
+</section>
+{% endblock %}

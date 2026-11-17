@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block extra_head %}{% include 'assets/collection_styles.html' %}{% endblock %}
+{% block content %}
+<section class="card collection-page" style="max-width:1000px;margin:auto;padding:24px">
+  <h1>Utwórz grupę środków</h1>
+  <p>Środki w grupie zachowują własne numery, wartości, plany amortyzacji i osobne wyniki inwentaryzacji.</p>
+  <p>Wybrany środek: <a href="{% url 'assets:detail' anchor.pk %}">{{ anchor.name }}</a> · {{ anchor.barcode }}</p>
+  <form method="get" style="margin:16px 0">
+    <label for="group-search">Znajdź dodatkowe środki</label>
+    <input id="group-search" name="q" value="{{ q }}" maxlength="255" placeholder="Nazwa, kod lub numer">
+    <button class="ui-btn ui-btn--secondary">Szukaj</button>
+  </form>
+  <form method="post">
+    {% csrf_token %}{{ form.non_field_errors }}{{ form.request_id }}
+    <p>{{ form.name.label_tag }} {{ form.name }} {{ form.name.errors }}</p>
+    <p>Zaznacz dodatkowe środki z tej strony. Zmiana strony lub wyszukiwania odświeża wybór.</p>
+    {% for asset in candidates %}
+      <label style="display:block;padding:8px 0"><input type="checkbox" name="asset_ids" value="{{ asset.pk }}" {% if asset.pk|stringformat:'s' in selected_ids %}checked{% endif %}> {{ asset.name }} · {{ asset.barcode }} · {{ asset.inventory_number|default:'—' }}</label>
+    {% empty %}<p>Brak dostępnych środków.</p>{% endfor %}
+    <p><button class="ui-btn ui-btn--primary" type="submit">Utwórz grupę</button> <a class="ui-btn ui-btn--secondary" href="{% url 'assets:detail' anchor.pk %}">Anuluj</a></p>
+  </form>
+  <p>Strona {{ candidates.number }} z {{ candidates.paginator.num_pages }}.
+    {% if candidates.has_previous %}<a href="?q={{ q|urlencode }}&amp;page={{ candidates.previous_page_number }}">Poprzednia</a>{% endif %}
+    {% if candidates.has_next %}<a href="?q={{ q|urlencode }}&amp;page={{ candidates.next_page_number }}">Następna</a>{% endif %}
+  </p>
+</section>
+{% endblock %}

@@ -208,7 +208,10 @@ def apply_asset_filters(queryset, parsed_filters: ParsedFilters):
                 }
             )
             continue
-        filtered = filtered.filter(**{condition.lookup: condition.value})
+        lookup = condition.lookup
+        if condition.field == 'inventory_number' and 'effective_inventory_number' in queryset.query.annotations:
+            lookup = lookup.replace('inventory_number', 'effective_inventory_number', 1)
+        filtered = filtered.filter(**{lookup: condition.value})
     return filtered
 
 

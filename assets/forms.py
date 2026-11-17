@@ -51,6 +51,17 @@ class AssetForm(forms.ModelForm):
         if self.instance.pk:
             self.initial['expected_updated_at'] = self.instance.updated_at.isoformat()
             self.fields['current_quantity'] = forms.IntegerField(label='Ilość', min_value=0)
+            from .collection_safety import strict_memberships
+            link = strict_memberships([self.instance.pk]).first()
+            if link:
+                self.fields['current_quantity'].disabled = True
+                self.fields['current_quantity'].help_text = 'Ilość elementu zestawu jest rozliczana przez inwentaryzację.'
+                if link.role == 'member':
+                    self.fields['inventory_number'].disabled = True
+                    self.fields['inventory_number'].label = 'Własny numer (zachowany)'
+                    self.fields['inventory_number'].help_text = 'Wyświetlany numer jest dziedziczony z zestawu. Ten własny numer pozostaje zapisany na wypadek odłączenia.'
+                    self.fields['purchase_value'].disabled = True
+                    self.fields['purchase_value'].help_text = 'Wartość ewidencyjną prowadzi środek nadrzędny.'
         asset_type_choices = [
             (asset_type.code, asset_type.name)
             for asset_type in AssetTypeDictionary.objects.filter(is_active=True).order_by("sort_order", "name")
@@ -177,6 +188,13 @@ class AssetForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if self.instance and self.instance.pk:
+            from copy import copy
+            from .collection_safety import validate_asset_set_state
+            candidate = copy(self.instance)
+            for field, value in cleaned_data.items():
+                if hasattr(candidate, field) and field not in SYSTEM_MANAGED_ASSET_FIELDS:
+                    setattr(candidate, field, value)
+            validate_asset_set_state(candidate)
             return cleaned_data
 
         if cleaned_data.get("barcode"):

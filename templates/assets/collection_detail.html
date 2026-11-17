@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block extra_head %}{% include 'assets/collection_styles.html' %}{% endblock %}
+{% block content %}
+<section class="card collection-page" style="max-width:1000px;margin:auto;padding:24px">
+  <h1>{{ collection.get_kind_display }}: {{ display_name }}</h1>
+  {% if collection.kind == 'group' %}<p>Równorzędne środki z niezależnymi numerami i rozliczeniem.</p>{% else %}<p>Zestaw ze środkiem głównym. Każdy element jest osobno potwierdzany w spisie. Wartość i amortyzacja prowadzone są na środku nadrzędnym.</p>{% endif %}
+  {{ form.non_field_errors }}{{ form.errors.action }}{{ form.errors.expected_version }}{{ form.errors.request_id }}
+  {% if label_ids %}<p><a class="ui-btn ui-btn--secondary" href="{% url 'assets:labels-pdf' %}?ids={{ label_ids }}">Drukuj etykiety elementów z tej strony</a></p>{% endif %}
+  <p>{% if can_move_set %}<a class="ui-btn ui-btn--secondary" href="{% url 'assets:set-operation' collection.pk 'move' %}">Przenieś cały zestaw</a> <a class="ui-btn ui-btn--secondary" href="{% url 'assets:set-operation' collection.pk 'dissolve' %}">Rozwiąż zestaw</a>{% endif %}
+  {% if can_withdraw_set %}<a class="ui-btn ui-btn--danger" href="{% url 'assets:set-operation' collection.pk 'withdraw' %}">Wycofaj cały zestaw</a>{% endif %}
+  {% if can_restore_set %}<a class="ui-btn ui-btn--success" href="{% url 'assets:set-operation' collection.pk 'restore' %}">Przywróć cały zestaw</a>{% endif %}</p>
+  <form method="post">
+    {% csrf_token %}{{ form.request_id }}{{ form.expected_version }}
+    <input type="hidden" name="action" value="detach">
+    {% for member in members %}
+      <div style="padding:10px 0">
+        {% if can_manage %}<input type="checkbox" name="asset_ids" value="{{ member.asset_id }}" aria-label="Zaznacz {{ member.asset.name }}">{% endif %}
+        <a href="{% url 'assets:detail' member.asset_id %}">{{ member.asset.name }}</a> · {{ member.asset.barcode }} · {{ member.display_inventory_number|default:'—' }}
+        {% if member.role == 'parent' %}<strong>Środek nadrzędny</strong>{% endif %}
+      </div>
+    {% empty %}<p>Brak dostępnych członków grupy.</p>{% endfor %}
+    {% if can_manage %}<p><button class="ui-btn ui-btn--secondary">Odłącz zaznaczone</button></p>{% endif %}
+  </form>
+  <p>Strona {{ members.number }} z {{ members.paginator.num_pages }}.
+    {% if members.has_previous %}<a href="?members_page={{ members.previous_page_number }}&amp;q={{ q|urlencode }}">Poprzednia</a>{% endif %}
+    {% if members.has_next %}<a href="?members_page={{ members.next_page_number }}&amp;q={{ q|urlencode }}">Następna</a>{% endif %}
+  </p>
+  {% if can_manage %}
+  <p><a class="ui-btn ui-btn--secondary" href="{% url 'assets:collection-member-create' collection.pk %}">Utwórz nowy element</a></p>
+  <h2>Dodaj środki z bazy</h2>
+  <form method="get"><label for="member-search">Nazwa, kod lub numer</label> <input id="member-search" name="q" value="{{ q }}" maxlength="255"> <button class="ui-btn ui-btn--secondary">Szukaj</button></form>
+  <form method="post">
+    {% csrf_token %}{{ form.request_id }}{{ form.expected_version }}
+    <input type="hidden" name="action" value="attach">
+    {% for asset in candidates %}<label style="display:block;padding:8px 0"><input type="checkbox" name="asset_ids" value="{{ asset.pk }}"> {{ asset.name }} · {{ asset.barcode }} · {{ asset.inventory_number|default:'—' }}</label>{% empty %}<p>Brak dostępnych środków.</p>{% endfor %}
+    <p><button class="ui-btn ui-btn--primary">Dodaj zaznaczone</button></p>
+  </form>
+  <p>Strona {{ candidates.number }} z {{ candidates.paginator.num_pages }}.
+    {% if candidates.has_previous %}<a href="?q={{ q|urlencode }}&amp;page={{ candidates.previous_page_number }}">Poprzednia</a>{% endif %}
+    {% if candidates.has_next %}<a href="?q={{ q|urlencode }}&amp;page={{ candidates.next_page_number }}">Następna</a>{% endif %}
+  </p>
+  {% else %}<p>Skład pokazuje wyłącznie środki dostępne w Twoim zakresie.</p>{% endif %}
+  <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
+</section>
+{% endblock %}

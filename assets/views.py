@@ -82,7 +82,7 @@ def _get_asset_current_quantity(asset):
 EXPORTABLE_ASSET_COLUMNS = {
     "inventory_number": {
         "label": "Nr inwentarzowy",
-        "value": lambda asset, context: asset.inventory_number,
+        "value": lambda asset, context: getattr(asset, 'effective_inventory_number', asset.inventory_number),
     },
     "name": {
         "label": "Nazwa",
@@ -212,6 +212,13 @@ EXPORTABLE_ASSET_COLUMNS = {
     },
 }
 
+
+EXPORTABLE_ASSET_COLUMNS.update({
+    "own_inventory_number": {"label": "Własny numer przed powiązaniem", "value": lambda asset, context: asset.inventory_number},
+    "collection_kind": {"label": "Rodzaj powiązania", "value": lambda asset, context: {"set": "Zestaw", "group": "Grupa środków"}.get(getattr(asset, "collection_kind", None), "")},
+    "collection_id": {"label": "ID zestawu / grupy", "value": lambda asset, context: getattr(asset, "collection_id_display", None)},
+    "collection_role": {"label": "Rola w powiązaniu", "value": lambda asset, context: {"parent": "Środek nadrzędny", "member": "Element / członek"}.get(getattr(asset, "collection_role_display", None), "")},
+})
 
 def _user_can_review_asset_changes(user):
     if not getattr(user, "is_authenticated", False):
@@ -871,6 +878,8 @@ def asset_detail(request, id):
         raise Http404
 
     asset_type_names_by_code = dict(AssetTypeDictionary.objects.values_list("code", "name"))
+    from .collection_views import collection_context
+    collection_info = collection_context(asset, request.user, request=request)
     history_entries = asset.history_entries.select_related("operator").order_by("-occurred_at", "-id")[:50]
     is_in_active_inventory = InventorySnapshotItem.objects.filter(
         asset_id_snapshot=asset.pk,
@@ -882,6 +891,7 @@ def asset_detail(request, id):
         "assets/asset_detail.html",
         {
             "asset": asset,
+            "collection_info": collection_info,
             "can_restore_asset": (not asset.is_active) and _user_can_restore_asset(request.user),
             "can_delete_attachment": _user_can_restore_asset(request.user),
             "asset_type_display": _format_asset_type_display(asset, asset_type_names_by_code),
@@ -958,6 +968,11 @@ def asset_restore(request, id):
     if accessible_location_ids is not None and asset.location_fk_id not in accessible_location_ids:
         raise Http404
 
+    from .collection_safety import validate_individual_withdrawal
+    try:
+        validate_individual_withdrawal([asset.pk])
+    except ValidationError as error:
+        return HttpResponse('; '.join(error.messages), status=409)
     if asset.is_active:
         return HttpResponse("Asset is already active.", status=400)
 
@@ -1222,9 +1237,21 @@ def build_asset_list_queryset(request):
     if location_ids is not None:
         queryset = queryset.filter(location_fk_id__in=location_ids)
 
+    from .models import AssetCollectionMembership
+    from django.db.models import F, Case, When, Value, CharField
+    from django.db.models.functions import Coalesce
+    visible_parent_assets = _scoped_assets(request.user).values('pk')
+    member_links = AssetCollectionMembership.objects.filter(asset_id=OuterRef('pk'), left_at__isnull=True)
+    parent_number = member_links.filter(role='member', collection__kind='set',
+        collection__memberships__role='parent', collection__memberships__left_at__isnull=True,
+        collection__memberships__asset_id__in=visible_parent_assets).values('collection__memberships__asset__inventory_number')[:1]
+    queryset = queryset.annotate(effective_inventory_number=Case(When(Exists(member_links.filter(role='member', collection__kind='set')), then=Coalesce(Subquery(parent_number), Value('—'))), default=F('inventory_number'), output_field=CharField()),
+        collection_kind=Subquery(member_links.values('collection__kind')[:1]),
+        collection_id_display=Subquery(member_links.values('collection_id')[:1]),
+        collection_role_display=Subquery(member_links.values('role')[:1]))
     if search:
         queryset = queryset.filter(
-            Q(inventory_number__icontains=search)
+            Q(effective_inventory_number__icontains=search) | Q(inventory_number__icontains=search) | Q(barcode__icontains=search)
             | Q(name__icontains=search)
             | Q(location__icontains=search)
         )
@@ -1291,6 +1318,9 @@ def build_asset_list_queryset(request):
         ),
     )
     from django.db.models.functions import Coalesce, TruncDate
+    from .models import AssetCollectionMembership
+    queryset = queryset.annotate(has_collection=Exists(AssetCollectionMembership.objects.filter(
+        asset_id=OuterRef('pk'), left_at__isnull=True)))
     queryset = queryset.annotate(effective_inventory_date=Coalesce(
         TruncDate('last_inventory_at'), 'last_inventory_date', output_field=DateField()))
     parsed_filters = parse_asset_filters(request.GET)
@@ -1298,7 +1328,8 @@ def build_asset_list_queryset(request):
     queryset = queryset.filter(is_active=(asset_scope == "active"))
 
     ordering_field = _resolve_asset_ordering(ordering)
-    queryset = queryset.order_by(ordering_field, "id")
+    actual_order = ordering_field.replace('inventory_number', 'effective_inventory_number') if ordering_field.lstrip('-') == 'inventory_number' else ordering_field
+    queryset = queryset.order_by(actual_order, "id")
 
     return queryset, {
         "search": search,
@@ -1314,6 +1345,17 @@ def asset_list_api(request):
     page = max(_parse_positive_int(request.GET.get("page"), default=1), 1)
     page_size = min(max(_parse_positive_int(request.GET.get("page_size"), default=50), 1), 200)
     queryset, active_filters = build_asset_list_queryset(request)
+    matching_queryset = queryset
+    hierarchy = request.GET.get('hierarchy') == '1' and not request.GET.get('child_of')
+    from .collection_views import hierarchical_queryset, child_queryset
+    if request.GET.get('child_of'):
+        try:
+            parent_id = int(request.GET['child_of'])
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Nieprawidłowy środek nadrzędny.'}, status=400)
+        queryset = child_queryset(queryset, request, parent_id)
+    elif hierarchy:
+        queryset = hierarchical_queryset(queryset, request)
 
     paginator = Paginator(queryset, page_size)
 
@@ -1386,6 +1428,13 @@ def asset_list_api(request):
         }
         for asset in page_assets
     ]
+    from .collection_views import decorate_collection_rows
+    if any(asset.has_collection for asset in page_assets):
+        decorate_collection_rows(results, request.user)
+    if hierarchy:
+        matching_ids = set(matching_queryset.filter(pk__in=[asset.pk for asset in page_assets]).values_list('pk', flat=True))
+        for row in results:
+            row['context_only'] = row['id'] not in matching_ids
 
     return JsonResponse(
         {
@@ -1398,6 +1447,7 @@ def asset_list_api(request):
                 "has_next": page_obj.has_next(),
                 "has_previous": page_obj.has_previous(),
             },
+            **({"hierarchy": hierarchy} if 'hierarchy' in request.GET or 'child_of' in request.GET else {}),
             "filters": active_filters,
         }
     )
@@ -1518,6 +1568,8 @@ def asset_labels_pdf(request):
     org = OrganizationSettings.get()
     org_short_name = getattr(settings, "ASSET_LABEL_ORGANIZATION_NAME", "") or org.short_name or org.full_name or "LUPINE"
 
+    from .collection_views import label_assets
+    assets = label_assets(assets, request.user)
     buffer = generate_labels_pdf(assets, org_short_name, layout=getattr(settings, "ASSET_LABEL_LAYOUT", "standard"))
     return FileResponse(buffer, content_type="application/pdf", filename="etykiety.pdf")
 
@@ -1535,6 +1587,12 @@ def asset_generate_ot_pdf(request, asset_id):
     location_ids = get_accessible_location_ids(request.user)
     if location_ids is not None and asset.location_fk_id not in location_ids:
         raise Http404
+    from .collection_safety import validate_component_depreciation
+    try:
+        validate_component_depreciation(asset.pk)
+    except ValidationError:
+        messages.error(request, 'Dokument OT zestawu jest wystawiany na środek nadrzędny, nie na jego element.')
+        return redirect('assets:detail', id=asset.pk)
     from .ot_numbering import allocate_ot_number, reserve_ot_number, suggest_ot_number
     form = OtDocumentForm(request.POST if request.method == "POST" else None, initial={
         "document_number": asset.ot_document_number,
@@ -1640,6 +1698,14 @@ def asset_lt_document(request):
         queryset = queryset.filter(location_fk_id__in=location_ids)
 
     assets = list(queryset.order_by("id"))
+    from .collection_safety import accounting_document_assets
+    try:
+        assets = accounting_document_assets(assets)
+    except ValidationError as error:
+        msg = '; '.join(error.messages)
+        if request.method == 'POST' and request.POST.get('format') == 'json':
+            return JsonResponse({'ok': False, 'error': msg}, status=400)
+        return HttpResponse(msg, status=400)
     if not assets:
         return HttpResponse("Brak archiwalnych środków do wygenerowania LT.", status=404)
 
@@ -1680,7 +1746,15 @@ def asset_generate_lt_pdf(request):
         queryset = queryset.filter(location_fk_id__in=location_ids)
 
     assets = list(queryset.order_by("id"))
-    ids_raw = ",".join(str(i) for i in ids)
+    from .collection_safety import accounting_document_assets
+    try:
+        assets = accounting_document_assets(assets)
+    except ValidationError as error:
+        msg = '; '.join(error.messages)
+        if request.method == 'POST' and request.POST.get('format') == 'json':
+            return JsonResponse({'ok': False, 'error': msg}, status=400)
+        return HttpResponse(msg, status=400)
+    ids_raw = ",".join(str(a.pk) for a in assets)
 
     if request.method == "GET":
         return render(request, "assets/asset_lt_generate.html", {
@@ -1841,6 +1915,11 @@ def asset_bulk_move_api(request):
             return JsonResponse({'success': False, 'error': 'Zakres środków zmienił się. Odśwież listę.'}, status=409)
         if any(not asset.is_active for asset in movable_asset_snapshots):
             return JsonResponse({'success': False, 'error': 'Archived assets cannot be moved.'}, status=400)
+        from .collection_safety import validate_individual_move
+        try:
+            validate_individual_move([asset.pk for asset in movable_asset_snapshots])
+        except ValidationError as error:
+            return JsonResponse({'success': False, 'error': '; '.join(error.messages)}, status=409)
         target_path = target_location.path
         history_entries = [AssetHistoryEntry(asset=asset, operator=request.user,
             event_type=AssetHistoryEntry.EventType.MOVED, description='Przeniesiono środek',
@@ -2042,6 +2121,12 @@ def asset_depreciation_plan(request, asset_id):
         raise Http404
 
     plan = AssetDepreciationPlan.objects.filter(asset=asset).first()
+    from .collection_safety import validate_component_depreciation
+    try:
+        validate_component_depreciation(asset.pk)
+    except ValidationError as error:
+        messages.error(request, '; '.join(error.messages))
+        return redirect('assets:detail', id=asset.pk)
     is_readonly = not asset.is_active
     monthly_depreciation_amount = None
     annual_depreciation_amount = None

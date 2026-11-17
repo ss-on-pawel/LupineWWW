@@ -55,10 +55,14 @@ def start_inventory_session(*, created_by, root_locations, asset_types):
         .order_by("id")
     )
 
+    from .collections import lock_inventory_collections, freeze_inventory_collections
+    lock_inventory_collections(assets)
+    assets = assets.select_for_update(of=('self',))
     rows = (_build_snapshot_item(session, asset, location_paths=paths)
             for asset in assets.iterator(chunk_size=500))
     while batch := list(islice(rows, 500)):
         InventorySnapshotItem.objects.bulk_create(batch, batch_size=500)
+    freeze_inventory_collections(session)
     return session
 
 

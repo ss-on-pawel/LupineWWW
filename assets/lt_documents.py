@@ -18,6 +18,9 @@ def create_lt_document(*, assets, org, date_of_action, operator, issuing_unit_te
                 'asset_type_ref', 'location_fk').filter(pk__in=ids, is_active=False).order_by('pk'))
             if len(locked) != len(ids) or not locked:
                 raise ValidationError('Stan środków zmienił się. Odśwież formularz LT.')
+            from .collection_safety import accounting_document_assets
+            locked = accounting_document_assets(locked)
+            ids = {asset.pk for asset in locked}
             now = timezone.now()
             year = timezone.localdate(now).year
             LtDocumentSequence.objects.get_or_create(year=year)

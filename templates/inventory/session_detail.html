@@ -737,6 +737,12 @@
                     <span class="inventory-table-tool-stat">Problemy <strong data-summary-value="problem_count">{{ wrong_location_count|add:found_out_of_scope_count|add:unknown_code_count }}</strong></span>
                 </div>
             </div>
+            {% if collection_summaries %}
+            <div style="padding:12px 0">
+                <p>Liczniki dotyczą elementów fizycznych. Środki nadrzędne nie wymagają dodatkowego skanu.</p>
+                <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:collection-report' session.pk %}">Raport zbiorczy zestawów</a>
+            </div>
+            {% endif %}
             <form method="get" action="{% url 'inventory:session-detail' session.pk %}" class="inventory-search" role="search">
                 <label for="inventory-search-input">Szukaj w tej inwentaryzacji</label>
                 <input type="hidden" name="sort" value="{{ inventory_sort }}">

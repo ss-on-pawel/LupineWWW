@@ -63,6 +63,7 @@ def generate_catalogued_pdf(assets, organization):
         instruction = ("Najpierw zeskanuj lokalizację, następnie kody potwierdzonych przedmiotów."
                        if location and location.code else
                        "Wybierz rzeczywistą lokalizację na terminalu przed skanowaniem przedmiotów.")
+        instruction += " W zestawach potwierdzaj każdy element osobno."
         _text(c, instruction, 214 * mm, size=8)
         for index, asset in enumerate(rows):
             top = (204 - index * 31) * mm

@@ -78,6 +78,7 @@ class InventorySnapshotItem(models.Model):
     location_code = models.CharField(max_length=120, blank=True)
     location_name = models.CharField(max_length=255, blank=True)
     location_path = models.CharField(max_length=1024, blank=True)
+    collection_snapshot = models.JSONField(default=dict, blank=True)
     status_snapshot = models.CharField(max_length=30, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

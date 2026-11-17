@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block extra_head %}{% include 'assets/collection_styles.html' %}{% endblock %}
+{% block content %}
+<section class="card collection-page">
+<h1>{{ title }}</h1>
+<p>{{ collection.name }}. Operacja obejmie <strong>wszystkie {{ total }} kartoteki</strong>: środek nadrzędny i wszystkie jego elementy. {% if action == 'dissolve' %}Powiązanie zostanie zakończone. Kartoteki, ich własne numery, kody i historia pozostaną zachowane. Rozwiązanie zestawu z wartością lub planem wymaga osobnego uzgodnienia finansowego.{% else %}Powiązanie zestawu zostanie zachowane.{% endif %}</p>
+{% for member in members %}<p>{{ member.asset.name }} · {{ member.asset.barcode }}{% if member.role == 'parent' %} — środek nadrzędny{% endif %}</p>{% endfor %}
+<p>Strona {{ members.number }} z {{ members.paginator.num_pages }}.
+{% if members.has_previous %}<a href="?page={{ members.previous_page_number }}">Poprzednia</a>{% endif %}
+{% if members.has_next %}<a href="?page={{ members.next_page_number }}">Następna</a>{% endif %}</p>
+<form method="post">{% csrf_token %}{{ state_form.as_p }}{{ operation_form.as_p }}
+<button class="ui-btn {% if action == 'withdraw' %}ui-btn--danger{% else %}ui-btn--primary{% endif %}">{{ title }} — zatwierdź</button>
+<a class="ui-btn ui-btn--secondary" href="{% url 'assets:collection-detail' collection.pk %}">Anuluj</a>
+</form>
+</section>
+{% endblock %}

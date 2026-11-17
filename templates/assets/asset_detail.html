@@ -462,9 +462,10 @@
             </div>
         </div>
         <div class="asset-actions">
-            {% if features.asset_ot_documents %}
+            {% if features.asset_ot_documents and not collection_info.is_set_component %}
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:ot-generate' asset.id %}">Dokument OT</a>
             {% endif %}
+            {% if features.asset_ot_documents and collection_info.is_set_component and collection_info.parent %}<a class="ui-btn ui-btn--secondary" href="{% url 'assets:ot-generate' collection_info.parent.asset_id %}">Dokument OT zestawu</a>{% endif %}
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:update' asset.id %}">Edytuj</a>
             <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
         </div>
@@ -485,7 +486,8 @@
                     <div class="section-grid">
                         <div class="detail-item">
                             <span class="detail-label">Numer inwentarzowy</span>
-                            <div class="detail-value is-mono">{{ asset.inventory_number }}</div>
+                            <div class="detail-value is-mono">{{ collection_info.effective_number }}</div>
+                            {% if collection_info.membership.collection.kind == 'set' and collection_info.membership.role == 'member' %}<small>Numer dziedziczony z zestawu{% if not collection_info.parent %}; karta nadrzędna poza zakresem{% endif %}.</small>{% endif %}
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Nazwa</span>
@@ -633,7 +635,8 @@
                         </div>
                     </div>
 
-                    {% if features.depreciation %}
+                    {% if features.depreciation and collection_info.is_set_component %}<p>Amortyzacja jest prowadzona na środku nadrzędnym zestawu.</p>{% endif %}
+                    {% if features.depreciation and not collection_info.is_set_component %}
                         <div class="depreciation-block">
                             <span class="section-label">Plan amortyzacji</span>
                             {% with plan=asset.depreciation_plan %}
@@ -879,6 +882,7 @@
                     {% endif %}
                 </div>
             </section>
+            {% include "assets/collection_section.html" %}
             <section class="detail-section">
                 <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-wycofanie">
                     <span class="section-icon">▶</span>
@@ -888,7 +892,8 @@
                     </div>
                 </button>
                 <div class="section-body is-hidden" id="sekcja-wycofanie">
-            {% if features.asset_withdraw and asset.is_active %}
+            {% if collection_info.is_strict_set %}<p><a class="ui-btn ui-btn--secondary" href="{% url 'assets:collection-detail' collection_info.membership.collection_id %}">Operacje całego zestawu</a></p>{% endif %}
+            {% if features.asset_withdraw and asset.is_active and not collection_info.is_strict_set %}
                 <form class="asset-withdraw-form" method="post" action="{% url 'assets:asset-withdraw' asset.id %}" onsubmit="return window.confirm('Wycofać środek z aktywnej Ewidencji?');">
                     {% csrf_token %}
                     {{ withdrawal_form.request_id }}{{ withdrawal_form.expected_quantity }}
@@ -913,7 +918,7 @@
                     <button class="ui-btn ui-btn--danger" type="submit">Wycofaj z Ewidencji</button>
                 </form>
             {% endif %}
-            {% if features.asset_archive and can_restore_asset %}
+            {% if features.asset_archive and can_restore_asset and not collection_info.is_strict_set %}
                 <form method="post" action="{% url 'assets:asset-restore' asset.id %}" onsubmit="return window.confirm('Przywrócić środek do aktywnej Ewidencji?');">
                     {% csrf_token %}
                     <button class="ui-btn ui-btn--success" type="submit">Przywróć do Ewidencji</button>

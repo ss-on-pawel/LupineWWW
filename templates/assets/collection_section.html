@@ -1,0 +1,20 @@
+<section class="detail-section">
+  <button class="section-toggle" type="button" aria-expanded="false" aria-controls="sekcja-zestaw">
+    <span class="section-icon">▶</span>
+    <div class="section-title-wrap"><span class="section-label">Powiązania</span><span class="section-title-text">Zestaw / grupa{% if collection_info.membership %} · {{ collection_info.visible_count }} dostępnych środków{% endif %}</span></div>
+  </button>
+  <div class="section-body is-hidden" id="sekcja-zestaw">
+  {% if collection_info.membership %}
+    {% if collection_info.membership.collection.kind == 'group' %}
+      <p>Grupa: <a href="{% url 'assets:collection-detail' collection_info.membership.collection_id %}">{{ collection_info.membership.collection.name }}</a></p>
+    {% elif collection_info.parent %}
+      <p>Zestaw: <a href="{% url 'assets:detail' collection_info.parent.asset_id %}">{{ collection_info.parent.asset.name }}</a></p>
+    {% else %}<p>Środek należy do zestawu. Karta nadrzędna jest poza Twoim zakresem.</p>{% endif %}
+    {% for member in collection_info.members %}<p>{% if member.role == 'member' and collection_info.membership.collection.kind == 'set' %}↳ {% endif %}<a href="{% url 'assets:detail' member.asset_id %}">{{ member.asset.name }}</a> · {{ member.asset.barcode }}</p>{% endfor %}
+    <a class="ui-btn ui-btn--secondary" href="{% url 'assets:collection-detail' collection_info.membership.collection_id %}">Pokaż cały skład{% if collection_info.can_manage %} / zarządzaj{% endif %}</a>
+  {% else %}
+    <p>Środek nie należy do zestawu ani grupy.</p>
+    {% if asset.is_active %}<a class="ui-btn ui-btn--secondary" href="{% url 'assets:set-create' asset.pk %}">Utwórz zestaw</a> <a class="ui-btn ui-btn--secondary" href="{% url 'assets:group-create' asset.pk %}">Utwórz grupę środków</a>{% endif %}
+  {% endif %}
+  </div>
+</section>

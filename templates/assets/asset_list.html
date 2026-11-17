@@ -1606,6 +1606,12 @@
                 padding-right: 8px;
             }
         }
+        @media (max-width: 640px) {
+            .asset-list-shell .asset-list-heading { flex-direction: column; align-items: flex-start; }
+            .asset-list-shell .asset-list-heading > div { min-width: 0; max-width: 100%; }
+            .asset-list-shell .asset-list-heading-actions { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+            .asset-list-shell #asset-results-summary { white-space: normal; overflow-wrap: anywhere; }
+        }
     </style>
 {% endblock %}
 
@@ -2679,6 +2685,7 @@ let searchDebounceId = null;
                 renderHead();
                 renderRows(payload.results || []);
                 renderPagination(payload.pagination);
+                if (payload.hierarchy) elements.resultsSummary.textContent += ' najwyższego poziomu (elementy zestawów po rozwinięciu)';
                 updateSortLabel();
                 syncControls();
                 updateStickyOffsets();
@@ -3023,18 +3030,10 @@ let searchDebounceId = null;
                 return "upcoming";
             }
 
-            function renderRows(rows) {
+            function createAssetRow(row, depth, parentId) {
                 const visibleColumns = getVisibleColumns();
-                elements.tableBody.innerHTML = "";
-
-                if (!rows.length) {
-                    elements.tableBody.innerHTML = '<tr><td colspan="' + visibleColumns.length + '" class="asset-table-empty">Brak wyników dla bieżących filtrów.</td></tr>';
-                    syncSelectAllControl();
-                    return;
-                }
-
-                rows.forEach(function (row) {
                     const tr = document.createElement("tr");
+                    if (depth) { tr.dataset.setParent = String(parentId); tr.id = 'set-element-' + parentId + '-' + row.id; }
 
                     visibleColumns.forEach(function (column, visibleIndex) {
                         const td = document.createElement("td");
@@ -3044,13 +3043,36 @@ let searchDebounceId = null;
                         if (column.key === "select") {
                             td.innerHTML = '<input type="checkbox" aria-label="Zaznacz środek" data-role="asset-select" data-asset-id="' + row.id + '">';
                         } else if (column.key === "name") {
+                            if (depth) { td.style.paddingLeft = '30px'; }
+                            if (!depth && row.collection && row.collection.kind === 'set' && row.collection.role === 'parent' && row.collection.child_count) {
+                                const toggle = document.createElement('button');
+                                toggle.type = 'button'; toggle.className = 'asset-set-toggle';
+                                toggle.textContent = '▶'; toggle.setAttribute('aria-expanded', 'false');
+                                toggle.setAttribute('aria-label', 'Rozwiń elementy: ' + row.name);
+                                toggle.style.cssText = 'border:0;background:none;padding:4px 8px 4px 0;cursor:pointer;font:inherit';
+                                toggle.addEventListener('click', () => toggleSetRows(row, tr, toggle));
+                                td.appendChild(toggle);
+                            }
                             const link = document.createElement("a");
                             link.href = buildDetailUrl(row.id);
                             link.className = "asset-name-link";
+                            if (!depth && row.collection && row.collection.role === 'parent') link.style.display = 'inline';
                             link.textContent = row.name || "-";
                             td.appendChild(link);
+                            if (!depth && row.collection && row.collection.kind === 'set' && row.collection.role === 'parent') {
+                                const count = document.createElement('small');
+                                count.textContent = ' · ' + row.collection.child_count + ' dostępnych elementów';
+                                td.appendChild(count);
+                            }
                             const badgeRow = document.createElement("div");
                             badgeRow.className = "asset-name-badges";
+                            if (row.collection) {
+                                const collectionLink = document.createElement("a");
+                                collectionLink.href = "/assets/collections/" + row.collection.id + "/";
+                                collectionLink.className = "asset-info-pill";
+                                collectionLink.textContent = (row.collection.kind === "group" ? "Grupa: " : "Zestaw: ") + row.collection.name;
+                                badgeRow.appendChild(collectionLink);
+                            }
                             if (row.has_pending_update) {
                                 const pending = document.createElement("span");
                                 pending.className = "asset-info-pill asset-info-pill--approval";
@@ -3104,7 +3126,70 @@ let searchDebounceId = null;
                         tr.appendChild(td);
                     });
 
+                return tr;
+            }
+
+            async function toggleSetRows(row, parentTr, button, pageNumber) {
+                const setRows = () => Array.from(elements.tableBody.querySelectorAll('tr[data-set-parent="' + row.id + '"]'));
+                if (!pageNumber && button.getAttribute('aria-expanded') === 'true') {
+                    setRows().forEach(element => element.remove());
+                    button.setAttribute('aria-expanded', 'false'); button.textContent = '▶';
+                    button.removeAttribute('aria-controls'); syncSelectAllControl(); return;
+                }
+                button.disabled = true; button.textContent = '…';
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 15000);
+                try {
+                    const url = new URL(buildApiUrl(), window.location.origin);
+                    url.searchParams.set('hierarchy', '0'); url.searchParams.set('child_of', String(row.id));
+                    url.searchParams.set('page', String(pageNumber || 1));
+                    const response = await fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}, signal: controller.signal});
+                    if (!response.ok) throw new Error('Nie udało się pobrać składu.');
+                    const payload = await response.json();
+                    if (!parentTr.isConnected) return;
+                    let anchor = parentTr;
+                    setRows().filter(element => element.dataset.setMore).forEach(element => element.remove());
+                    const existing = setRows(); if (existing.length) anchor = existing[existing.length - 1];
+                    (payload.results || []).forEach(child => {
+                        const childTr = createAssetRow(child, 1, row.id);
+                        anchor.insertAdjacentElement('afterend', childTr); anchor = childTr;
+                    });
+                    if (payload.pagination.has_next || !(payload.results || []).length) {
+                        const more = document.createElement('tr'); more.dataset.setParent = String(row.id); more.dataset.setMore = '1';
+                        more.id = 'set-more-' + row.id;
+                        const cell = document.createElement('td'); cell.colSpan = getVisibleColumns().length;
+                        if (payload.pagination.has_next) {
+                            const load = document.createElement('button'); load.type = 'button'; load.className = 'ui-btn ui-btn--secondary';
+                            load.textContent = 'Pokaż kolejne elementy';
+                            load.addEventListener('click', () => {load.disabled=true;toggleSetRows(row, parentTr, button, payload.pagination.page + 1);});
+                            cell.appendChild(load);
+                        } else { cell.textContent = 'Brak elementów pasujących do bieżących filtrów.'; }
+                        more.appendChild(cell); anchor.insertAdjacentElement('afterend', more);
+                    }
+                    button.setAttribute('aria-expanded', 'true'); button.textContent = '▼';
+                    button.setAttribute('aria-controls', setRows().map(element => element.id).join(' '));
+                    button.title = ''; syncSelectAllControl();
+                } catch (error) {
+                    button.setAttribute('aria-expanded', 'false'); button.textContent = '▶';
+                    button.title = 'Nie udało się pobrać elementów. Kliknij, aby ponowić.';
+                    setRows().forEach(element => element.remove());
+                } finally {clearTimeout(timeout); button.disabled = false;}
+            }
+
+            function renderRows(rows) {
+                const visibleColumns = getVisibleColumns();
+                elements.tableBody.innerHTML = '';
+                if (!rows.length) {
+                    elements.tableBody.innerHTML = '<tr><td colspan="' + visibleColumns.length + '" class="asset-table-empty">Brak wyników dla bieżących filtrów.</td></tr>';
+                    syncSelectAllControl(); return;
+                }
+                rows.forEach(row => {
+                    const tr = createAssetRow(row, 0);
                     elements.tableBody.appendChild(tr);
+                    if (row.context_only) {
+                        const button = tr.querySelector('.asset-set-toggle');
+                        if (button) toggleSetRows(row, tr, button);
+                    }
                 });
                 syncSelectAllControl();
             }
@@ -4055,6 +4140,7 @@ let searchDebounceId = null;
             function buildApiUrl() {
                 const target = new URL(apiUrl, window.location.origin);
                 const params = new URLSearchParams(target.search);
+                params.set("hierarchy", "1");
                 params.set("page", String(state.page));
                 params.set("page_size", String(state.pageSize));
                 params.set("search", state.search);
