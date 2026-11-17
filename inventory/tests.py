@@ -417,12 +417,34 @@ class InventorySessionDetailViewTests(TestCase):
             response = self.client.get(url, {"q": " krzesło ", "items_page": 2})
             self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
             self.assertEqual(len(response.context["inventory_work_items"]), 2)
-            self.assertContains(response, "q=krzes%C5%82o&amp;items_page=3")
+            self.assertContains(response, "q=krzes%C5%82o&amp;discrepancies=0&amp;items_page=3")
         for query in ("99999", "Nowa nazwa", "<script>"):
             response = self.client.get(url, {"q": query})
             self.assertEqual(response.context["inventory_work_page"].paginator.count, 0)
             self.assertContains(response, "Brak pozycji pasujących")
         response = self.client.get(url, {"q": "  "})
+        self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
+
+    def test_detail_filters_discrepancies_before_pagination_and_combines_search(self):
+        from unittest.mock import patch
+        assets = [self._create_asset(f"FILTER-{i}", self.child) for i in range(5)]
+        session = self._start_session(self.root)
+        from inventory.models import InventorySessionManualConfirmation
+        InventorySessionManualConfirmation.objects.create(session=session, asset=assets[0])
+        self.client.force_login(self.admin_user)
+        url = reverse("inventory:session-detail", kwargs={"pk": session.pk})
+        with patch("inventory.views.INVENTORY_DETAIL_PAGE_SIZE", 2):
+            response = self.client.get(url, {"discrepancies": "1"})
+            self.assertEqual(response.context["snapshot_total"], 5)
+            self.assertEqual(response.context["inventory_work_page"].paginator.count, 4)
+            self.assertTrue(all(i["row_status"] != "matching" for i in response.context["inventory_work_items"]))
+            self.assertContains(response, "discrepancies=1&amp;items_page=2")
+            self.assertContains(response, 'aria-pressed="true"')
+        response = self.client.get(url, {"q": "FILTER-0", "discrepancies": "1"})
+        self.assertEqual(response.context["inventory_work_page"].paginator.count, 0)
+        response = self.client.get(url, {"q": "FILTER-1", "discrepancies": "1"})
+        self.assertEqual(response.context["inventory_work_page"].paginator.count, 1)
+        response = self.client.get(url, {"discrepancies": "0"})
         self.assertEqual(response.context["inventory_work_page"].paginator.count, 5)
 
     def test_detail_paginates_snapshot_items(self):

@@ -163,6 +163,9 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
                 if any(needle in (getattr(item["snapshot"], field) or "").casefold()
                        for field in ("barcode", "inventory_number", "name"))
             ]
+        discrepancies_only = self.request.GET.get("discrepancies") == "1"
+        if discrepancies_only:
+            work_items = [item for item in work_items if item["row_status"] != "matching"]
         work_items_page = Paginator(
             work_items,
             INVENTORY_DETAIL_PAGE_SIZE,
@@ -170,6 +173,7 @@ class InventorySessionDetailView(LoginRequiredMixin, DetailView):
 
         context.update(analysis)
         context["inventory_work_items"] = list(work_items_page.object_list)
+        context["inventory_discrepancies_only"] = discrepancies_only
         context["inventory_search_query"] = search_query
         context["inventory_work_page"] = work_items_page
         context["inventory_work_page_size"] = INVENTORY_DETAIL_PAGE_SIZE

@@ -512,8 +512,8 @@
 
         .inventory-search { padding: 12px; }
         .inventory-search label { display: block; margin-bottom: 6px; }
-        .inventory-search-controls { display: flex; flex-wrap: wrap; gap: 8px; }
-        .inventory-search input { flex: 1 1 260px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); }
+        .inventory-search-controls { display: flex; flex-wrap: wrap; gap: 8px; max-width: 780px; }
+        .inventory-search input { flex: 1 1 260px; max-width: 400px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); }
         .inventory-search p { margin: 8px 0 0; color: var(--muted); }
 
         .inventory-empty {
@@ -735,12 +735,14 @@
             </div>
             <form method="get" action="{% url 'inventory:session-detail' session.pk %}" class="inventory-search" role="search">
                 <label for="inventory-search-input">Szukaj w tej inwentaryzacji</label>
+                {% if inventory_discrepancies_only %}<input type="hidden" name="discrepancies" value="1">{% endif %}
                 <div class="inventory-search-controls">
                     <input id="inventory-search-input" type="search" name="q" value="{{ inventory_search_query }}" placeholder="Kod, numer inwentarzowy lub fragment nazwy">
                     <button class="ui-btn ui-btn--primary" type="submit">Szukaj</button>
-                    {% if inventory_search_query %}<a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Wyczyść</a>{% endif %}
+                    <button class="ui-btn {% if inventory_discrepancies_only %}ui-btn--primary{% else %}ui-btn--secondary{% endif %}" type="submit" name="discrepancies" value="{% if inventory_discrepancies_only %}0{% else %}1{% endif %}" aria-pressed="{{ inventory_discrepancies_only|yesno:'true,false' }}">{% if inventory_discrepancies_only %}Pokaż wszystkie{% else %}Tylko niezgodne{% endif %}</button>
+                    {% if inventory_search_query or inventory_discrepancies_only %}<a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-detail' session.pk %}">Wyczyść</a>{% endif %}
                 </div>
-                {% if inventory_search_query %}<p role="status">Znaleziono {{ inventory_work_page.paginator.count }} z {{ snapshot_total }} pozycji.</p>{% endif %}
+                {% if inventory_search_query or inventory_discrepancies_only %}<p role="status">Znaleziono {{ inventory_work_page.paginator.count }} z {{ snapshot_total }} pozycji.</p>{% endif %}
             </form>
             {% if inventory_work_items %}
                 {% if inventory_work_page.paginator.num_pages > 1 %}
@@ -750,17 +752,17 @@
                         </span>
                         <span class="inventory-table-pagination-controls">
                             {% if inventory_work_page.has_previous %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;discrepancies={{ inventory_discrepancies_only|yesno:"1,0" }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
                             {% endif %}
                             <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
                             {% if inventory_work_page.has_next %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;discrepancies={{ inventory_discrepancies_only|yesno:"1,0" }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
                             {% endif %}
                         </span>
                     </nav>
                 {% endif %}
                 <div class="inventory-table-wrap">
-                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}" data-inventory-paginated="{% if inventory_search_query or inventory_work_page.paginator.num_pages > 1 %}true{% else %}false{% endif %}">
+                    <table class="inventory-table inventory-work-table" data-manual-quantity-url="{% url 'inventory:manual-quantity-api' session.pk %}" data-manual-confirmation-url="{% url 'inventory:manual-confirmation-api' session.pk %}" data-session-closed="{% if is_session_closed %}true{% else %}false{% endif %}" data-inventory-paginated="{% if inventory_search_query or inventory_discrepancies_only or inventory_work_page.paginator.num_pages > 1 %}true{% else %}false{% endif %}">
                         <thead>
                             <tr>
                                 <th class="inventory-col-number">Numer inwentarzowy</th>
@@ -822,17 +824,17 @@
                         </span>
                         <span class="inventory-table-pagination-controls">
                             {% if inventory_work_page.has_previous %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;discrepancies={{ inventory_discrepancies_only|yesno:"1,0" }}&amp;items_page={{ inventory_work_page.previous_page_number }}">Poprzednia</a>
                             {% endif %}
                             <span>Strona {{ inventory_work_page.number }} z {{ inventory_work_page.paginator.num_pages }}</span>
                             {% if inventory_work_page.has_next %}
-                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
+                                <a class="ui-btn ui-btn--secondary" href="?q={{ inventory_search_query|urlencode }}&amp;discrepancies={{ inventory_discrepancies_only|yesno:"1,0" }}&amp;items_page={{ inventory_work_page.next_page_number }}">Następna</a>
                             {% endif %}
                         </span>
                     </nav>
                 {% endif %}
             {% else %}
-                <div class="inventory-empty">{% if inventory_search_query %}Brak pozycji pasujących do wyszukiwania w tej inwentaryzacji.{% else %}Brak pozycji ewidencji na dzień spisu dla tej sesji.{% endif %}</div>
+                <div class="inventory-empty">{% if inventory_search_query %}Brak pozycji pasujących do wyszukiwania w tej inwentaryzacji.{% elif inventory_discrepancies_only %}Brak niezgodnych pozycji w tej inwentaryzacji.{% else %}Brak pozycji ewidencji na dzień spisu dla tej sesji.{% endif %}</div>
             {% endif %}
         </section>
         </div>
