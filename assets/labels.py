@@ -20,11 +20,16 @@ _MAX_NAME_CHARS = 34
 _BARCODE_MARGIN_X = 1.75 * mm
 
 
-def generate_labels_pdf(assets, org_short_name: str) -> io.BytesIO:
+def generate_labels_pdf(assets, org_short_name: str, *, layout: str = "standard") -> io.BytesIO:
+    if layout not in {"standard", "50x35"}:
+        raise ValueError("Unknown asset label layout")
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=(PAGE_W, PAGE_H))
+    c = canvas.Canvas(buffer, pagesize=(PAGE_W, 35 * mm if layout == "50x35" else PAGE_H))
     for asset in assets:
-        _draw_label(c, asset, org_short_name)
+        if layout == "50x35":
+            _draw_label_50x35(c, asset, org_short_name)
+        else:
+            _draw_label(c, asset, org_short_name)
         c.showPage()
     c.save()
     buffer.seek(0)
@@ -92,3 +97,64 @@ def _fit_text(text: str, font: str, size: float) -> str:
     while text and stringWidth(text + "…", font, size) > max_width:
         text = text[:-1]
     return text + "…"
+
+def _draw_label_50x35(c, asset, organization_name: str) -> None:
+    """Compact full-width label: organization, barcode, code and asset name."""
+    width, height = 50 * mm, 35 * mm
+    margin = 1.5 * mm
+    available = width - 2 * margin
+    c.setFillColorRGB(0, 0, 0)
+
+    # Keep the complete organization name on one line, including Polish glyphs.
+    title_size = 7.5
+    title_width = stringWidth(organization_name, _BODY_FONT_BOLD, title_size)
+    if title_width > available:
+        title_size *= available / title_width
+    c.setFont(_BODY_FONT_BOLD, title_size)
+    c.drawCentredString(width / 2, height - 3 * mm, organization_name)
+
+    barcode = Code128(asset.barcode, barWidth=0.4 * mm, barHeight=18.5 * mm,
+                      humanReadable=False, quiet=True, lquiet=4 * mm, rquiet=4 * mm)
+    # Scale bars and their 10-module quiet zones together; never crop the symbol.
+    c.saveState()
+    c.translate(margin, 11.2 * mm)
+    c.scale(available / barcode.width, 1)
+    barcode.drawOn(c, 0, 0)
+    c.restoreState()
+
+    code_size = 12
+    code_width = stringWidth(asset.barcode, _BODY_FONT_BOLD, code_size)
+    if code_width > available:
+        code_size *= available / code_width
+    c.setFont(_BODY_FONT_BOLD, code_size)
+    c.drawCentredString(width / 2, 7.2 * mm, asset.barcode)
+
+    # Two lines for the name when no inventory number was supplied.
+    name_lines = _wrap_label_name(asset.name, available, 8)
+    c.setFont(_BODY_FONT_BOLD, 8)
+    c.drawString(margin, 3.8 * mm, name_lines[0])
+    if asset.inventory_number:
+        c.setFont(_BODY_FONT, 6)
+        c.drawString(margin, 1.1 * mm, _fit_text(f"Nr inw.: {asset.inventory_number}", _BODY_FONT, 6))
+    elif len(name_lines) > 1:
+        c.drawString(margin, 0.9 * mm, name_lines[1])
+
+
+def _wrap_label_name(name: str, width: float, size: float) -> list[str]:
+    remaining = " ".join(name.split())
+    lines = []
+    for line_number in range(2):
+        if stringWidth(remaining, _BODY_FONT_BOLD, size) <= width:
+            lines.append(remaining)
+            break
+        end = len(remaining)
+        suffix = "…" if line_number == 1 else ""
+        while end and stringWidth(remaining[:end] + suffix, _BODY_FONT_BOLD, size) > width:
+            end -= 1
+        if line_number == 0:
+            space = remaining.rfind(" ", 0, end + 1)
+            if space > 0:
+                end = space
+        lines.append(remaining[:end].rstrip() + suffix)
+        remaining = remaining[end:].lstrip()
+    return lines or [""]

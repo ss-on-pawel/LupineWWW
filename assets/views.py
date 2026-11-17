@@ -7,6 +7,7 @@ from datetime import date
 
 from accounts.utils import get_accessible_location_ids
 from config.features import FeatureRequiredMixin, require_feature
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
@@ -1436,9 +1437,9 @@ def asset_labels_pdf(request):
         return HttpResponse("Brak środków do wydruku.", status=404)
 
     org = OrganizationSettings.get()
-    org_short_name = org.short_name or org.full_name or "LUPINE"
+    org_short_name = getattr(settings, "ASSET_LABEL_ORGANIZATION_NAME", "") or org.short_name or org.full_name or "LUPINE"
 
-    buffer = generate_labels_pdf(assets, org_short_name)
+    buffer = generate_labels_pdf(assets, org_short_name, layout=getattr(settings, "ASSET_LABEL_LAYOUT", "standard"))
     return FileResponse(buffer, content_type="application/pdf", filename="etykiety.pdf")
 
 
