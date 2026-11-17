@@ -638,6 +638,7 @@
             <div class="inventory-session-action-group">
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-list' %}">Wróć do listy</a>
                 <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-location-codes' session.pk %}" target="_blank" rel="noopener">Kody pomieszczeń A4</a>
+                {% if features.asset_labels %}<a class="ui-btn ui-btn--secondary" href="{% url 'assets:catalogued-pdf' %}" target="_blank" rel="noopener" title="Wszystkie czynne katalogowane środki w dostępnych lokalizacjach">Katalogowane — wydruk A4</a>{% endif %}
                 {% if features.inventory_reports %}
                     <a class="ui-btn ui-btn--secondary" href="{% url 'inventory:session-report' session.pk %}">Raport</a>
                     {% if is_session_closed %}

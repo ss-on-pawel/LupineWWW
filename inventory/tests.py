@@ -1951,7 +1951,7 @@ class InventorySessionDetailScanProgressTests(TestCase):
         self.assertContains(response, "Kod kreskowy")
         self.assertContains(response, "Ręczne")
         self.assertContains(response, "Ilość faktyczna")
-        self.assertContains(response, "R&Oacute;&#379;NICA")
+        self.assertContains(response, "Różnica")
 
     def test_regular_asset_is_not_quantity_based_and_read_is_binary(self):
         import_inventory_scan_text(

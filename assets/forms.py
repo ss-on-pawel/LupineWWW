@@ -82,6 +82,7 @@ class AssetForm(forms.ModelForm):
             "serial_number",
             "barcode",
             "description",
+            "is_catalogued",
             "purchase_date",
             "commissioning_date",
             "purchase_value",

@@ -1414,6 +1414,29 @@ def _parse_asset_id_list_payload(payload):
 
 
 @login_required
+@never_cache
+@require_GET
+def asset_catalogued_pdf(request):
+    require_feature(request, "asset_labels")
+    from .catalogue_printing import generate_catalogued_pdf
+    from locations.models import OrganizationSettings
+    assets = Asset.objects.filter(is_active=True, is_catalogued=True).select_related("location_fk")
+    location_ids = get_accessible_location_ids(request.user)
+    if location_ids is not None:
+        assets = assets.filter(location_fk_id__in=location_ids)
+    assets = list(assets.order_by("location_fk_id", "barcode", "pk"))
+    if not assets:
+        return HttpResponse("Brak katalogowanych środków do wydruku.", status=404)
+    org = OrganizationSettings.objects.first()
+    organization = (org.full_name or org.short_name) if org else "LUPINE"
+    try:
+        buffer = generate_catalogued_pdf(assets, organization)
+    except ValueError as exc:
+        return HttpResponse(str(exc), status=400)
+    return FileResponse(buffer, content_type="application/pdf", filename="ewidencja-katalogowanych-A4.pdf")
+
+
+@login_required
 @require_GET
 def asset_labels_pdf(request):
     require_feature(request, "asset_labels")

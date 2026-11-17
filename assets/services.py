@@ -109,6 +109,11 @@ def _asset_barcode_candidate_exists(*, Asset, Location, barcode):
 
 
 ASSET_HISTORY_FIELD_SPECS = {
+    "is_catalogued": {
+        "label": "Katalogowany",
+        "description": "Zmieniono oznaczenie katalogowania",
+        "value": lambda asset: _format_bool(asset.is_catalogued),
+    },
     "commissioning_date": {
         "label": "Przyjęcie do użycia",
         "description": "Zmieniono datę przyjęcia do użycia",
@@ -399,12 +404,15 @@ def approve_asset_change_request(change_request, reviewer):
             # Requests created before OT was introduced did not snapshot this field.
             if "ot_document_number" not in payload["current"]:
                 serialized_current.pop("ot_document_number", None)
+            if "is_catalogued" not in payload["current"]:
+                serialized_current.pop("is_catalogued", None)
             if serialized_current != _without_system_managed_asset_fields(payload["current"]):
                 raise ValidationError("Asset has changed since the request was created.")
 
             before_values = capture_asset_history_values(asset)
             form_data = deserialize_asset_payload_for_form(payload["proposed"])
             form_data.setdefault("ot_document_number", asset.ot_document_number)
+            form_data.setdefault("is_catalogued", asset.is_catalogued)
             form = AssetForm(data=form_data, instance=asset)
             if not form.is_valid():
                 raise ValidationError(form.errors)

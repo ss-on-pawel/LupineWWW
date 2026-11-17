@@ -511,6 +511,14 @@
                             <span class="detail-label">NUMER KODU KRESKOWEGO</span>
                             <div class="detail-value is-mono">{{ asset.barcode|default:"—" }}</div>
                         </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Katalogowany</span>
+                            <div class="detail-value">{{ asset.is_catalogued|yesno:"Tak,Nie" }}{% if asset.is_catalogued %} — etykieta w segregatorze{% endif %}</div>
+                        </div>
+                        <div class="detail-item" style="grid-column: 1 / -1; overflow-wrap: anywhere;">
+                            <span class="detail-label">Opis</span>
+                            <div class="detail-value">{{ asset.description|default:"—"|linebreaksbr }}</div>
+                        </div>
                     </div>
                 </div>
             </section>

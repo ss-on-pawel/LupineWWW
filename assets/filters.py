@@ -65,6 +65,7 @@ class ParsedFilters:
 
 
 ASSET_FILTER_SPECS: dict[str, FilterFieldSpec] = {
+    "is_catalogued": FilterFieldSpec("is_catalogued", "Katalogowany", "enum", "is_catalogued", TYPE_OPERATORS["enum"], (("true", "Tak"), ("false", "Nie"))),
     "name": FilterFieldSpec("name", "Nazwa", "text", "name", TYPE_OPERATORS["text"]),
     "inventory_number": FilterFieldSpec("inventory_number", "Nr inwentarzowy", "text", "inventory_number", TYPE_OPERATORS["text"]),
     "location": FilterFieldSpec("location", "Lokalizacja", "text", "location", TYPE_OPERATORS["text"]),
@@ -222,14 +223,14 @@ def _normalize_filter_value(spec: FilterFieldSpec, operator: str, raw_value: str
             values = [item.strip() for item in str(raw_value).split(",") if item.strip()]
             if not values or any(item not in allowed for item in values):
                 return None
-            if spec.field in {"is_active", "is_in_active_inventory"}:
+            if spec.field in {"is_active", "is_in_active_inventory", "is_catalogued"}:
                 return [_parse_bool(value) for value in values]
             return values
 
         value = str(raw_value).strip()
         if value not in allowed:
             return None
-        if spec.field in {"is_active", "is_in_active_inventory"}:
+        if spec.field in {"is_active", "is_in_active_inventory", "is_catalogued"}:
             return _parse_bool(value)
         return value
 

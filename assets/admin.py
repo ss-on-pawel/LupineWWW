@@ -37,6 +37,7 @@ class AssetAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = (
+        "is_catalogued",
         "asset_type",
         "category",
         "status",
@@ -88,6 +89,7 @@ class AssetAdmin(admin.ModelAdmin):
                     "asset_type",
                     "category",
                     "description",
+                    "is_catalogued",
                     "is_active",
                 )
             },

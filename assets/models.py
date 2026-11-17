@@ -81,6 +81,8 @@ class Asset(models.Model):
         max_length=120,
         verbose_name="Kod kreskowy",
     )
+    is_catalogued = models.BooleanField(default=False, db_index=True, verbose_name="Katalogowany",
+        help_text="Etykieta przechowywana w segregatorze zamiast na przedmiocie.")
     description = models.TextField(blank=True, verbose_name="Opis")
     purchase_date = models.DateField(
         null=True,
