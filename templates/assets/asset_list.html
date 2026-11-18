@@ -448,6 +448,39 @@
             height: 24px;
             background: rgba(15, 23, 42, 0.1);
         }
+        .asset-list-shell .asset-set-add {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            min-height: 30px;
+            margin-left: 8px;
+            padding: 0;
+            vertical-align: middle;
+            border: 1px solid #d0d5dd;
+            border-radius: 6px;
+            background: #f9fafb;
+            color: #475467;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            text-decoration: none;
+            transition: background-color 120ms, border-color 120ms, color 120ms;
+        }
+        .asset-list-shell .asset-set-add:hover {
+            background: #eef2f6;
+            border-color: #98a2b3;
+            color: #101828;
+            text-decoration: none;
+        }
+        .asset-list-shell .asset-set-add:focus-visible {
+            outline: 2px solid #667085;
+            outline-offset: 3px;
+        }
+        .asset-set-add svg { width: 16px; height: 16px; flex: none; }
+        @media (pointer: coarse) {
+            .asset-list-shell .asset-set-add { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
+        }
         .asset-list-table-tools {
             position: relative;
             display: flex;
@@ -1731,11 +1764,11 @@
                 <div class="asset-list-table-tools">
                     <div class="asset-table-tools-left">
                         <button id="asset-management-add" type="button" class="ui-btn ui-btn--success" hidden>Dodaj środek</button>
-                        <button id="asset-create-set" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Utwórz zestaw</button>
                         <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Wycofaj</button>
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
                         <button id="asset-print-labels" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Drukuj etykiety</button>
+                        <button id="asset-create-set" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Utwórz zestaw</button>
                         <span id="asset-lt-date-group">
                             <label for="asset-lt-date" id="asset-lt-date-label">Data likwidacji:</label>
                             <input type="date" id="asset-lt-date" name="date_of_action" autocomplete="off">
@@ -3056,12 +3089,11 @@ let searchDebounceId = null;
             function addComponentLink(cell, assetId, collectionId) {
                 if (!cell || cell.querySelector('.asset-set-add')) return;
                 const plus = document.createElement('a');
-                plus.className = 'asset-set-add';
+                plus.className = 'ui-btn ui-btn--secondary asset-set-add';
                 plus.href = collectionId ? '/assets/collections/' + collectionId + '/member/create/' : '/assets/' + assetId + '/set/component/create/';
-                plus.textContent = '+';
+                plus.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
                 plus.setAttribute('aria-label', 'Dodaj składnik zestawu');
                 plus.title = 'Dodaj składnik zestawu';
-                plus.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;margin-left:8px;border:1px solid currentColor;border-radius:4px;font-size:20px;text-decoration:none';
                 const name = cell.querySelector('.asset-name-link');
                 if (name) {
                     name.style.display = 'inline';
