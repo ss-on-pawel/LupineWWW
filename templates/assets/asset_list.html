@@ -152,108 +152,57 @@
             min-height: 40px;
             font-family: var(--ui-font);
         }
-        .asset-list-workrow {
-            display: grid;
-            grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr);
-            gap: 12px;
-            align-items: stretch;
-            margin-bottom: 10px;
-        }
-        .asset-list-worksegment {
-            display: grid;
-            grid-template-rows: auto minmax(0, 1fr);
-            min-width: 0;
-            min-height: 100%;
-            border-top: 1px solid var(--line);
-            border-bottom: 1px solid var(--line);
-            background: rgba(248, 250, 252, 0.52);
-            box-sizing: border-box;
-        }
-        .asset-list-worksegment-head {
+        .asset-query-bar {
             display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 10px;
             flex-wrap: wrap;
-            padding: 8px 12px;
-            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--line);
+            background: rgba(248, 250, 252, 0.68);
         }
-        .asset-list-worksegment-head strong {
-            display: block;
-            font-family: var(--mono-font);
-            margin-bottom: 6px;
-            font-size: 11px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: #101828;
+        .asset-query-title {
+            flex: 0 0 auto;
+            color: #344054;
+            font-size: 0.84rem;
+            font-weight: 600;
+            white-space: nowrap;
         }
-        .asset-list-worksegment-meta {
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            line-height: 1.3;
+        .asset-query-bar .asset-list-field {
+            flex: 1 1 280px;
+            min-width: 240px;
+            max-width: 520px;
+            align-self: center;
         }
-        .asset-list-worksegment-body {
-            display: grid;
-            align-content: start;
-            gap: 8px;
-            min-width: 0;
-            padding: 8px 12px;
-        }
-        .asset-list-worksegment--search .asset-list-worksegment-body {
-            align-items: start;
-        }
-        .asset-list-worksegment-body > .asset-list-filters {
-            padding: 0;
-            margin: 0;
-            border: 0;
-            background: transparent;
-        }
-        .asset-list-worksegment-body > .asset-list-filters .asset-list-filters-head {
-            display: none;
-        }
-        .asset-list-worksegment-body > .asset-list-field {
-            min-width: 0;
-        }
-        .asset-list-worksegment-body > .asset-list-field label {
-            display: none;
-        }
-        .asset-list-worksegment-body > .asset-list-field input {
+        .asset-query-bar .asset-list-field input {
             width: 100%;
             height: 40px;
             min-height: 40px;
             padding: 0 12px;
-            font-size: 14px;
-            font-family: var(--ui-font);
+            font: 14px var(--ui-font);
         }
-        .asset-list-shell[data-mode="dense"] .asset-list-workrow {
-            gap: 8px;
-            margin-bottom: 6px;
+        .asset-query-bar .asset-filter-count {
+            margin-left: auto;
+            padding: 6px 8px;
+            border: 1px solid #eaecf0;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.8);
+            white-space: nowrap;
         }
-        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-head {
-            padding: 6px 10px 5px;
-        }
-        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-head strong {
-            font-size: 0.68rem;
-            letter-spacing: 0.12em;
-        }
-        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-body {
-            gap: 6px;
-            padding: 6px 10px;
-        }
-        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-body > .asset-list-filters {
-            margin: 0;
-            padding: 0;
-            border-left: 0;
-            border-right: 0;
-            background: transparent;
-        }
-        .asset-list-shell[data-mode="dense"] .asset-list-worksegment-body > .asset-list-field input {
-            min-height: 34px;
-            padding-top: 7px;
-            padding-bottom: 7px;
-            padding-left: 10px;
-            padding-right: 10px;
-            font-size: 0.86rem;
+        .asset-query-bar .asset-list-filters-actions { flex: 0 0 auto; }
+        .asset-query-bar .ui-btn { min-height: 40px; }
+        .asset-list-filters[hidden] { display: none; }
+        .asset-filter-conditions .asset-list-filters-head { display: none; }
+        .asset-filter-conditions .asset-list-filters-workbar { grid-template-columns: minmax(0, 1fr); }
+        .asset-filter-conditions { margin-bottom: 10px; }
+        .asset-list-shell[data-mode="dense"] .asset-query-bar { padding: 8px 10px; margin-bottom: 6px; }
+        @media (max-width: 700px) {
+            .asset-query-bar { gap: 10px; padding: 10px; }
+            .asset-query-title { flex: 1 1 auto; }
+            .asset-query-bar .asset-filter-count { order: 1; }
+            .asset-query-bar .asset-list-field { order: 2; flex-basis: 100%; min-width: 0; max-width: none; }
+            .asset-query-bar .asset-list-filters-actions { order: 3; justify-content: flex-start; }
         }
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar input,
         .asset-list-shell[data-mode="dense"] .asset-list-toolbar select,
@@ -1574,10 +1523,6 @@
                 flex-wrap: wrap;
                 align-items: end;
             }
-            .asset-list-workrow {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
             .asset-toolbar-record-group {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -2751,6 +2696,7 @@ let searchDebounceId = null;
             function renderFilterRows() {
                 elements.filterList.innerHTML = "";
                 elements.filterEmpty.hidden = state.filters.length > 0;
+                elements.filtersSection.hidden = state.filters.length === 0;
                 elements.clearFiltersButton.disabled = !state.filters.length;
                 elements.filterCount.textContent = "Aktywne filtry: " + getActiveFiltersCount();
 
@@ -4039,90 +3985,23 @@ let searchDebounceId = null;
             function arrangeSearchAndFiltersLayout() {
                 const searchField = shell.querySelector('[data-role="search-field"]');
                 const filtersSection = elements.filtersSection;
-                if (!searchField || !filtersSection) {
-                    return;
-                }
-
-                let workrow = shell.querySelector(".asset-list-workrow");
-                if (!workrow) {
-                    const workContainer = filtersSection.parentElement;
-                    workrow = document.createElement("div");
-                    workrow.className = "asset-list-workrow";
-                    workContainer.insertBefore(workrow, filtersSection);
-                }
-
-                let filtersSegment = workrow.querySelector(".asset-list-worksegment--filters");
-                let filtersHead = filtersSegment ? filtersSegment.querySelector(".asset-list-worksegment-head") : null;
-                let filtersMeta = filtersHead ? filtersHead.querySelector(".asset-list-worksegment-meta") : null;
-                let filtersBody = filtersSegment ? filtersSegment.querySelector(".asset-list-worksegment-body") : null;
-                if (!filtersSegment) {
-                    filtersSegment = document.createElement("section");
-                    filtersSegment.className = "asset-list-worksegment asset-list-worksegment--filters";
-
-                    filtersHead = document.createElement("div");
-                    filtersHead.className = "asset-list-worksegment-head";
-
-                    const filtersTitle = document.createElement("strong");
-                    filtersTitle.textContent = "Filtry danych";
-
-                    filtersMeta = document.createElement("div");
-                    filtersMeta.className = "asset-list-worksegment-meta";
-                    filtersMeta.id = "asset-filter-count";
-                    filtersMeta.textContent = "Aktywne filtry: 0";
-
-                    filtersHead.appendChild(filtersTitle);
-                    filtersHead.appendChild(filtersMeta);
-
-                    filtersBody = document.createElement("div");
-                    filtersBody.className = "asset-list-worksegment-body";
-
-                    filtersSegment.appendChild(filtersHead);
-                    filtersSegment.appendChild(filtersBody);
-                    workrow.appendChild(filtersSegment);
-                }
-
-                let searchSegment = workrow.querySelector(".asset-list-worksegment--search");
-                let searchBody = searchSegment ? searchSegment.querySelector(".asset-list-worksegment-body") : null;
-                if (!searchSegment) {
-                    searchSegment = document.createElement("section");
-                    searchSegment.className = "asset-list-worksegment asset-list-worksegment--search";
-
-                    const searchHead = document.createElement("div");
-                    searchHead.className = "asset-list-worksegment-head";
-
-                    const searchTitle = document.createElement("strong");
-                    searchTitle.textContent = "Wyszukiwanie";
-                    searchHead.appendChild(searchTitle);
-
-                    searchBody = document.createElement("div");
-                    searchBody.className = "asset-list-worksegment-body";
-
-                    searchSegment.appendChild(searchHead);
-                    searchSegment.appendChild(searchBody);
-                    workrow.appendChild(searchSegment);
-                }
-
-                const legacyFilterCount = document.getElementById("asset-filter-count");
-                if (legacyFilterCount && legacyFilterCount !== filtersMeta) {
-                    legacyFilterCount.id = "";
-                    legacyFilterCount.remove();
-                }
-
-                const searchLabel = searchField.querySelector("label");
-                if (searchLabel) {
-                    searchLabel.className = "visually-hidden";
-                }
-
-                searchField.className = "asset-list-field";
-
-                if (filtersSection.parentElement !== filtersBody) {
-                    filtersBody.appendChild(filtersSection);
-                }
-                if (searchField.parentElement !== searchBody) {
-                    searchBody.appendChild(searchField);
-                }
-
-                elements.filterCount = filtersMeta;
+                if (!searchField || !filtersSection) return;
+                const bar = document.createElement('div');
+                bar.className = 'asset-query-bar';
+                bar.setAttribute('role', 'search');
+                bar.setAttribute('aria-label', 'Wyszukiwanie i filtry');
+                const title = document.createElement('strong');
+                title.className = 'asset-query-title';
+                title.textContent = 'Wyszukiwanie i filtry';
+                filtersSection.parentElement.insertBefore(bar, filtersSection);
+                const label = searchField.querySelector('label');
+                if (label) label.className = 'visually-hidden';
+                searchField.className = 'asset-list-field';
+                bar.appendChild(title);
+                bar.appendChild(searchField);
+                bar.appendChild(elements.filterCount);
+                bar.appendChild(filtersSection.querySelector('.asset-list-filters-actions'));
+                filtersSection.classList.add('asset-filter-conditions');
             }
 
             function syncControls() {
