@@ -5,13 +5,14 @@
 {% block content %}
     <form method="post">
         {% csrf_token %}
+        {% if member_form %}{{ member_form.as_p }}{% endif %}
         {{ form.expected_updated_at }}
         {{ form.is_active.as_hidden }}
         {{ form.last_inventory_date.as_hidden }}
 
         <section class="card">
             <h2>{{ page_title|default:"Nowy składnik majątku" }}</h2>
-            <p class="intro">Uzupełnij podstawowe dane identyfikacyjne, organizacyjne i eksploatacyjne.</p>
+            {% if component_parent %}<p class="intro">Element zestawu: <strong>{{ component_parent.name }}</strong>. Numer inwentarzowy i kod z kolejną końcówką są nadawane automatycznie przy zapisie. Uzupełnij pozostałe dane. Anulowanie nie tworzy kartoteki ani zestawu.</p>{% else %}<p class="intro">Uzupełnij podstawowe dane identyfikacyjne, organizacyjne i eksploatacyjne.</p>{% endif %}
 
             {% if form.non_field_errors %}
                 <ul class="errorlist">
@@ -202,7 +203,7 @@
 
         <section class="card">
             <div class="actions">
-                <button class="ui-btn ui-btn--primary" type="submit">Zapisz składnik</button>
+                <button class="ui-btn ui-btn--primary" type="submit">{% if member_form %}Zapisz i dołącz{% else %}Zapisz składnik{% endif %}</button>
                 <a class="ui-btn ui-btn--secondary" href="{% url 'assets:list' %}">Wróć do ewidencji</a>
             </div>
         </section>

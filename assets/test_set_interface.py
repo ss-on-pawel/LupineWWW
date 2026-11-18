@@ -74,19 +74,21 @@ class SetInterfaceTests(TestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.client.post(url, data).status_code, 302)
-        self.assertEqual(Asset.objects.filter(barcode='SUI-NEW').count(), 1)
+        self.assertEqual(Asset.objects.filter(barcode='SUI-0/1', inventory_number='SUI-INV-0').count(), 1)
         self.assertEqual(collection.memberships.filter(left_at__isnull=True).count(), 4)
 
-    def test_invalid_or_stale_child_is_not_saved(self):
+    def test_inherited_fields_ignore_tampering_and_stale_child_is_not_saved(self):
         collection = self.create()
         url = reverse('assets:collection-member-create', args=[collection.pk])
         data = dict(action='attach', request_id=str(uuid.uuid4()), expected_version=1,
             purchase_value='120', **self.asset_data())
         response = self.client.post(url, data)
-        self.assertContains(response, 'własną wartością')
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(Asset.objects.get(barcode='SUI-0/1').purchase_value)
         self.assertFalse(Asset.objects.filter(barcode='SUI-NEW').exists())
         data.pop('purchase_value')
         data['expected_version'] = 99
+        data['request_id'] = str(uuid.uuid4())
         response = self.client.post(url, data)
         self.assertContains(response, 'Skład zmienił się')
         self.assertFalse(Asset.objects.filter(barcode='SUI-NEW').exists())

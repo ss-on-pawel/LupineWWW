@@ -42,6 +42,7 @@ app_name = "assets"
 
 urlpatterns = [
     path("assets/collections/<int:pk>/operate/<str:action>/", set_operation, name="set-operation"),
+    path("assets/<int:asset_id>/set/component/create/", collection_member_create, name="set-component-create"),
     path("assets/<int:asset_id>/set/create/", set_create, name="set-create"),
     path("assets/collections/<int:pk>/member/create/", collection_member_create, name="collection-member-create"),
     path("assets/<int:asset_id>/group/create/", group_create, name="group-create"),

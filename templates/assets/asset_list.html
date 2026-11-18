@@ -451,6 +451,7 @@
         .asset-list-table-tools {
             position: relative;
             display: flex;
+            flex-wrap: wrap;
             justify-content: flex-end;
             align-items: center;
             gap: 8px;
@@ -461,6 +462,7 @@
         }
         .asset-table-tools-left {
             display: inline-flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 8px;
             min-width: 0;
@@ -483,6 +485,7 @@
         }
         .asset-list-table-tools-cluster {
             display: inline-flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: flex-end;
             gap: 12px;
@@ -1728,6 +1731,7 @@
                 <div class="asset-list-table-tools">
                     <div class="asset-table-tools-left">
                         <button id="asset-management-add" type="button" class="ui-btn ui-btn--success" hidden>Dodaj środek</button>
+                        <button id="asset-create-set" type="button" class="ui-btn ui-btn--secondary" hidden disabled>Utwórz zestaw</button>
                         <button id="asset-management-delete" type="button" class="ui-btn ui-btn--danger" hidden disabled>Wycofaj</button>
                         <button id="asset-move-trigger" type="button" class="ui-btn ui-btn--secondary" hidden>Przenieś</button>
                         <span id="asset-move-target" class="asset-move-target" hidden>brak lokalizacji</span>
@@ -2300,6 +2304,7 @@
                 managementToolbar: document.getElementById("asset-management-toolbar"),
                 managementEditButton: document.getElementById("asset-management-edit"),
                 managementDeleteButton: document.getElementById("asset-management-delete"),
+                createSetButton: document.getElementById("asset-create-set"),
                 managementAddButton: document.getElementById("asset-management-add"),
                 moveTrigger: document.getElementById("asset-move-trigger"),
                 printLabelsButton: document.getElementById("asset-print-labels"),
@@ -2360,6 +2365,7 @@
                 ordering: "-updated_at",
                 columns: loadColumns(),
                 layoutMode: loadLayoutMode(),
+                preparedSets: new Set(),
                 lastPayload: null,
                 requestToken: 0,
                 activeController: null
@@ -2528,6 +2534,23 @@ let searchDebounceId = null;
                 elements.managementDeleteButton.addEventListener("click", handleDeleteRecordAction);
 
                 elements.managementAddButton.addEventListener("click", handleAddRecordAction);
+                elements.createSetButton.addEventListener('click', function () {
+                    const ids = getSelectedAssetIds();
+                    if (isArchiveMode || ids.length !== 1) return;
+                    const selected = elements.tableBody.querySelector('[data-asset-id="' + ids[0] + '"]');
+                    const row = selected && selected.closest('tr');
+                    if (!row || row.dataset.collectionKind) return;
+                    if (!row.querySelector('[data-column-key="name"]')) {
+                        showListNotice('Włącz kolumnę Nazwa, aby dodać składniki przy nazwie środka.');
+                        return;
+                    }
+                    state.preparedSets.add(String(ids[0]));
+                    addComponentLink(row.querySelector('[data-column-key="name"]'), ids[0], null);
+                    const plus = row.querySelector('.asset-set-add');
+                    if (plus) plus.focus();
+                    showListNotice('Kliknij + przy nazwie, aby dodać pierwszy składnik. Zestaw powstanie po jego zapisaniu.');
+                    syncToolbarControls();
+                });
 
                 elements.printLabelsButton.addEventListener("click", function () {
                     const ids = getSelectedAssetIds();
@@ -3030,9 +3053,28 @@ let searchDebounceId = null;
                 return "upcoming";
             }
 
+            function addComponentLink(cell, assetId, collectionId) {
+                if (!cell || cell.querySelector('.asset-set-add')) return;
+                const plus = document.createElement('a');
+                plus.className = 'asset-set-add';
+                plus.href = collectionId ? '/assets/collections/' + collectionId + '/member/create/' : '/assets/' + assetId + '/set/component/create/';
+                plus.textContent = '+';
+                plus.setAttribute('aria-label', 'Dodaj składnik zestawu');
+                plus.title = 'Dodaj składnik zestawu';
+                plus.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;margin-left:8px;border:1px solid currentColor;border-radius:4px;font-size:20px;text-decoration:none';
+                const name = cell.querySelector('.asset-name-link');
+                if (name) {
+                    name.style.display = 'inline';
+                    name.insertAdjacentElement('afterend', plus);
+                } else {
+                    cell.appendChild(plus);
+                }
+            }
+
             function createAssetRow(row, depth, parentId) {
                 const visibleColumns = getVisibleColumns();
                     const tr = document.createElement("tr");
+                    tr.dataset.collectionKind = row.collection ? row.collection.kind : "";
                     if (depth) { tr.dataset.setParent = String(parentId); tr.id = 'set-element-' + parentId + '-' + row.id; }
 
                     visibleColumns.forEach(function (column, visibleIndex) {
@@ -3063,6 +3105,9 @@ let searchDebounceId = null;
                                 const count = document.createElement('small');
                                 count.textContent = ' · ' + row.collection.child_count + ' dostępnych elementów';
                                 td.appendChild(count);
+                            }
+                            if (!isArchiveMode && !depth && ((row.collection && row.collection.kind === 'set' && row.collection.role === 'parent' && row.collection.can_add_component) || (!row.collection && state.preparedSets.has(String(row.id))))) {
+                                addComponentLink(td, row.id, row.collection ? row.collection.id : null);
                             }
                             const badgeRow = document.createElement("div");
                             badgeRow.className = "asset-name-badges";
@@ -4066,6 +4111,7 @@ let searchDebounceId = null;
                 if (isArchiveMode) {
                     elements.managementToolbar.hidden = true;
                     elements.managementAddButton.hidden = true;
+                    elements.createSetButton.hidden = true;
                     elements.managementDeleteButton.hidden = true;
                     elements.moveTrigger.hidden = true;
                     elements.moveTarget.hidden = true;
@@ -4075,6 +4121,7 @@ let searchDebounceId = null;
                 }
                 elements.managementToolbar.hidden = false;
                 elements.managementAddButton.hidden = false;
+                elements.createSetButton.hidden = false;
                 elements.managementDeleteButton.hidden = !enabledFeatures.assetWithdraw;
                 elements.moveTrigger.hidden = false;
                 elements.moveTarget.hidden = false;
@@ -4103,6 +4150,10 @@ let searchDebounceId = null;
                 elements.managementAddButton.textContent = "Dodaj środek";
                 elements.managementAddButton.className = "ui-btn ui-btn--success";
                 elements.managementAddButton.disabled = false;
+                const setIds = getSelectedAssetIds();
+                const selectedSetRow = setIds.length === 1 ? elements.tableBody.querySelector('[data-asset-id="' + setIds[0] + '"]') : null;
+                elements.createSetButton.disabled = isArchiveMode || !selectedSetRow || !!selectedSetRow.closest('tr').dataset.collectionKind || state.preparedSets.has(String(setIds[0]));
+                elements.createSetButton.title = 'Zaznacz jeden samodzielny środek nadrzędny';
                 elements.moveTrigger.className = "ui-btn ui-btn--secondary";
                 elements.moveTrigger.disabled = state.moveSubmitting;
                 renderMoveTarget();

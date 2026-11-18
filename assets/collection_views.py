@@ -71,6 +71,8 @@ def decorate_collection_rows(rows, user):
     from django.db.models import Count
     counts = dict(AssetCollectionMembership.objects.filter(collection_id__in=set_ids,
         role='member', left_at__isnull=True, asset_id__in=visible).values('collection_id').annotate(n=Count('pk')).values_list('collection_id', 'n'))
+    restricted = set(AssetCollectionMembership.objects.filter(collection_id__in=set_ids, left_at__isnull=True).filter(
+        Q(asset__is_active=False) | ~Q(asset_id__in=visible)).values_list('collection_id', flat=True))
     by_asset = {link.asset_id: link for link in links}
     for row in rows:
         link = by_asset.get(row['id'])
@@ -79,7 +81,7 @@ def decorate_collection_rows(rows, user):
         parent = parents.get(link.collection_id)
         row['collection'] = dict(id=link.collection_id, kind=link.collection.kind, role=link.role,
             name=link.collection.name if link.collection.kind == 'group' else (parent.name if parent else 'Zestaw'),
-            child_count=counts.get(link.collection_id, 0))
+            child_count=counts.get(link.collection_id, 0), can_add_component=link.collection_id not in restricted)
         if link.collection.kind == 'set':
             row['own_inventory_number'] = row['inventory_number']
             row['inventory_number'] = parent.inventory_number if parent else '—'
@@ -223,44 +225,76 @@ def set_create(request, asset_id):
 
 @login_required
 @require_http_methods(['GET', 'POST'])
-def collection_member_create(request, pk):
-    collection = get_object_or_404(AssetCollection, pk=pk)
-    memberships = collection.memberships.filter(left_at__isnull=True)
-    visible = visible_request_assets(request).values('pk')
-    if not memberships.filter(asset_id__in=visible).exists() or memberships.exclude(asset_id__in=visible).exists():
-        raise PermissionDenied
+def collection_member_create(request, pk=None, asset_id=None):
+    """Create the first part and its set atomically, or extend an existing set/group."""
+    anchor = get_object_or_404(scoped_assets(request.user), pk=asset_id, is_active=True) if asset_id else None
+    collection = get_object_or_404(AssetCollection, pk=pk) if pk else None
+    if collection is None and request.method == 'GET':
+        link = AssetCollectionMembership.objects.filter(asset=anchor, left_at__isnull=True).first()
+        if link:
+            if link.role != 'parent' or link.collection.kind != 'set':
+                raise Http404('Środek już należy do zestawu lub grupy.')
+            return redirect('assets:collection-member-create', pk=link.collection_id)
+    memberships = collection.memberships.filter(left_at__isnull=True) if collection else None
+    if collection:
+        visible = visible_request_assets(request).values('pk')
+        if not memberships.exists() or memberships.exclude(asset_id__in=visible).exists():
+            raise PermissionDenied
+        parent_link = memberships.filter(role='parent').select_related('asset').first()
+        anchor = parent_link.asset if parent_link else None
+    strict_set = collection is None or collection.kind == 'set'
     member_form = ChangeMembersForm(request.POST or None, initial={'action': 'attach',
-        'expected_version': collection.version, 'request_id': uuid.uuid4()})
+        'expected_version': collection.version if collection else 1, 'request_id': uuid.uuid4()})
     allowed = get_accessible_location_ids(request.user)
     from locations.models import Location
     locations = Location.objects.filter(is_active=True)
     if allowed is not None:
         locations = locations.filter(pk__in=allowed)
-    form = AssetForm(request.POST if request.method == 'POST' else None, location_queryset=locations,
-        initial={'location_fk': memberships.first().asset.location_fk_id})
-    for field in ['is_active', 'is_catalogued', 'last_inventory_date']:
-        form.fields[field].widget = forms.HiddenInput()
+    from .collection_components import component_form
+    form = component_form(request, locations, anchor, strict_set)
+    if not strict_set:
+        form.initial['location_fk'] = memberships.first().asset.location_fk_id
     if request.method == 'POST' and member_form.is_valid():
         try:
-            replay = _replay_form(request, member_form.cleaned_data['request_id'])
-            if replay:
-                return redirect('assets:collection-detail', pk=replay.pk)
-            if not form.is_valid():
-                raise ValidationError('Uzupełnij poprawnie dane nowego elementu.')
-            if member_form.cleaned_data['action'] != 'attach':
-                raise ValidationError('Nieprawidłowa operacja.')
             with transaction.atomic():
-                # Match collection -> asset ordering before writing a new asset.
-                AssetCollection.objects.select_for_update().get(pk=collection.pk)
                 from .collections import _assets
-                _assets(request.user, sorted(memberships.values_list('asset_id', flat=True)))
+                if collection:
+                    collection = AssetCollection.objects.select_for_update().get(pk=collection.pk)
+                    assets = _assets(request.user, sorted(collection.memberships.filter(
+                        left_at__isnull=True).values_list('asset_id', flat=True)))
+                    if strict_set:
+                        parent_id = collection.memberships.filter(role='parent', left_at__isnull=True).values_list('asset_id', flat=True).first()
+                        anchor = next((asset for asset in assets if asset.pk == parent_id), None)
+                        if anchor is None:
+                            raise ValidationError('Zestaw nie ma aktywnego środka nadrzędnego.')
+                else:
+                    anchor = _assets(request.user, [anchor.pk])[0]
+                replay = _replay_form(request, member_form.cleaned_data['request_id'])
+                if replay:
+                    return redirect('assets:list') if strict_set else redirect('assets:collection-detail', pk=replay.pk)
+                if collection is None and AssetCollectionMembership.objects.filter(asset=anchor, left_at__isnull=True).exists():
+                    raise ValidationError('Powiązanie zmieniło się. Otwórz formularz ponownie z ewidencji.')
+                if member_form.cleaned_data['action'] != 'attach':
+                    raise ValidationError('Nieprawidłowa operacja.')
+                if collection and collection.version != member_form.cleaned_data['expected_version']:
+                    raise ValidationError('Skład zmienił się. Otwórz formularz ponownie.')
+                # Recompute both inherited identifiers under the same locks as the save.
+                form = component_form(request, locations, anchor, strict_set)
+                if not form.is_valid():
+                    raise ValidationError('Uzupełnij poprawnie dane nowego elementu.')
                 asset = form.save()
                 from .services import record_asset_history
                 record_asset_history(asset=asset, operator=request.user, event_type='created', description='Utworzono element składu')
-                change_collection_members(operator=request.user, collection_id=collection.pk,
-                    asset_ids=[asset.pk], **member_form.cleaned_data)
+                if collection is None:
+                    collection = create_collection(operator=request.user, kind='set', name=anchor.name,
+                        parent_id=anchor.pk, asset_ids=[anchor.pk, asset.pk], request_id=member_form.cleaned_data['request_id'])
+                else:
+                    change_collection_members(operator=request.user, collection_id=collection.pk,
+                        asset_ids=[asset.pk], **member_form.cleaned_data)
                 event = AssetCollectionEvent.objects.get(request_id=member_form.cleaned_data['request_id'])
                 event.payload['form_signature'] = _form_signature(request)
+                if strict_set:
+                    event.payload.update(component_parent_id=anchor.pk, component_barcode=asset.barcode)
                 event.save(update_fields=['payload'])
         except ValidationError as error:
             form.add_error(None, '; '.join(error.messages))
@@ -268,9 +302,10 @@ def collection_member_create(request, pk):
             form.add_error(None, 'Kod lub skład zmienił się. Odśwież formularz.')
         else:
             messages.success(request, 'Utworzono i dołączono nowy element.')
-            return redirect('assets:collection-detail', pk=collection.pk)
-    return render(request, 'assets/collection_member_form.html', dict(page_title='Utwórz element',
-        collection=collection, form=form, member_form=member_form))
+            return redirect('assets:list') if strict_set else redirect('assets:collection-detail', pk=collection.pk)
+    context = dict(page_title='Nowy składnik zestawu' if strict_set else 'Utwórz element',
+        collection=collection, form=form, member_form=member_form, component_parent=anchor)
+    return render(request, 'assets/asset_form.html' if strict_set else 'assets/collection_member_form.html', context)
 
 
 @login_required

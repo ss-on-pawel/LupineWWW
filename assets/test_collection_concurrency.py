@@ -45,6 +45,46 @@ class CollectionConcurrencyTests(TransactionTestCase):
         self.assertEqual(AssetCollection.objects.count(), 1)
         self.assertEqual(AssetCollectionMembership.objects.count(), 2)
 
+    def component_post(self, user, key, collection=None):
+        from django.test import RequestFactory
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from .collection_views import collection_member_create
+        path = '/assets/collections/%s/member/create/' % collection.pk if collection else '/assets/%s/set/component/create/' % self.assets[0].pk
+        request = RequestFactory().post(path, dict(action='attach', expected_version=1,
+            request_id=str(key), name='New component', asset_type='',
+            location_fk=self.room.pk, status='active', technical_condition='good'))
+        request.user = user
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        response = collection_member_create(request, pk=collection.pk) if collection else collection_member_create(request, asset_id=self.assets[0].pk)
+        if response.status_code != 302:
+            raise ValidationError('Conflict')
+
+    def test_parallel_first_component_creates_only_one_set(self):
+        def create(user):
+            self.component_post(user, uuid.uuid4())
+        self.assertCountEqual(self.parallel(create, create), ['ok', 'conflict'])
+        self.assertEqual(AssetCollection.objects.count(), 1)
+        self.assertEqual(Asset.objects.filter(barcode='CONC-0/1').count(), 1)
+        self.assertEqual(Asset.objects.count(), 5)
+
+    def test_parallel_first_component_retry_is_idempotent(self):
+        key = uuid.uuid4()
+        def create(user):
+            self.component_post(user, key)
+        self.assertEqual(self.parallel(create, create), ['ok', 'ok'])
+        self.assertEqual(AssetCollectionEvent.objects.count(), 1)
+        self.assertEqual(Asset.objects.filter(barcode='CONC-0/1').count(), 1)
+
+    def test_parallel_component_addition_rejects_stale_form_without_orphan(self):
+        collection = create_collection(operator=self.user, kind='set', name='Set', parent_id=self.assets[0].pk,
+            asset_ids=[a.pk for a in self.assets[:2]], request_id=uuid.uuid4())
+        def create(user):
+            self.component_post(user, uuid.uuid4(), collection)
+        self.assertCountEqual(self.parallel(create, create), ['ok', 'conflict'])
+        self.assertEqual(Asset.objects.count(), 5)
+        self.assertEqual(Asset.objects.filter(barcode='CONC-0/1').count(), 1)
+
     def test_same_asset_cannot_join_two_groups_concurrently(self):
         groups = [create_collection(operator=self.user, kind='group', name=f'Group {i}',
             asset_ids=[self.assets[i].pk], request_id=uuid.uuid4()) for i in range(2)]
