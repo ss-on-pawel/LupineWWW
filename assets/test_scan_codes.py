@@ -61,10 +61,9 @@ class SharedScanCodeTests(TestCase):
         self.assertEqual(self.room.code,'LOK GŁ.')
 
     def test_auto_location_avoids_code_used_by_asset(self):
-        next_id = Location.objects.order_by('-pk').first().pk+1
-        Asset.objects.create(name='Legacy code',barcode=f'LOC-{next_id:06d}')
+        Asset.objects.create(name='Legacy code',barcode='LOK000001')
         location=Location.objects.create(name='Automatic')
-        self.assertEqual(location.code,f'LOC-{next_id:06d}-1')
+        self.assertEqual(location.code,'LOK000002')
 
     def test_significant_characters_are_not_normalized_or_renumbered(self):
         for code in ('0001','1','AbC','abc','A / # 2','__proto__','constructor','12345678-1234-1234-1234-123456789012'):

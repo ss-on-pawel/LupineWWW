@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import models, transaction, IntegrityError
+from django.db import models, transaction
 
 
 class OrganizationSettings(models.Model):
@@ -102,6 +102,9 @@ class Location(models.Model):
     @transaction.atomic
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+        if is_new and not self.code:
+            from .codes import save_with_automatic_code
+            return save_with_automatic_code(self, args, kwargs)
         previous = type(self).objects.filter(pk=self.pk).values('name', 'parent_id').first() if not is_new else None
         if not kwargs.get("update_fields"):
             self.full_clean()
@@ -119,19 +122,3 @@ class Location(models.Model):
             paths = _build_location_paths(nodes, descendants)
             for pk in descendants:
                 Asset.objects.filter(location_fk_id=pk).update(location=paths[pk])
-        if is_new and not self.code:
-            from assets.scan_codes import is_scan_code_conflict, validate_scan_code
-            suffix = 0
-            while True:
-                self.code = f"LOC-{self.pk:06d}" + (f"-{suffix}" if suffix else "")
-                try:
-                    validate_scan_code(self.code, kind='location', owner_id=self.pk)
-                    with transaction.atomic():
-                        super().save(update_fields=["code"])
-                    break
-                except ValidationError:
-                    suffix += 1
-                except IntegrityError as error:
-                    if not is_scan_code_conflict(error):
-                        raise
-                    suffix += 1

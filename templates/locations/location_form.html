@@ -66,6 +66,10 @@
             display: grid;
             gap: 8px;
         }
+        .location-form-field input::placeholder {
+            color: #98a2b3;
+            opacity: 1;
+        }
         .location-form-help {
             margin: 0;
             color: var(--app-muted);
@@ -122,7 +126,7 @@
                     <div class="location-form-field">
                         {{ form.code.label_tag }}{{ form.code }}{{ form.code.errors }}
                     </div>
-                    <p class="location-form-help">Możesz wpisać własny kod. Puste pole przy dodawaniu nada kod automatycznie. Kod musi być wolny w całej bazie środków i lokalizacji.</p>
+                    <p class="location-form-help" id="location-code-help">{% if form.instance.pk %}Możesz zmienić kod. Puste pole zachowa dotychczasowy kod.{% else %}Wyszarzony kod jest podpowiedzią. Pozostaw pole puste, aby nadać kod automatycznie, lub wpisz własny.{% endif %} Kod musi być wolny w całej bazie środków i lokalizacji.</p>
                 </div>
 
                 <div class="location-form-actions">

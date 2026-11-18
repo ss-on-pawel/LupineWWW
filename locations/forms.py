@@ -24,6 +24,11 @@ class LocationForm(forms.ModelForm):
         self.parent = parent
         super().__init__(*args, **kwargs)
         self.fields['code'].required = False
+        self.fields['code'].widget.attrs.update(autocomplete='off', spellcheck='false')
+        if not self.instance.pk:
+            from .codes import next_location_code
+            self.fields['code'].widget.attrs['placeholder'] = next_location_code()
+            self.fields['code'].widget.attrs['aria-describedby'] = 'location-code-help'
         if self.is_bound and 'code' not in self.data and self.instance.pk:
             self.data = self.data.copy()
             self.data['code'] = self.instance.code

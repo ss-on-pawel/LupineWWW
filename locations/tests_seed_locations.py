@@ -16,7 +16,7 @@ class SeedLocationsCommandTests(TestCase):
         self.assertEqual(Location.objects.count(), 40)
         self.assertEqual(Location.objects.filter(parent__isnull=True).count(), 3)
         self.assertTrue(Location.objects.filter(parent__parent__isnull=False).exists())
-        self.assertTrue(Location.objects.exclude(code="").filter(code__startswith="LOC-").exists())
+        self.assertTrue(Location.objects.exclude(code="").filter(code__startswith="LOK").exists())
         self.assertIn("Liczba wszystkich lokalizacji: 40", stdout.getvalue())
 
     def test_seed_locations_requires_empty_table_without_clear(self):
