@@ -21,13 +21,13 @@ _BARCODE_MARGIN_X = 1.75 * mm
 
 
 def generate_labels_pdf(assets, org_short_name: str, *, layout: str = "standard") -> io.BytesIO:
-    if layout not in {"standard", "50x35"}:
+    if layout not in {"standard", "50x35", "50x30"}:
         raise ValueError("Unknown asset label layout")
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=(PAGE_W, 35 * mm if layout == "50x35" else PAGE_H))
     for asset in assets:
-        if layout == "50x35":
-            _draw_label_50x35(c, asset, org_short_name)
+        if layout in {"50x35", "50x30"}:
+            _draw_compact_label(c, asset, org_short_name, height_mm=35 if layout == "50x35" else 30)
         else:
             _draw_label(c, asset, org_short_name)
         c.showPage()
@@ -98,9 +98,9 @@ def _fit_text(text: str, font: str, size: float) -> str:
         text = text[:-1]
     return text + "…"
 
-def _draw_label_50x35(c, asset, organization_name: str) -> None:
+def _draw_compact_label(c, asset, organization_name: str, *, height_mm: int) -> None:
     """Compact full-width label: organization, barcode, code and asset name."""
-    width, height = 50 * mm, 35 * mm
+    width, height = 50 * mm, height_mm * mm
     margin = 1.5 * mm
     available = width - 2 * margin
     c.setFillColorRGB(0, 0, 0)
@@ -113,7 +113,7 @@ def _draw_label_50x35(c, asset, organization_name: str) -> None:
     c.setFont(_BODY_FONT_BOLD, title_size)
     c.drawCentredString(width / 2, height - 3 * mm, organization_name)
 
-    barcode = Code128(asset.barcode, barWidth=0.4 * mm, barHeight=18.5 * mm,
+    barcode = Code128(asset.barcode, barWidth=0.4 * mm, barHeight=(height_mm - 16.5) * mm,
                       humanReadable=False, quiet=True, lquiet=4 * mm, rquiet=4 * mm)
     # Scale bars and their 10-module quiet zones together; never crop the symbol.
     c.saveState()

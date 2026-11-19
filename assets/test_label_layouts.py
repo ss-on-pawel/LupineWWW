@@ -30,6 +30,28 @@ class AssetLabelLayoutTests(SimpleTestCase):
         self.assertAlmostEqual(width, 50, places=3)
         self.assertAlmostEqual(height, 35, places=3)
 
+    def test_compact_library_media_is_exactly_50x30(self):
+        width, height = self.page_size("50x30")
+        self.assertAlmostEqual(width, 50, places=3)
+        self.assertAlmostEqual(height, 30, places=3)
+
+    def test_compact_50x30_preserves_content_and_barcode_quiet_zones(self):
+        from reportlab.graphics.barcode.code128 import Code128
+        title = "Biblioteka Publiczna Gminy Grodzisk Mazowiecki"
+        asset = SimpleNamespace(name="Szafa do biurka", barcode="100407", inventory_number="100407")
+        with patch("assets.labels.Code128", wraps=Code128) as barcode, \
+             patch.object(canvas.Canvas, "drawCentredString", autospec=True) as centred, \
+             patch.object(canvas.Canvas, "drawString", autospec=True) as left:
+            generate_labels_pdf([asset], title, layout="50x30")
+        self.assertAlmostEqual(barcode.call_args.kwargs["barHeight"] / mm, 13.5)
+        self.assertTrue(barcode.call_args.kwargs["quiet"])
+        self.assertEqual(barcode.call_args.kwargs["lquiet"], 4 * mm)
+        self.assertEqual(barcode.call_args.kwargs["rquiet"], 4 * mm)
+        self.assertIn(title, [c.args[3] for c in centred.call_args_list])
+        self.assertIn("100407", [c.args[3] for c in centred.call_args_list])
+        self.assertIn("Szafa do biurka", [c.args[3] for c in left.call_args_list])
+        self.assertIn("Nr inw.: 100407", [c.args[3] for c in left.call_args_list])
+
     def test_default_media_remains_50x30(self):
         width, height = self.page_size("standard")
         self.assertAlmostEqual(width, 50, places=3)
